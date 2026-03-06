@@ -29,6 +29,7 @@ async function runScheduledTasks(): Promise<void> {
   await runScheduledReports();
   await runScheduledAlertEvaluation();
   await runEscalationChecks();
+  await runScheduledDigests();
 }
 
 async function acquireLock(jobKey: string): Promise<number | null> {
@@ -311,6 +312,43 @@ export async function manualRunNow(): Promise<{ reports: number; alerts: number 
     }
   }
   return { reports: reportCount, alerts: alertCount };
+}
+
+async function runScheduledDigests(): Promise<void> {
+  try {
+    const { generateDigest, getWeekKey } = await import("../phase5-routes");
+    const allTenants = await storage.getTenants();
+    const now = new Date();
+    const currentDay = now.getDay();
+    const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const weekKey = getWeekKey(now);
+
+    for (const tenant of allTenants) {
+      try {
+        const schedule = await storage.getDigestSchedule(tenant.id);
+        if (!schedule || !schedule.isEnabled) continue;
+        if (schedule.dayOfWeek !== currentDay) continue;
+        if (currentTime < schedule.sendTime || currentTime > schedule.sendTime.replace(/:\d{2}$/, (m) => `:${String(parseInt(m.slice(1)) + 1).padStart(2, "0")}`)) continue;
+
+        const existingRun = await storage.getDigestSchedulerRunByWeek(tenant.id, weekKey);
+        if (existingRun) continue;
+
+        const run = await storage.createDigestSchedulerRun({ tenantId: tenant.id, weekKey, status: "running" });
+        try {
+          const digest = await generateDigest(tenant.id, "system");
+          await storage.updateDigestSchedulerRun(run.id, { status: "success", digestId: digest.id, completedAt: new Date() } as any);
+          console.log(`[SCHEDULER] Digest generated for tenant ${tenant.id} (${weekKey})`);
+        } catch (e: any) {
+          await storage.updateDigestSchedulerRun(run.id, { status: "failed", errorMessage: e.message, completedAt: new Date() } as any);
+          console.error(`[SCHEDULER] Digest failed for tenant ${tenant.id}:`, e.message);
+        }
+      } catch (e) {
+        console.error(`[SCHEDULER] Digest schedule check failed for tenant ${tenant.id}:`, e);
+      }
+    }
+  } catch (e) {
+    console.error("[SCHEDULER] runScheduledDigests error:", e);
+  }
 }
 
 export async function getSchedulerStatus(tenantId?: number): Promise<any> {

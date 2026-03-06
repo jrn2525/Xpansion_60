@@ -61,12 +61,15 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 ### Phase 5 Tables (Growth Operating System)
 - `actions` - Trackable execution work items (status lifecycle: open/in_progress/blocked/done, priority, owner, linked metric/location)
 - `action_checkins` - Weekly check-in notes on actions
-- `opportunities` - Auto-detected or manual improvement opportunities (impact score, source type)
+- `opportunities` - Auto-detected or manual improvement opportunities (priority, confidence_score, rationale_json, detected_at, last_recomputed_at)
 - `goals` - Target vs actual variance tracking (on_track/at_risk/off_track, consecutive off-track counter)
-- `playbooks` - Reusable action templates
+- `playbooks` - Reusable action templates (is_archived, version, updated_by_user_id for lifecycle management)
 - `playbook_steps` - Ordered steps within a playbook
 - `playbook_applications` - Record of playbook applications to locations
 - `digests` - Weekly executive summaries (wins, risks, blocked, overdue, recommended moves as JSON)
+- `digest_schedules` - Per-tenant digest schedule config (day_of_week, send_time, timezone, recipients, is_enabled)
+- `digest_scheduler_runs` - Digest generation run history (week_key, status, digest_id, error_message)
+- `benchmarking_configs` - Per-tenant configurable scoring weights (goal_attainment_weight, alert_penalty_weight, trend_momentum_weight, scorecard_contribution_weight)
 
 ## Key Patterns
 - Tenant scoping enforced in service layer via `requireTenantAccess()` (Phase 1) and `requireAdminAccess()` (Phase 2+)
@@ -78,7 +81,10 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - Trend endpoints generate period slots and fill with data, returning null for missing periods
 - Alert evaluation: cooldown (skip repeat), dedup (skip open duplicates), escalation (auto-bump severity)
 - Notifications: alert events + report completions -> email (Resend) + Slack webhook with retry/backoff
-- Scheduler: 60s interval, job locking via scheduler_runs, report generation + alert evaluation + escalation checks
+- Scheduler: 60s interval, job locking via scheduler_runs, report generation + alert evaluation + escalation checks + scheduled digest generation
+- Digest idempotency: week_key based dedup prevents duplicate digest runs per tenant/week; force flag allows regeneration
+- Benchmarking formula: configurable weighted composite (goal attainment, alert penalty, trend momentum, scorecard contribution); weights must sum to 100
+- Opportunity scoring v2: severity × duration → impact, magnitude-based confidence, rationale factors stored as JSON
 - Forecasting: linear regression on historical values, 1.96σ confidence bands
 - Anomaly detection: rolling 6-period window, flags >2σ deviations
 - Idempotency: X-Idempotency-Key header support on mutation endpoints
@@ -87,10 +93,10 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - `/api/health` returns `{ ok: true, service: "xpansion-console", timestamp }` for uptime checks
 
 ## File Structure
-- `shared/schema.ts` - All Drizzle models, relations, Zod schemas, types (34 tables)
+- `shared/schema.ts` - All Drizzle models, relations, Zod schemas, types (37 tables)
 - `shared/models/auth.ts` - Auth user/session models
 - `server/db.ts` - Database connection pool
-- `server/storage.ts` - DatabaseStorage implementing IStorage interface (~130 methods)
+- `server/storage.ts` - DatabaseStorage implementing IStorage interface (~145 methods)
 - `server/routes.ts` - Phase 1 + portfolio + forecasting/anomaly API routes
 - `server/admin-routes.ts` - Phase 2+3 admin API routes (imports, alerts, reports, notifications, data quality, scheduler, audit)
 - `server/phase5-routes.ts` - Phase 5 Growth OS routes (command center, actions, opportunities, goals, benchmarking, playbooks, digests)

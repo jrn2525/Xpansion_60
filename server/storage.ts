@@ -78,6 +78,10 @@ import {
   playbookSteps,
   playbookApplications,
   digests,
+  digestSchedules,
+  digestSchedulerRuns,
+  benchmarkingConfigs,
+  users,
   type Action,
   type InsertAction,
   type ActionCheckin,
@@ -94,6 +98,12 @@ import {
   type InsertPlaybookApplication,
   type Digest,
   type InsertDigest,
+  type DigestSchedule,
+  type InsertDigestSchedule,
+  type DigestSchedulerRun,
+  type InsertDigestSchedulerRun,
+  type BenchmarkingConfig,
+  type InsertBenchmarkingConfig,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, lt, inArray, isNull, sql } from "drizzle-orm";
@@ -253,6 +263,20 @@ export interface IStorage {
 
   getDigests(tenantId: number): Promise<Digest[]>;
   createDigest(data: InsertDigest): Promise<Digest>;
+
+  getDigestSchedule(tenantId: number): Promise<DigestSchedule | undefined>;
+  upsertDigestSchedule(tenantId: number, data: Partial<InsertDigestSchedule>): Promise<DigestSchedule>;
+  getDigestSchedulerRuns(tenantId: number): Promise<DigestSchedulerRun[]>;
+  createDigestSchedulerRun(data: InsertDigestSchedulerRun): Promise<DigestSchedulerRun>;
+  getDigestSchedulerRunByWeek(tenantId: number, weekKey: string): Promise<DigestSchedulerRun | undefined>;
+  updateDigestSchedulerRun(id: number, data: Partial<DigestSchedulerRun>): Promise<DigestSchedulerRun | undefined>;
+
+  getBenchmarkingConfig(tenantId: number): Promise<BenchmarkingConfig | undefined>;
+  upsertBenchmarkingConfig(tenantId: number, data: Partial<InsertBenchmarkingConfig>): Promise<BenchmarkingConfig>;
+
+  getPlaybookApplicationsByPlaybook(playbookId: number): Promise<PlaybookApplication[]>;
+
+  getTenantUsersWithNames(tenantId: number): Promise<Array<{ id: number; userId: string; role: string; username: string | null }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -997,6 +1021,73 @@ export class DatabaseStorage implements IStorage {
   async createDigest(data: InsertDigest): Promise<Digest> {
     const [digest] = await db.insert(digests).values(data).returning();
     return digest;
+  }
+
+  async getDigestSchedule(tenantId: number): Promise<DigestSchedule | undefined> {
+    const [schedule] = await db.select().from(digestSchedules).where(eq(digestSchedules.tenantId, tenantId));
+    return schedule;
+  }
+
+  async upsertDigestSchedule(tenantId: number, data: Partial<InsertDigestSchedule>): Promise<DigestSchedule> {
+    const existing = await this.getDigestSchedule(tenantId);
+    if (existing) {
+      const [updated] = await db.update(digestSchedules).set({ ...data, updatedAt: new Date() }).where(eq(digestSchedules.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(digestSchedules).values({ ...data, tenantId } as InsertDigestSchedule).returning();
+    return created;
+  }
+
+  async getDigestSchedulerRuns(tenantId: number): Promise<DigestSchedulerRun[]> {
+    return db.select().from(digestSchedulerRuns).where(eq(digestSchedulerRuns.tenantId, tenantId)).orderBy(desc(digestSchedulerRuns.startedAt)).limit(50);
+  }
+
+  async createDigestSchedulerRun(data: InsertDigestSchedulerRun): Promise<DigestSchedulerRun> {
+    const [run] = await db.insert(digestSchedulerRuns).values(data).returning();
+    return run;
+  }
+
+  async getDigestSchedulerRunByWeek(tenantId: number, weekKey: string): Promise<DigestSchedulerRun | undefined> {
+    const [run] = await db.select().from(digestSchedulerRuns).where(and(eq(digestSchedulerRuns.tenantId, tenantId), eq(digestSchedulerRuns.weekKey, weekKey)));
+    return run;
+  }
+
+  async updateDigestSchedulerRun(id: number, data: Partial<DigestSchedulerRun>): Promise<DigestSchedulerRun | undefined> {
+    const [updated] = await db.update(digestSchedulerRuns).set(data).where(eq(digestSchedulerRuns.id, id)).returning();
+    return updated;
+  }
+
+  async getBenchmarkingConfig(tenantId: number): Promise<BenchmarkingConfig | undefined> {
+    const [config] = await db.select().from(benchmarkingConfigs).where(eq(benchmarkingConfigs.tenantId, tenantId));
+    return config;
+  }
+
+  async upsertBenchmarkingConfig(tenantId: number, data: Partial<InsertBenchmarkingConfig>): Promise<BenchmarkingConfig> {
+    const existing = await this.getBenchmarkingConfig(tenantId);
+    if (existing) {
+      const [updated] = await db.update(benchmarkingConfigs).set({ ...data, updatedAt: new Date() }).where(eq(benchmarkingConfigs.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(benchmarkingConfigs).values({ ...data, tenantId } as InsertBenchmarkingConfig).returning();
+    return created;
+  }
+
+  async getPlaybookApplicationsByPlaybook(playbookId: number): Promise<PlaybookApplication[]> {
+    return db.select().from(playbookApplications).where(eq(playbookApplications.playbookId, playbookId)).orderBy(desc(playbookApplications.createdAt));
+  }
+
+  async getTenantUsersWithNames(tenantId: number): Promise<Array<{ id: number; userId: string; role: string; username: string | null }>> {
+    const rows = await db
+      .select({
+        id: tenantUsers.id,
+        userId: tenantUsers.userId,
+        role: tenantUsers.role,
+        username: users.username,
+      })
+      .from(tenantUsers)
+      .leftJoin(users, eq(tenantUsers.userId, users.id))
+      .where(eq(tenantUsers.tenantId, tenantId));
+    return rows;
   }
 }
 

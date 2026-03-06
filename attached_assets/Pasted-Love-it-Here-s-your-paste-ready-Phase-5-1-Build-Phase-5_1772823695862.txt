@@ -1,0 +1,167 @@
+Love it. Here’s your paste-ready Phase 5.1:
+
+───
+
+Build Phase 5.1 — Automation, Optimization, and Operator UX for Franchise OS / Xpansion Console.
+
+Goal
+
+Advance Phase 5 from functional to high-leverage by automating digests, improving scoring logic, and tightening execution UX for owners/managers.
+
+───
+
+1) Scheduled Weekly Digests (Automation)
+
+Scope
+
+Automate digest generation per tenant using schedule settings.
+
+Requirements
+
+• Add per-tenant digest schedule config:
+• day of week
+• send time
+• timezone
+• recipients/channels
+• Create scheduler job to auto-run digest generation.
+• Prevent duplicate digest runs for same tenant/week.
+• Store schedule run history and failure reasons.
+
+Endpoints
+
+• GET /api/admin/digests/:tenantId/schedule
+• PUT /api/admin/digests/:tenantId/schedule
+• POST /api/admin/digests/:tenantId/run (manual remains)
+• GET /api/admin/digests/:tenantId/history
+• GET /api/admin/digests/:tenantId/scheduler-runs
+
+Data model additions
+
+• digest_schedules
+• digest_scheduler_runs
+
+UI
+
+• Extend /admin/digests with:
+• schedule editor
+• timezone selector
+• recipient management
+• scheduler run history
+• last run / next run indicators
+
+───
+
+2) Opportunity Detection v2 (Smarter Scoring)
+
+Scope
+
+Improve opportunity quality and prioritization.
+
+Requirements
+
+• Expand detection beyond trend decline:
+• scorecard weakness clusters
+• repeated threshold misses
+• off-track goals with growing variance
+• Add weighted opportunity scoring model:
+• severity factor
+• trend magnitude
+• duration of issue
+• business impact proxy
+• Priority output: critical, high, medium, low
+• Add confidence score and rationale text per opportunity.
+
+Endpoints
+
+• GET /api/tenants/:tenantId/opportunities
+• POST /api/tenants/:tenantId/opportunities/recompute
+• GET /api/tenants/:tenantId/opportunities/:id/rationale
+
+Data model additions
+
+• Add fields to opportunities:
+• priority
+• confidence_score
+• rationale_json
+• detected_at
+• last_recomputed_at
+
+UI
+
+• Opportunity cards show:
+• priority
+• confidence
+• “why this matters” explanation
+
+───
+
+3) Playbook Management v2 (Edit + Lifecycle)
+
+Scope
+
+Complete playbook lifecycle beyond create-only.
+
+Requirements
+
+• Add playbook edit flow (name/category/steps).
+• Add step reordering and deletion.
+• Add playbook archive/unarchive.
+• Track playbook version and application history.
+• Allow “apply with overrides” (owner/due date/priority defaults).
+
+Endpoints
+
+• PUT /api/tenants/:tenantId/playbooks/:playbookId
+• DELETE /api/tenants/:tenantId/playbooks/:playbookId (soft archive)
+• POST /api/tenants/:tenantId/playbooks/:playbookId/unarchive
+• GET /api/tenants/:tenantId/playbooks/:playbookId/applications
+
+Data model updates
+
+• Add to playbooks:
+• is_archived
+• version
+• updated_by_user_id
+
+UI
+
+• /playbooks:
+• edit drawer/modal
+• step reorder controls
+• archive toggle
+• applications history panel
+
+───
+
+4) Action Assignment UX v2 (Human-readable ownership)
+
+Scope
+
+Improve operator usability of action ownership and accountability.
+
+Requirements
+
+• Replace raw owner user ID display with user name + role.
+• Add assignee picker sourced from tenant users.
+• Add due date quick presets (today, +3d, +7d, end of week).
+• Add overdue badge + “days overdue” indicator.
+• Add bulk status updates in list view.
+
+Endpoints
+
+• GET /api/tenants/:tenantId/users
+• Existing action endpoints should support richer assignee metadata in response payload.
+
+UI
+
+• /actions:
+• assignee display improvements
+• bulk actions toolbar
+• overdue indicators
+• quick due date controls
+
+───
+
+5) Benchmarking Formula v2 (Configurable weights)
+
+S

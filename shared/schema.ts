@@ -669,6 +669,11 @@ export const opportunities = pgTable("opportunities", {
   sourceType: varchar("source_type", { length: 100 }),
   status: varchar("status", { length: 50 }).notNull().default("open"),
   actionId: integer("action_id").references(() => actions.id, { onDelete: "set null" }),
+  priority: varchar("priority", { length: 50 }).notNull().default("medium"),
+  confidenceScore: real("confidence_score"),
+  rationaleJson: text("rationale_json"),
+  detectedAt: timestamp("detected_at").defaultNow(),
+  lastRecomputedAt: timestamp("last_recomputed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -700,6 +705,9 @@ export const playbooks = pgTable("playbooks", {
   description: text("description"),
   category: varchar("category", { length: 100 }),
   isActive: boolean("is_active").notNull().default(true),
+  isArchived: boolean("is_archived").notNull().default(false),
+  version: integer("version").notNull().default(1),
+  updatedByUserId: varchar("updated_by_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -746,6 +754,46 @@ export const digests = pgTable("digests", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const digestSchedules = pgTable("digest_schedules", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  dayOfWeek: integer("day_of_week").notNull().default(1),
+  sendTime: varchar("send_time", { length: 10 }).notNull().default("09:00"),
+  timezone: varchar("timezone", { length: 100 }).notNull().default("America/New_York"),
+  recipientsJson: text("recipients_json").notNull().default("[]"),
+  isEnabled: boolean("is_enabled").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const digestSchedulerRuns = pgTable("digest_scheduler_runs", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  weekKey: varchar("week_key", { length: 20 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("success"),
+  digestId: integer("digest_id").references(() => digests.id, { onDelete: "set null" }),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const benchmarkingConfigs = pgTable("benchmarking_configs", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  goalAttainmentWeight: real("goal_attainment_weight").notNull().default(40),
+  alertPenaltyWeight: real("alert_penalty_weight").notNull().default(25),
+  trendMomentumWeight: real("trend_momentum_weight").notNull().default(20),
+  scorecardContributionWeight: real("scorecard_contribution_weight").notNull().default(15),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const insertActionSchema = createInsertSchema(actions).omit({
   id: true,
   createdAt: true,
@@ -782,6 +830,20 @@ export const insertDigestSchema = createInsertSchema(digests).omit({
   id: true,
   createdAt: true,
 });
+export const insertDigestScheduleSchema = createInsertSchema(digestSchedules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertDigestSchedulerRunSchema = createInsertSchema(digestSchedulerRuns).omit({
+  id: true,
+  startedAt: true,
+});
+export const insertBenchmarkingConfigSchema = createInsertSchema(benchmarkingConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
 export type Action = typeof actions.$inferSelect;
 export type InsertAction = z.infer<typeof insertActionSchema>;
@@ -799,6 +861,12 @@ export type PlaybookApplication = typeof playbookApplications.$inferSelect;
 export type InsertPlaybookApplication = z.infer<typeof insertPlaybookApplicationSchema>;
 export type Digest = typeof digests.$inferSelect;
 export type InsertDigest = z.infer<typeof insertDigestSchema>;
+export type DigestSchedule = typeof digestSchedules.$inferSelect;
+export type InsertDigestSchedule = z.infer<typeof insertDigestScheduleSchema>;
+export type DigestSchedulerRun = typeof digestSchedulerRuns.$inferSelect;
+export type InsertDigestSchedulerRun = z.infer<typeof insertDigestSchedulerRunSchema>;
+export type BenchmarkingConfig = typeof benchmarkingConfigs.$inferSelect;
+export type InsertBenchmarkingConfig = z.infer<typeof insertBenchmarkingConfigSchema>;
 
 export type ScoreRun = typeof scoreRuns.$inferSelect;
 export type InsertScoreRun = z.infer<typeof insertScoreRunSchema>;

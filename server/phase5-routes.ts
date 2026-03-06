@@ -7,6 +7,8 @@ import {
   insertGoalSchema,
   insertPlaybookSchema,
   insertPlaybookStepSchema,
+  insertDigestScheduleSchema,
+  insertBenchmarkingConfigSchema,
 } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -47,6 +49,15 @@ async function audit(tenantId: number, actorUserId: string, entityType: string, 
     beforeJson: before ? JSON.stringify(before) : undefined,
     afterJson: after ? JSON.stringify(after) : undefined,
   });
+}
+
+export function getWeekKey(date: Date = new Date()): string {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const dayOfWeek = d.getDay();
+  const diff = d.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+  d.setDate(diff);
+  return `${d.getFullYear()}-W${String(Math.ceil((((d.getTime() - new Date(d.getFullYear(), 0, 1).getTime()) / 86400000) + 1) / 7)).padStart(2, "0")}`;
 }
 
 export const phase5Router = Router();
@@ -144,15 +155,35 @@ phase5Router.post("/tenants/:tenantId/weekly-command-center/refresh", isAuthenti
               o => o.metricDefinitionId === metric.id && o.locationId === loc.id && o.status === "open"
             );
             if (!existing) {
+              const vals = recent.map(v => v.value);
+              const magnitude = Math.abs(vals[2] - vals[0]) / (Math.abs(vals[0]) || 1);
+              const severity = magnitude > 0.2 ? 3 : magnitude > 0.1 ? 2 : 1;
+              const duration = 3;
+              const impact = severity * duration;
+              const impactLabel = impact >= 6 ? "high" : impact >= 3 ? "medium" : "low";
+              const priorityLabel = impact >= 8 ? "critical" : impact >= 5 ? "high" : impact >= 3 ? "medium" : "low";
+              const confidence = Math.min(0.95, 0.5 + magnitude + (duration * 0.1));
+              const rationale = {
+                factors: [
+                  { label: "Trend direction", value: isDecreasing ? "Declining" : "Increasing (bad)" },
+                  { label: "Magnitude", value: `${(magnitude * 100).toFixed(1)}% change` },
+                  { label: "Duration", value: `${duration} consecutive periods` },
+                  { label: "Business impact", value: impactLabel },
+                ],
+                summary: `${metric.name} at ${loc.name} has moved ${(magnitude * 100).toFixed(1)}% in an unfavorable direction over ${duration} periods.`,
+              };
               const opp = await storage.createOpportunity({
                 tenantId,
                 locationId: loc.id,
                 metricDefinitionId: metric.id,
                 title: `${metric.name} declining at ${loc.name}`,
-                description: `${metric.name} has shown a declining trend over the last 3 periods at ${loc.name}.`,
-                impactScore: "medium",
+                description: rationale.summary,
+                impactScore: impactLabel,
                 sourceType: "trend_decline",
                 status: "open",
+                priority: priorityLabel,
+                confidenceScore: parseFloat(confidence.toFixed(2)),
+                rationaleJson: JSON.stringify(rationale),
               });
               generated.push(opp);
             }
@@ -283,6 +314,36 @@ phase5Router.get("/tenants/:tenantId/actions/:actionId/checkins", isAuthenticate
   }
 });
 
+phase5Router.put("/tenants/:tenantId/actions/bulk-status", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const { actionIds, status } = req.body;
+    if (!Array.isArray(actionIds) || !actionIds.length || !status) {
+      return res.status(400).json(err("VALIDATION_ERROR", "actionIds (array) and status are required"));
+    }
+    if (!["open", "in_progress", "blocked", "done"].includes(status)) {
+      return res.status(400).json(err("VALIDATION_ERROR", "Invalid status"));
+    }
+
+    const updated: any[] = [];
+    for (const id of actionIds) {
+      const existing = await storage.getAction(id);
+      if (existing && existing.tenantId === tenantId) {
+        const action = await storage.updateAction(id, { status });
+        updated.push(action);
+      }
+    }
+
+    await audit(tenantId, req.user.claims.sub, "action", actionIds.join(","), "bulk_status_update", null, { status, count: updated.length });
+    res.json(ok({ updated: updated.length }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
 // ── Opportunities ──
 
 phase5Router.get("/tenants/:tenantId/opportunities", isAuthenticated, async (req: any, res) => {
@@ -324,6 +385,98 @@ phase5Router.post("/tenants/:tenantId/opportunities/:id/create-action", isAuthen
     await storage.updateOpportunity(oppId, { status: "actioned", actionId: action.id });
     await audit(tenantId, req.user.claims.sub, "opportunity", String(oppId), "create_action", opp, action);
     res.status(201).json(ok(action));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.post("/tenants/:tenantId/opportunities/recompute", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const opps = await storage.getOpportunities(tenantId);
+    const openOpps = opps.filter(o => o.status === "open");
+    let recomputed = 0;
+
+    const [metrics, locs, allGoals] = await Promise.all([
+      storage.getMetricDefinitions(tenantId),
+      storage.getLocations(tenantId),
+      storage.getGoals(tenantId),
+    ]);
+
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    for (const opp of openOpps) {
+      if (opp.metricDefinitionId && opp.locationId) {
+        const metric = metrics.find(m => m.id === opp.metricDefinitionId);
+        if (!metric) continue;
+        const values = await storage.getMetricTrends(opp.metricDefinitionId, opp.locationId, "weekly", thirtyDaysAgo, now);
+        if (values.length >= 3) {
+          const recent = values.slice(-3);
+          const vals = recent.map(v => v.value);
+          const magnitude = Math.abs(vals[2] - vals[0]) / (Math.abs(vals[0]) || 1);
+          const severity = magnitude > 0.2 ? 3 : magnitude > 0.1 ? 2 : 1;
+          const duration = 3;
+          const impact = severity * duration;
+          const impactLabel = impact >= 6 ? "high" : impact >= 3 ? "medium" : "low";
+          const priorityLabel = impact >= 8 ? "critical" : impact >= 5 ? "high" : impact >= 3 ? "medium" : "low";
+          const confidence = Math.min(0.95, 0.5 + magnitude + (duration * 0.1));
+
+          const relatedGoals = allGoals.filter(g => g.metricDefinitionId === opp.metricDefinitionId && g.locationId === opp.locationId);
+          const offTrackGoals = relatedGoals.filter(g => g.status === "off_track");
+
+          const rationale = {
+            factors: [
+              { label: "Trend direction", value: `${(magnitude * 100).toFixed(1)}% change` },
+              { label: "Duration", value: `${duration} periods` },
+              { label: "Business impact", value: impactLabel },
+              ...(offTrackGoals.length > 0 ? [{ label: "Related off-track goals", value: String(offTrackGoals.length) }] : []),
+            ],
+            summary: `${metric.name} at location ID ${opp.locationId} continues to trend unfavorably.`,
+          };
+
+          await storage.updateOpportunity(opp.id, {
+            impactScore: impactLabel,
+            priority: priorityLabel,
+            confidenceScore: parseFloat(confidence.toFixed(2)),
+            rationaleJson: JSON.stringify(rationale),
+            lastRecomputedAt: now,
+          });
+          recomputed++;
+        }
+      }
+    }
+
+    await audit(tenantId, req.user.claims.sub, "opportunity", "all", "recompute");
+    res.json(ok({ recomputed }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.get("/tenants/:tenantId/opportunities/:id/rationale", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const oppId = parseInt(req.params.id);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const opp = await storage.getOpportunity(oppId);
+    if (!opp || opp.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Opportunity not found"));
+
+    const rationale = opp.rationaleJson ? JSON.parse(opp.rationaleJson) : null;
+    res.json(ok({
+      opportunityId: opp.id,
+      title: opp.title,
+      priority: opp.priority,
+      confidenceScore: opp.confidenceScore,
+      rationale,
+      detectedAt: opp.detectedAt,
+      lastRecomputedAt: opp.lastRecomputedAt,
+    }));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
@@ -418,28 +571,90 @@ phase5Router.get("/tenants/:tenantId/goals/variance", isAuthenticated, async (re
 
 // ── Benchmarking ──
 
+phase5Router.get("/tenants/:tenantId/benchmarking/config", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const config = await storage.getBenchmarkingConfig(tenantId);
+    res.json(ok(config || {
+      tenantId,
+      goalAttainmentWeight: 40,
+      alertPenaltyWeight: 25,
+      trendMomentumWeight: 20,
+      scorecardContributionWeight: 15,
+    }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.put("/tenants/:tenantId/benchmarking/config", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireAdminAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const schema = z.object({
+      goalAttainmentWeight: z.number().min(0).max(100),
+      alertPenaltyWeight: z.number().min(0).max(100),
+      trendMomentumWeight: z.number().min(0).max(100),
+      scorecardContributionWeight: z.number().min(0).max(100),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+
+    const total = parsed.data.goalAttainmentWeight + parsed.data.alertPenaltyWeight + parsed.data.trendMomentumWeight + parsed.data.scorecardContributionWeight;
+    if (total !== 100) return res.status(400).json(err("VALIDATION_ERROR", `Weights must sum to 100, got ${total}`));
+
+    const before = await storage.getBenchmarkingConfig(tenantId);
+    const config = await storage.upsertBenchmarkingConfig(tenantId, parsed.data);
+    await audit(tenantId, req.user.claims.sub, "benchmarking_config", String(tenantId), "update", before, config);
+    res.json(ok(config));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
 phase5Router.get("/tenants/:tenantId/benchmarking", isAuthenticated, async (req: any, res) => {
   try {
     const tenantId = parseInt(req.params.tenantId);
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
-    const [locs, allAlerts, allGoals, allActions] = await Promise.all([
+    const [locs, allAlerts, allGoals, allActions, configRow] = await Promise.all([
       storage.getLocations(tenantId),
       storage.getAlertEvents(tenantId),
       storage.getGoals(tenantId),
       storage.getActions(tenantId),
+      storage.getBenchmarkingConfig(tenantId),
     ]);
+
+    const config = configRow || { goalAttainmentWeight: 40, alertPenaltyWeight: 25, trendMomentumWeight: 20, scorecardContributionWeight: 15 };
+    const totalWeight = config.goalAttainmentWeight + config.alertPenaltyWeight + config.trendMomentumWeight + config.scorecardContributionWeight;
 
     const rankings = locs.filter(l => l.isActive).map(loc => {
       const locAlerts = allAlerts.filter(a => a.locationId === loc.id && a.status === "open");
       const locGoals = allGoals.filter(g => g.locationId === loc.id);
       const onTrackGoals = locGoals.filter(g => g.status === "on_track").length;
       const totalGoals = locGoals.length;
-      const goalAttainment = totalGoals > 0 ? Math.round((onTrackGoals / totalGoals) * 100) : null;
+      const goalAttainment = totalGoals > 0 ? Math.round((onTrackGoals / totalGoals) * 100) : 0;
       const locActions = allActions.filter(a => a.locationId === loc.id);
       const completedActions = locActions.filter(a => a.status === "done").length;
       const totalActions = locActions.length;
+      const actionCompletion = totalActions > 0 ? Math.round((completedActions / totalActions) * 100) : 0;
+
+      const alertPenalty = Math.max(0, 100 - locAlerts.length * 20);
+      const trendMomentum = actionCompletion;
+      const scorecardContribution = goalAttainment;
+
+      const compositeScore = totalWeight > 0 ? Math.round(
+        (goalAttainment * config.goalAttainmentWeight +
+         alertPenalty * config.alertPenaltyWeight +
+         trendMomentum * config.trendMomentumWeight +
+         scorecardContribution * config.scorecardContributionWeight) / totalWeight
+      ) : 0;
 
       return {
         locationId: loc.id,
@@ -450,11 +665,15 @@ phase5Router.get("/tenants/:tenantId/benchmarking", isAuthenticated, async (req:
         totalGoals,
         completedActions,
         totalActions,
-        compositeScore: (goalAttainment || 0) - locAlerts.length * 5,
+        actionCompletion,
+        alertPenalty,
+        trendMomentum,
+        scorecardContribution,
+        compositeScore,
       };
     }).sort((a, b) => b.compositeScore - a.compositeScore);
 
-    res.json(ok(rankings));
+    res.json(ok({ rankings, weights: config }));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
@@ -510,6 +729,100 @@ phase5Router.post("/tenants/:tenantId/playbooks", isAuthenticated, async (req: a
   }
 });
 
+phase5Router.put("/tenants/:tenantId/playbooks/:playbookId", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const playbookId = parseInt(req.params.playbookId);
+    const tu = await requireAdminAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const existing = await storage.getPlaybook(playbookId);
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Playbook not found"));
+    if (existing.isArchived) return res.status(400).json(err("ARCHIVED", "Cannot edit archived playbook"));
+
+    const updated = await storage.updatePlaybook(playbookId, {
+      name: req.body.name || existing.name,
+      description: req.body.description !== undefined ? req.body.description : existing.description,
+      category: req.body.category !== undefined ? req.body.category : existing.category,
+      version: (existing.version || 1) + 1,
+      updatedByUserId: req.user.claims.sub,
+      updatedAt: new Date(),
+    } as any);
+
+    if (req.body.steps && Array.isArray(req.body.steps)) {
+      await storage.deletePlaybookSteps(playbookId);
+      for (let i = 0; i < req.body.steps.length; i++) {
+        await storage.createPlaybookStep({
+          playbookId,
+          stepOrder: i + 1,
+          title: req.body.steps[i].title,
+          description: req.body.steps[i].description || null,
+          metricDefinitionId: req.body.steps[i].metricDefinitionId || null,
+        });
+      }
+    }
+
+    const steps = await storage.getPlaybookSteps(playbookId);
+    await audit(tenantId, req.user.claims.sub, "playbook", String(playbookId), "update", existing, updated);
+    res.json(ok({ ...updated, steps }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.delete("/tenants/:tenantId/playbooks/:playbookId", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const playbookId = parseInt(req.params.playbookId);
+    const tu = await requireAdminAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const existing = await storage.getPlaybook(playbookId);
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Playbook not found"));
+
+    await storage.updatePlaybook(playbookId, { isArchived: true, isActive: false, updatedByUserId: req.user.claims.sub, updatedAt: new Date() } as any);
+    await audit(tenantId, req.user.claims.sub, "playbook", String(playbookId), "archive", existing);
+    res.json(ok({ archived: true }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/unarchive", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const playbookId = parseInt(req.params.playbookId);
+    const tu = await requireAdminAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const existing = await storage.getPlaybook(playbookId);
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Playbook not found"));
+
+    await storage.updatePlaybook(playbookId, { isArchived: false, isActive: true, updatedByUserId: req.user.claims.sub, updatedAt: new Date() } as any);
+    await audit(tenantId, req.user.claims.sub, "playbook", String(playbookId), "unarchive", existing);
+    res.json(ok({ unarchived: true }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.get("/tenants/:tenantId/playbooks/:playbookId/applications", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const playbookId = parseInt(req.params.playbookId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const pb = await storage.getPlaybook(playbookId);
+    if (!pb || pb.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Playbook not found"));
+
+    const applications = await storage.getPlaybookApplicationsByPlaybook(playbookId);
+    res.json(ok(applications));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
 phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/apply", isAuthenticated, async (req: any, res) => {
   try {
     const tenantId = parseInt(req.params.tenantId);
@@ -522,6 +835,12 @@ phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/apply", isAuthentica
 
     const locationIds: number[] = req.body.locationIds || [];
     if (locationIds.length === 0) return res.status(400).json(err("VALIDATION_ERROR", "locationIds required"));
+
+    const overrides = {
+      ownerUserId: req.body.ownerUserId || req.user.claims.sub,
+      priority: req.body.priority || "medium",
+      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+    };
 
     const steps = await storage.getPlaybookSteps(playbookId);
     const results: any[] = [];
@@ -543,11 +862,11 @@ phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/apply", isAuthentica
           title: `[Playbook] ${step.title}`,
           description: step.description,
           status: "open",
-          priority: "medium",
-          ownerUserId: req.user.claims.sub,
+          priority: overrides.priority,
+          ownerUserId: overrides.ownerUserId,
           sourceType: "playbook",
           sourceId: playbookId,
-          dueDate: null,
+          dueDate: overrides.dueDate,
         });
       }
 
@@ -561,7 +880,64 @@ phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/apply", isAuthentica
   }
 });
 
+// ── Tenant Users ──
+
+phase5Router.get("/tenants/:tenantId/users", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const users = await storage.getTenantUsersWithNames(tenantId);
+    res.json(ok(users));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
 // ── Digests ──
+
+export async function generateDigest(tenantId: number, userId: string) {
+  const [allActions, allGoals, allOpportunities, allAlerts] = await Promise.all([
+    storage.getActions(tenantId),
+    storage.getGoals(tenantId),
+    storage.getOpportunities(tenantId),
+    storage.getAlertEvents(tenantId, { status: "open" }),
+  ]);
+
+  const now = new Date();
+  const overdueActions = allActions.filter(a => a.dueDate && new Date(a.dueDate) < now && a.status !== "done");
+  const blockedActions = allActions.filter(a => a.status === "blocked");
+  const completedActions = allActions.filter(a => a.status === "done").slice(0, 5);
+  const offTrackGoals = allGoals.filter(g => g.status === "off_track" || g.status === "at_risk");
+  const highImpactOpps = allOpportunities.filter(o => o.status === "open" && o.impactScore === "high");
+
+  const wins = completedActions.map(a => a.title);
+  const risks = [
+    ...offTrackGoals.map(g => `Goal off-track: ${g.title}`),
+    ...allAlerts.filter(a => a.severity === "critical").slice(0, 3).map(a => `Critical alert: ${a.message}`),
+  ].slice(0, 5);
+  const blocked = blockedActions.map(a => `${a.title} (blocked)`);
+  const overdue = overdueActions.map(a => `${a.title} (due ${a.dueDate ? new Date(a.dueDate).toLocaleDateString() : "N/A"})`);
+  const recommendedMoves = [
+    ...overdueActions.slice(0, 2).map(a => `Resolve overdue action: ${a.title}`),
+    ...offTrackGoals.slice(0, 2).map(g => `Address off-track goal: ${g.title}`),
+    ...highImpactOpps.slice(0, 1).map(o => `Act on opportunity: ${o.title}`),
+  ].slice(0, 5);
+
+  const summaryText = `Weekly Digest: ${wins.length} wins, ${risks.length} risks, ${overdue.length} overdue, ${blocked.length} blocked. ${recommendedMoves.length} recommended moves.`;
+
+  return storage.createDigest({
+    tenantId,
+    generatedByUserId: userId,
+    winsJson: JSON.stringify(wins),
+    risksJson: JSON.stringify(risks),
+    blockedActionsJson: JSON.stringify(blocked),
+    overdueActionsJson: JSON.stringify(overdue),
+    recommendedMovesJson: JSON.stringify(recommendedMoves),
+    summaryText,
+  });
+}
 
 phase5Router.post("/admin/digests/:tenantId/run", isAuthenticated, async (req: any, res) => {
   try {
@@ -569,49 +945,29 @@ phase5Router.post("/admin/digests/:tenantId/run", isAuthenticated, async (req: a
     const tu = await requireAdminAccess(req, res, tenantId);
     if (!tu) return;
 
-    const [allActions, allGoals, allOpportunities, allAlerts] = await Promise.all([
-      storage.getActions(tenantId),
-      storage.getGoals(tenantId),
-      storage.getOpportunities(tenantId),
-      storage.getAlertEvents(tenantId, { status: "open" }),
-    ]);
+    const weekKey = getWeekKey();
+    const existingRun = await storage.getDigestSchedulerRunByWeek(tenantId, weekKey);
+    if (existingRun && existingRun.status === "success" && !req.body.force) {
+      return res.status(409).json(err("DUPLICATE", `Digest already generated for ${weekKey}. Pass force: true to regenerate.`));
+    }
 
-    const now = new Date();
-    const overdueActions = allActions.filter(a => a.dueDate && new Date(a.dueDate) < now && a.status !== "done");
-    const blockedActions = allActions.filter(a => a.status === "blocked");
-    const completedActions = allActions.filter(a => a.status === "done").slice(0, 5);
-    const offTrackGoals = allGoals.filter(g => g.status === "off_track" || g.status === "at_risk");
-    const highImpactOpps = allOpportunities.filter(o => o.status === "open" && o.impactScore === "high");
-
-    const wins = completedActions.map(a => a.title);
-    const risks = [
-      ...offTrackGoals.map(g => `Goal off-track: ${g.title}`),
-      ...allAlerts.filter(a => a.severity === "critical").slice(0, 3).map(a => `Critical alert: ${a.message}`),
-    ].slice(0, 5);
-    const blocked = blockedActions.map(a => `${a.title} (blocked)`);
-    const overdue = overdueActions.map(a => `${a.title} (due ${a.dueDate ? new Date(a.dueDate).toLocaleDateString() : "N/A"})`);
-    const recommendedMoves = [
-      ...overdueActions.slice(0, 2).map(a => `Resolve overdue action: ${a.title}`),
-      ...offTrackGoals.slice(0, 2).map(g => `Address off-track goal: ${g.title}`),
-      ...highImpactOpps.slice(0, 1).map(o => `Act on opportunity: ${o.title}`),
-    ].slice(0, 5);
-
-    const summaryText = `Weekly Digest: ${wins.length} wins, ${risks.length} risks, ${overdue.length} overdue, ${blocked.length} blocked. ${recommendedMoves.length} recommended moves.`;
-
-    const digest = await storage.createDigest({
+    const run = await storage.createDigestSchedulerRun({
       tenantId,
-      generatedByUserId: req.user.claims.sub,
-      winsJson: JSON.stringify(wins),
-      risksJson: JSON.stringify(risks),
-      blockedActionsJson: JSON.stringify(blocked),
-      overdueActionsJson: JSON.stringify(overdue),
-      recommendedMovesJson: JSON.stringify(recommendedMoves),
-      summaryText,
+      weekKey,
+      status: "running",
     });
 
-    await audit(tenantId, req.user.claims.sub, "digest", String(digest.id), "create", null, digest);
-    res.status(201).json(ok(digest));
+    try {
+      const digest = await generateDigest(tenantId, req.user.claims.sub);
+      await storage.updateDigestSchedulerRun(run.id, { status: "success", digestId: digest.id, completedAt: new Date() } as any);
+      await audit(tenantId, req.user.claims.sub, "digest", String(digest.id), "create", null, digest);
+      res.status(201).json(ok(digest));
+    } catch (genError: any) {
+      await storage.updateDigestSchedulerRun(run.id, { status: "failed", errorMessage: genError.message, completedAt: new Date() } as any);
+      throw genError;
+    }
   } catch (error: any) {
+    if (error.message?.includes("already generated")) return;
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -623,6 +979,64 @@ phase5Router.get("/admin/digests/:tenantId/history", isAuthenticated, async (req
     if (!tu) return;
     const data = await storage.getDigests(tenantId);
     res.json(ok(data));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.get("/admin/digests/:tenantId/schedule", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const schedule = await storage.getDigestSchedule(tenantId);
+    res.json(ok(schedule || {
+      tenantId,
+      dayOfWeek: 1,
+      sendTime: "09:00",
+      timezone: "America/New_York",
+      recipientsJson: "[]",
+      isEnabled: false,
+    }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.put("/admin/digests/:tenantId/schedule", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireAdminAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const schema = z.object({
+      dayOfWeek: z.number().min(0).max(6),
+      sendTime: z.string().regex(/^\d{2}:\d{2}$/),
+      timezone: z.string().min(1),
+      recipientsJson: z.string().optional(),
+      isEnabled: z.boolean(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+
+    const before = await storage.getDigestSchedule(tenantId);
+    const schedule = await storage.upsertDigestSchedule(tenantId, parsed.data);
+    await audit(tenantId, req.user.claims.sub, "digest_schedule", String(tenantId), "update", before, schedule);
+    res.json(ok(schedule));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.get("/admin/digests/:tenantId/scheduler-runs", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const runs = await storage.getDigestSchedulerRuns(tenantId);
+    res.json(ok(runs));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
