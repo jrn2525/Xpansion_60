@@ -45,6 +45,27 @@ export async function registerRoutes(
   await setupAuth(app);
   registerAuthRoutes(app);
 
+  app.get("/api/admin/tenants", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const userTenants = await storage.getUserTenants(userId);
+      const hasOwnerRole = userTenants.some((tu) => tu.role === "owner" || tu.role === "admin");
+      if (!hasOwnerRole) {
+        return res.status(403).json({
+          ok: false,
+          error: { code: "FORBIDDEN", message: "Admin access required" },
+        });
+      }
+      const tenants = await storage.getTenants();
+      res.json({ ok: true, data: tenants });
+    } catch (error: any) {
+      res.status(500).json({
+        ok: false,
+        error: { code: "INTERNAL_ERROR", message: error.message },
+      });
+    }
+  });
+
   app.get("/api/tenants", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

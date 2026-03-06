@@ -28,6 +28,8 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - All API routes prefixed with `/api/tenants/:tenantId/`
 - Score run calculation: raw value -> threshold band -> normalized score (100/75/50/25) -> weighted sum
 - Trend endpoints generate period slots and fill with data, returning null for missing periods
+- `GET /api/auth/me` returns `{ ok, data: { id, email, tenants[] } }` (401 when not logged in)
+- `GET /api/admin/tenants` returns `{ ok, data: [...] }` (401/403 for non-admin, 200 for owner/admin)
 - API routes mounted first; SPA fallback explicitly skips `/api/*` paths
 - `/api/health` returns `{ ok: true, service: "xpansion-console", timestamp }` for uptime checks
 - Unmatched `/api/*` routes return JSON 404 (never HTML)
