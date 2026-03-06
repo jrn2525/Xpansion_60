@@ -11,7 +11,7 @@ export function registerAuthRoutes(app: Express): void {
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: "Failed to fetch user" } });
     }
   });
 

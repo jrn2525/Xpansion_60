@@ -15,6 +15,10 @@ import LocationsPage from "@/pages/locations";
 import MetricsPage from "@/pages/metrics";
 import ScorecardsPage from "@/pages/scorecards";
 import TrendsPage from "@/pages/trends";
+import AdminImportsPage from "@/pages/admin-imports";
+import AdminAlertsPage from "@/pages/admin-alerts";
+import AdminReportsPage from "@/pages/admin-reports";
+import AdminAuditPage from "@/pages/admin-audit";
 
 function AuthenticatedRouter() {
   return (
@@ -25,6 +29,10 @@ function AuthenticatedRouter() {
       <Route path="/metrics" component={MetricsPage} />
       <Route path="/scorecards" component={ScorecardsPage} />
       <Route path="/trends" component={TrendsPage} />
+      <Route path="/admin/imports" component={AdminImportsPage} />
+      <Route path="/admin/alerts" component={AdminAlertsPage} />
+      <Route path="/admin/reports" component={AdminReportsPage} />
+      <Route path="/admin/audit" component={AdminAuditPage} />
       <Route component={NotFound} />
     </Switch>
   );

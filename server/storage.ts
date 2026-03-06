@@ -9,6 +9,13 @@ import {
   scoreRuns,
   scoreRunDetails,
   metricValues,
+  importJobs,
+  importRowErrors,
+  alertRules,
+  alertEvents,
+  reports,
+  reportRuns,
+  auditLogs,
   type Tenant,
   type InsertTenant,
   type TenantUser,
@@ -28,6 +35,20 @@ import {
   type ScoreRunDetail,
   type MetricValue,
   type InsertMetricValue,
+  type ImportJob,
+  type InsertImportJob,
+  type ImportRowError,
+  type InsertImportRowError,
+  type AlertRule,
+  type InsertAlertRule,
+  type AlertEvent,
+  type InsertAlertEvent,
+  type Report,
+  type InsertReport,
+  type ReportRun,
+  type InsertReportRun,
+  type AuditLog,
+  type InsertAuditLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte } from "drizzle-orm";
@@ -99,6 +120,36 @@ export interface IStorage {
     startDate: Date,
     endDate: Date
   ): Promise<MetricValue[]>;
+
+  createImportJob(data: InsertImportJob): Promise<ImportJob>;
+  getImportJob(id: number): Promise<ImportJob | undefined>;
+  getImportJobs(tenantId: number): Promise<ImportJob[]>;
+  updateImportJob(id: number, data: Partial<ImportJob>): Promise<ImportJob | undefined>;
+  createImportRowError(data: InsertImportRowError): Promise<ImportRowError>;
+  getImportRowErrors(importJobId: number): Promise<ImportRowError[]>;
+
+  createAlertRule(data: InsertAlertRule): Promise<AlertRule>;
+  getAlertRule(id: number): Promise<AlertRule | undefined>;
+  getAlertRules(tenantId: number): Promise<AlertRule[]>;
+  updateAlertRule(id: number, data: Partial<InsertAlertRule>): Promise<AlertRule | undefined>;
+  deleteAlertRule(id: number): Promise<boolean>;
+  createAlertEvent(data: InsertAlertEvent): Promise<AlertEvent>;
+  getAlertEvent(id: number): Promise<AlertEvent | undefined>;
+  getAlertEvents(tenantId: number, filters?: { status?: string; severity?: string; locationId?: number }): Promise<AlertEvent[]>;
+  updateAlertEvent(id: number, data: Partial<AlertEvent>): Promise<AlertEvent | undefined>;
+
+  createReport(data: InsertReport): Promise<Report>;
+  getReport(id: number): Promise<Report | undefined>;
+  getReports(tenantId: number): Promise<Report[]>;
+  updateReport(id: number, data: Partial<InsertReport>): Promise<Report | undefined>;
+  deleteReport(id: number): Promise<boolean>;
+  createReportRun(data: InsertReportRun): Promise<ReportRun>;
+  getReportRun(id: number): Promise<ReportRun | undefined>;
+  getReportRuns(reportId: number): Promise<ReportRun[]>;
+  updateReportRun(id: number, data: Partial<ReportRun>): Promise<ReportRun | undefined>;
+
+  createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
+  getAuditLogs(tenantId: number, filters?: { entityType?: string; actorUserId?: string; start?: Date; end?: Date }): Promise<AuditLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -455,6 +506,138 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .orderBy(asc(metricValues.periodStart));
+  }
+
+  async createImportJob(data: InsertImportJob): Promise<ImportJob> {
+    const [job] = await db.insert(importJobs).values(data).returning();
+    return job;
+  }
+
+  async getImportJob(id: number): Promise<ImportJob | undefined> {
+    const [job] = await db.select().from(importJobs).where(eq(importJobs.id, id));
+    return job;
+  }
+
+  async getImportJobs(tenantId: number): Promise<ImportJob[]> {
+    return db.select().from(importJobs).where(eq(importJobs.tenantId, tenantId)).orderBy(desc(importJobs.createdAt));
+  }
+
+  async updateImportJob(id: number, data: Partial<ImportJob>): Promise<ImportJob | undefined> {
+    const [job] = await db.update(importJobs).set({ ...data, updatedAt: new Date() }).where(eq(importJobs.id, id)).returning();
+    return job;
+  }
+
+  async createImportRowError(data: InsertImportRowError): Promise<ImportRowError> {
+    const [err] = await db.insert(importRowErrors).values(data).returning();
+    return err;
+  }
+
+  async getImportRowErrors(importJobId: number): Promise<ImportRowError[]> {
+    return db.select().from(importRowErrors).where(eq(importRowErrors.importJobId, importJobId)).orderBy(asc(importRowErrors.rowNumber));
+  }
+
+  async createAlertRule(data: InsertAlertRule): Promise<AlertRule> {
+    const [rule] = await db.insert(alertRules).values(data).returning();
+    return rule;
+  }
+
+  async getAlertRule(id: number): Promise<AlertRule | undefined> {
+    const [rule] = await db.select().from(alertRules).where(eq(alertRules.id, id));
+    return rule;
+  }
+
+  async getAlertRules(tenantId: number): Promise<AlertRule[]> {
+    return db.select().from(alertRules).where(eq(alertRules.tenantId, tenantId)).orderBy(desc(alertRules.createdAt));
+  }
+
+  async updateAlertRule(id: number, data: Partial<InsertAlertRule>): Promise<AlertRule | undefined> {
+    const [rule] = await db.update(alertRules).set({ ...data, updatedAt: new Date() }).where(eq(alertRules.id, id)).returning();
+    return rule;
+  }
+
+  async deleteAlertRule(id: number): Promise<boolean> {
+    const result = await db.delete(alertRules).where(eq(alertRules.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createAlertEvent(data: InsertAlertEvent): Promise<AlertEvent> {
+    const [event] = await db.insert(alertEvents).values(data).returning();
+    return event;
+  }
+
+  async getAlertEvent(id: number): Promise<AlertEvent | undefined> {
+    const [event] = await db.select().from(alertEvents).where(eq(alertEvents.id, id));
+    return event;
+  }
+
+  async getAlertEvents(tenantId: number, filters?: { status?: string; severity?: string; locationId?: number }): Promise<AlertEvent[]> {
+    const conditions = [eq(alertEvents.tenantId, tenantId)];
+    if (filters?.status) conditions.push(eq(alertEvents.status, filters.status));
+    if (filters?.severity) conditions.push(eq(alertEvents.severity, filters.severity));
+    if (filters?.locationId) conditions.push(eq(alertEvents.locationId, filters.locationId));
+    return db.select().from(alertEvents).where(and(...conditions)).orderBy(desc(alertEvents.createdAt));
+  }
+
+  async updateAlertEvent(id: number, data: Partial<AlertEvent>): Promise<AlertEvent | undefined> {
+    const [event] = await db.update(alertEvents).set(data).where(eq(alertEvents.id, id)).returning();
+    return event;
+  }
+
+  async createReport(data: InsertReport): Promise<Report> {
+    const [report] = await db.insert(reports).values(data).returning();
+    return report;
+  }
+
+  async getReport(id: number): Promise<Report | undefined> {
+    const [report] = await db.select().from(reports).where(eq(reports.id, id));
+    return report;
+  }
+
+  async getReports(tenantId: number): Promise<Report[]> {
+    return db.select().from(reports).where(eq(reports.tenantId, tenantId)).orderBy(desc(reports.createdAt));
+  }
+
+  async updateReport(id: number, data: Partial<InsertReport>): Promise<Report | undefined> {
+    const [report] = await db.update(reports).set({ ...data, updatedAt: new Date() }).where(eq(reports.id, id)).returning();
+    return report;
+  }
+
+  async deleteReport(id: number): Promise<boolean> {
+    const result = await db.delete(reports).where(eq(reports.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createReportRun(data: InsertReportRun): Promise<ReportRun> {
+    const [run] = await db.insert(reportRuns).values(data).returning();
+    return run;
+  }
+
+  async getReportRun(id: number): Promise<ReportRun | undefined> {
+    const [run] = await db.select().from(reportRuns).where(eq(reportRuns.id, id));
+    return run;
+  }
+
+  async getReportRuns(reportId: number): Promise<ReportRun[]> {
+    return db.select().from(reportRuns).where(eq(reportRuns.reportId, reportId)).orderBy(desc(reportRuns.createdAt));
+  }
+
+  async updateReportRun(id: number, data: Partial<ReportRun>): Promise<ReportRun | undefined> {
+    const [run] = await db.update(reportRuns).set(data).where(eq(reportRuns.id, id)).returning();
+    return run;
+  }
+
+  async createAuditLog(data: InsertAuditLog): Promise<AuditLog> {
+    const [log] = await db.insert(auditLogs).values(data).returning();
+    return log;
+  }
+
+  async getAuditLogs(tenantId: number, filters?: { entityType?: string; actorUserId?: string; start?: Date; end?: Date }): Promise<AuditLog[]> {
+    const conditions = [eq(auditLogs.tenantId, tenantId)];
+    if (filters?.entityType) conditions.push(eq(auditLogs.entityType, filters.entityType));
+    if (filters?.actorUserId) conditions.push(eq(auditLogs.actorUserId, filters.actorUserId));
+    if (filters?.start) conditions.push(gte(auditLogs.createdAt, filters.start));
+    if (filters?.end) conditions.push(lte(auditLogs.createdAt, filters.end));
+    return db.select().from(auditLogs).where(and(...conditions)).orderBy(desc(auditLogs.createdAt));
   }
 }
 

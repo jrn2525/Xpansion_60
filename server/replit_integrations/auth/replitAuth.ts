@@ -131,10 +131,11 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  const unauthorizedResponse = { ok: false, error: { code: "UNAUTHORIZED", message: "Unauthorized" } };
   const user = req.user as any;
 
   if (!req.isAuthenticated() || !user.expires_at) {
-    return res.status(401).json({ message: "Unauthorized" });
+    return res.status(401).json(unauthorizedResponse);
   }
 
   const now = Math.floor(Date.now() / 1000);
@@ -144,7 +145,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
 
   const refreshToken = user.refresh_token;
   if (!refreshToken) {
-    res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json(unauthorizedResponse);
     return;
   }
 
@@ -154,7 +155,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     updateUserSession(user, tokenResponse);
     return next();
   } catch (error) {
-    res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json(unauthorizedResponse);
     return;
   }
 };

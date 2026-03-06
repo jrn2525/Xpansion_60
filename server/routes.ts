@@ -14,6 +14,7 @@ import {
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { seed } from "./seed";
+import { adminRouter } from "./admin-routes";
 
 function zodError(res: any, error: z.ZodError) {
   const validationError = fromZodError(error);
@@ -716,6 +717,8 @@ export async function registerRoutes(
       res.status(500).json({ message: error.message });
     }
   });
+
+  app.use("/api/admin", adminRouter);
 
   seed().catch(console.error);
 

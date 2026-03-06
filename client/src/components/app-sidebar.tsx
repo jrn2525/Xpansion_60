@@ -8,6 +8,10 @@ import {
   TrendingUp,
   LogOut,
   ChevronDown,
+  Upload,
+  Bell,
+  FileBarChart,
+  History,
 } from "lucide-react";
 import {
   Sidebar,
@@ -41,6 +45,13 @@ const navItems = [
   { title: "Metrics", url: "/metrics", icon: BarChart3 },
   { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck },
   { title: "Trends", url: "/trends", icon: TrendingUp },
+];
+
+const adminItems = [
+  { title: "Imports", url: "/admin/imports", icon: Upload },
+  { title: "Alerts", url: "/admin/alerts", icon: Bell },
+  { title: "Reports", url: "/admin/reports", icon: FileBarChart },
+  { title: "Audit Log", url: "/admin/audit", icon: History },
 ];
 
 export function AppSidebar() {
@@ -126,6 +137,29 @@ export function AppSidebar() {
                       isActive={isActive}
                     >
                       <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Admin</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {adminItems.map((item) => {
+                const isActive = location.startsWith(item.url);
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                    >
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
                       </Link>

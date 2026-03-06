@@ -268,6 +268,116 @@ export const metricValuesRelations = relations(metricValues, ({ one }) => ({
   }),
 }));
 
+export const importJobs = pgTable("import_jobs", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  locationId: integer("location_id")
+    .notNull()
+    .references(() => locations.id, { onDelete: "cascade" }),
+  fileName: varchar("file_name", { length: 500 }).notNull(),
+  mappingConfig: text("mapping_config").notNull().default("{}"),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  totalRows: integer("total_rows").notNull().default(0),
+  successRows: integer("success_rows").notNull().default(0),
+  failedRows: integer("failed_rows").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const importRowErrors = pgTable("import_row_errors", {
+  id: serial("id").primaryKey(),
+  importJobId: integer("import_job_id")
+    .notNull()
+    .references(() => importJobs.id, { onDelete: "cascade" }),
+  rowNumber: integer("row_number").notNull(),
+  rawData: text("raw_data").notNull().default("{}"),
+  errorMessage: text("error_message").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const alertRules = pgTable("alert_rules", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  severity: varchar("severity", { length: 50 }).notNull().default("medium"),
+  conditionJson: text("condition_json").notNull().default("{}"),
+  actionJson: text("action_json").notNull().default("{}"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const alertEvents = pgTable("alert_events", {
+  id: serial("id").primaryKey(),
+  alertRuleId: integer("alert_rule_id")
+    .notNull()
+    .references(() => alertRules.id, { onDelete: "cascade" }),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  locationId: integer("location_id").references(() => locations.id),
+  metricDefinitionId: integer("metric_definition_id").references(
+    () => metricDefinitions.id
+  ),
+  status: varchar("status", { length: 50 }).notNull().default("open"),
+  severity: varchar("severity", { length: 50 }).notNull().default("medium"),
+  message: text("message").notNull(),
+  detailJson: text("detail_json").notNull().default("{}"),
+  acknowledgedBy: varchar("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  resolvedBy: varchar("resolved_by"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const reports = pgTable("reports", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  reportType: varchar("report_type", { length: 100 }).notNull(),
+  configJson: text("config_json").notNull().default("{}"),
+  scheduleJson: text("schedule_json").notNull().default("{}"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const reportRuns = pgTable("report_runs", {
+  id: serial("id").primaryKey(),
+  reportId: integer("report_id")
+    .notNull()
+    .references(() => reports.id, { onDelete: "cascade" }),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  summaryJson: text("summary_json"),
+  outputUrl: varchar("output_url", { length: 500 }),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  actorUserId: varchar("actor_user_id").notNull(),
+  entityType: varchar("entity_type", { length: 100 }).notNull(),
+  entityId: varchar("entity_id", { length: 100 }).notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  beforeJson: text("before_json"),
+  afterJson: text("after_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertTenantSchema = createInsertSchema(tenants).omit({
   id: true,
   createdAt: true,
@@ -323,8 +433,64 @@ export type InsertScorecardTemplate = z.infer<
 >;
 export type ScorecardMetric = typeof scorecardMetrics.$inferSelect;
 export type InsertScorecardMetric = z.infer<typeof insertScorecardMetricSchema>;
+export const insertImportJobSchema = createInsertSchema(importJobs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  totalRows: true,
+  successRows: true,
+  failedRows: true,
+  status: true,
+});
+export const insertImportRowErrorSchema = createInsertSchema(
+  importRowErrors
+).omit({ id: true, createdAt: true });
+export const insertAlertRuleSchema = createInsertSchema(alertRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertAlertEventSchema = createInsertSchema(alertEvents).omit({
+  id: true,
+  createdAt: true,
+  acknowledgedAt: true,
+  resolvedAt: true,
+  acknowledgedBy: true,
+  resolvedBy: true,
+});
+export const insertReportSchema = createInsertSchema(reports).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertReportRunSchema = createInsertSchema(reportRuns).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+  summaryJson: true,
+  outputUrl: true,
+});
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type ScoreRun = typeof scoreRuns.$inferSelect;
 export type InsertScoreRun = z.infer<typeof insertScoreRunSchema>;
 export type ScoreRunDetail = typeof scoreRunDetails.$inferSelect;
 export type MetricValue = typeof metricValues.$inferSelect;
 export type InsertMetricValue = z.infer<typeof insertMetricValueSchema>;
+export type ImportJob = typeof importJobs.$inferSelect;
+export type InsertImportJob = z.infer<typeof insertImportJobSchema>;
+export type ImportRowError = typeof importRowErrors.$inferSelect;
+export type InsertImportRowError = z.infer<typeof insertImportRowErrorSchema>;
+export type AlertRule = typeof alertRules.$inferSelect;
+export type InsertAlertRule = z.infer<typeof insertAlertRuleSchema>;
+export type AlertEvent = typeof alertEvents.$inferSelect;
+export type InsertAlertEvent = z.infer<typeof insertAlertEventSchema>;
+export type Report = typeof reports.$inferSelect;
+export type InsertReport = z.infer<typeof insertReportSchema>;
+export type ReportRun = typeof reportRuns.$inferSelect;
+export type InsertReportRun = z.infer<typeof insertReportRunSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;

@@ -1,0 +1,177 @@
+Build Phase 2 for Franchise OS / Xpansion Console.
+
+Phase 2 Scope
+
+1. CSV import pipeline with field mapping
+2. Import validation + row error queue
+3. Alert rules engine
+4. Alert events log + ack/resolve actions
+5. Scheduled report definitions + report runs
+6. Audit log capture + admin viewer
+7. Standardize API error response shape
+
+1) CSV Import Pipeline
+
+Endpoints
+
+• POST /api/admin/imports
+• Accept CSV upload + tenantId + locationId + mapping config
+• GET /api/admin/imports/:jobId
+• GET /api/admin/imports/:jobId/errors
+• POST /api/admin/imports/:jobId/reprocess
+
+Behavior
+
+• Parse CSV safely
+• Map incoming columns to metric keys
+• Validate:
+• metric exists
+• numeric parseable (for numeric metrics)
+• period fields present
+• Write valid rows into metric_values
+• Write invalid rows into import_row_errors
+• Track counts in import_jobs:
+• total_rows, success_rows, failed_rows
+• Final status: completed | partial | failed
+
+UI
+
+• /admin/imports
+• Upload panel
+• Mapping UI (CSV column -> metric key)
+• Import history table
+• Job detail drawer with failed rows
+
+───
+
+2) Alert Rules Engine
+
+Rule model
+
+Use alert_rules:
+
+• name
+• severity (low/medium/high/critical)
+• condition_json
+• action_json
+• is_active
+
+Conditions to support now
+
+• threshold breach (value below/above target)
+• trend deterioration (current period vs prior period drop by X%)
+
+Actions to support now
+
+• in-app alert event
+• email action stub (log + queue; actual provider can be TODO)
+
+Endpoints
+
+• GET /api/admin/alert-rules?tenantId=
+• POST /api/admin/alert-rules
+• PUT /api/admin/alert-rules/:ruleId
+• GET /api/admin/alert-events?tenantId=&status=
+• POST /api/admin/alert-events/:eventId/ack
+• POST /api/admin/alert-events/:eventId/resolve
+
+UI
+
+• /admin/alerts
+• Rules CRUD
+• Events table
+• status chips: open/ack/resolved
+• filters: severity/status/location/date
+
+───
+
+3) Scheduled Reports
+
+Report model
+
+Use reports + report_runs:
+
+• report type (weekly_owner, manager, portfolio)
+• config_json (selected metrics, sections)
+• schedule_json (cron-like schedule)
+• is_active
+
+Endpoints
+
+• GET /api/admin/reports?tenantId=
+• POST /api/admin/reports
+• PUT /api/admin/reports/:reportId
+• POST /api/admin/reports/:reportId/run
+• GET /api/admin/report-runs?reportId=
+
+Behavior
+
+• Manual run creates report_runs record
+• Generate JSON summary first (PDF optional in this phase)
+• Store output URL or inline summary blob
+
+UI
+
+• /admin/reports
+• report definitions list
+• create/edit modal
+• run now button
+• run history table
+
+───
+
+4) Audit Logging
+
+Capture events for:
+
+• tenant/location/user changes
+• metric/threshold/formula changes
+• scorecard changes
+• imports created/reprocessed
+• alert rules changes
+• report definition changes
+
+Endpoint
+
+• GET /api/admin/audit?tenantId=&entityType=&actorUserId=&start=&end=
+
+UI
+
+• /admin/audit
+• filterable timeline
+• show entity, action, actor, timestamp
+• diff preview from before_json/after_json
+
+───
+
+5) API Response Standardization (important)
+
+Standardize all API errors to:
+
+{
+"ok": false,
+"error": {
+"code": "SOME_CODE",
+"message": "Human readable message",
+"details": {}
+}
+}
+
+Standardize success:
+
+{
+"ok": true,
+"data": {}
+}
+
+Apply to all new Phase 2 endpoints and existing unauthorized responses.
+
+───
+
+6) Security / Guardrails
+
+• Require auth on all /api/admin/*
+• Enforce tenant scoping in every query
+• Validate all write payloads with Zod
+• CSV parsing must reject malformed records safely
+• No silent failures; always
