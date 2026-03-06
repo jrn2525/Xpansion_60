@@ -11,6 +11,7 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
   - Local auth sessions use `authType: "local"` flag; `isAuthenticated` middleware handles both session types
   - Users table has `passwordHash` and `isSuperAdmin` columns
   - Admin login form on landing page (Admin button in nav)
+  - Security hardening: session fixation (regenerate), sameSite=lax cookie, rate limiting (20/IP + 5/account per 15m), brute-force lockout (15m), password policy (8+ chars, upper/lower/digit), audit logging (success/fail + IP/UA, no creds), `isSuperAdminGuard` middleware, passwordHash stripped from all responses, logout clears cookie, fail-fast on missing required env vars
 - **Validation**: Zod on all write endpoints with `zod-validation-error` for clean errors
 - **Notifications**: Resend (email) + Slack webhooks with retry/backoff
 - **Scheduler**: setInterval-based execution engine (60s tick) with job locking

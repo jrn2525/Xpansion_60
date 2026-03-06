@@ -35,6 +35,7 @@ export function getSession() {
     cookie: {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       maxAge: sessionTtl,
     },
   });
@@ -118,14 +119,16 @@ export async function setupAuth(app: Express) {
     })(req, res, next);
   });
 
-  app.get("/api/logout", (req, res) => {
+  app.get("/api/logout", (req: any, res) => {
+    const endSessionUrl = client.buildEndSessionUrl(config, {
+      client_id: process.env.REPL_ID!,
+      post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
+    }).href;
     req.logout(() => {
-      res.redirect(
-        client.buildEndSessionUrl(config, {
-          client_id: process.env.REPL_ID!,
-          post_logout_redirect_uri: `${req.protocol}://${req.hostname}`,
-        }).href
-      );
+      req.session.destroy(() => {
+        res.clearCookie("connect.sid", { path: "/" });
+        res.redirect(endSessionUrl);
+      });
     });
   });
 }
@@ -167,4 +170,17 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     res.status(401).json(unauthorizedResponse);
     return;
   }
+};
+
+export const isSuperAdminGuard: RequestHandler = async (req, res, next) => {
+  const user = req.user as any;
+  if (!user?.claims?.sub) {
+    return res.status(401).json({ ok: false, error: { code: "UNAUTHORIZED", message: "Unauthorized" } });
+  }
+  const { authStorage: aStore } = await import("./storage");
+  const dbUser = await aStore.getUser(user.claims.sub);
+  if (!dbUser || (dbUser as any).isSuperAdmin !== "true") {
+    return res.status(403).json({ ok: false, error: { code: "FORBIDDEN", message: "Superadmin access required" } });
+  }
+  next();
 };
