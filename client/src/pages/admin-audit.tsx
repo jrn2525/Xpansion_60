@@ -30,11 +30,13 @@ import {
 import { History, Eye, User, Database } from "lucide-react";
 import { useTenantStore } from "@/lib/tenant-store";
 
+import { statusColors } from "@/lib/semantic-colors";
+
 const actionColors: Record<string, string> = {
-  create: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-  update: "bg-secondary text-secondary-foreground",
-  delete: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-  reprocess: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+  create: statusColors.success,
+  update: statusColors.info,
+  delete: statusColors.error,
+  reprocess: statusColors.warning,
 };
 
 export default function AdminAuditPage() {
@@ -78,11 +80,11 @@ export default function AdminAuditPage() {
           const aVal = afterObj?.[key];
           const changed = JSON.stringify(bVal) !== JSON.stringify(aVal);
           return (
-            <div key={key} className={changed ? "bg-yellow-50 dark:bg-yellow-900/20 px-2 py-1 rounded" : "px-2 py-1"}>
+            <div key={key} className={changed ? "bg-amber-500/10 px-2 py-1 rounded" : "px-2 py-1"}>
               <span className="text-muted-foreground">{key}:</span>{" "}
-              {beforeObj && <span className="text-red-600 line-through">{JSON.stringify(bVal)}</span>}
+              {beforeObj && <span className="text-destructive line-through">{JSON.stringify(bVal)}</span>}
               {beforeObj && afterObj && " → "}
-              {afterObj && <span className="text-green-600">{JSON.stringify(aVal)}</span>}
+              {afterObj && <span className="text-emerald-600 dark:text-emerald-400">{JSON.stringify(aVal)}</span>}
             </div>
           );
         })}
@@ -114,8 +116,9 @@ export default function AdminAuditPage() {
       {isLoading ? (
         <div className="space-y-2">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
       ) : logs.length === 0 ? (
-        <Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-logs">No audit logs found</CardContent></Card>
+        <Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-logs">No audit logs found. Activity will be recorded as you manage your franchise data.</CardContent></Card>
       ) : (
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -154,6 +157,7 @@ export default function AdminAuditPage() {
             ))}
           </TableBody>
         </Table>
+        </div>
       )}
 
       <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>

@@ -53,12 +53,9 @@ import type {
 } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
 
-const BAND_STYLES: Record<string, string> = {
-  excellent: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  good: "bg-secondary text-secondary-foreground",
-  acceptable: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200",
-  poor: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-};
+import { bandBadgeStyles } from "@/lib/semantic-colors";
+
+const BAND_STYLES: Record<string, string> = bandBadgeStyles;
 
 interface ScorecardWithMetrics extends ScorecardTemplate {
   metrics?: ScorecardMetric[];
@@ -542,8 +539,8 @@ export default function ScorecardsPage() {
                   <span
                     className={`text-xs font-medium ${
                       Math.abs(totalWeight - 1) < 0.01
-                        ? "text-green-600"
-                        : "text-amber-600"
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-amber-600 dark:text-amber-400"
                     }`}
                   >
                     Total: {(totalWeight * 100).toFixed(0)}%

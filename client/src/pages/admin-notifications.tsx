@@ -21,11 +21,13 @@ import { Switch } from "@/components/ui/switch";
 import { Bell, Send, Mail, MessageSquare } from "lucide-react";
 import { useTenantStore } from "@/lib/tenant-store";
 
+import { statusColors } from "@/lib/semantic-colors";
+
 const deliveryStatusColors: Record<string, string> = {
-  sent: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-  delivered: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-  pending: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
+  sent: statusColors.success,
+  delivered: statusColors.success,
+  failed: statusColors.error,
+  pending: statusColors.warning,
 };
 
 const SEVERITIES = ["low", "medium", "high", "critical"] as const;
@@ -284,6 +286,7 @@ export default function AdminNotificationsPage() {
               No delivery history yet
             </p>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -321,6 +324,7 @@ export default function AdminNotificationsPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

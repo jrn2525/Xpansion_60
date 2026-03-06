@@ -20,6 +20,8 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - **Theme toggle**: In sidebar footer (data-testid="button-theme-toggle"), inline script in index.html prevents flash
 - **SEO**: Route-level document.title updates ("PageName | Xpansion Console"), OG/Twitter meta tags, SVG favicon
 - **Off-brand colors**: Blues removed (replaced with token-based or neutral classes), green/yellow/red kept for semantic status indicators only
+- **Semantic color system**: `client/src/lib/semantic-colors.ts` — shared `statusColors` (success/warning/error/info/neutral), `severityColors` (low/medium/high/critical), `bandColors` (chart hex), `bandBadgeStyles` (badge classes), `scoreColor()`, `deltaTrendColor()` — all pages import from here
+- **Accessibility**: Global `:focus-visible` ring via CSS, dialog max-width capped at `calc(100vw - 2rem)`, all tables wrapped in `overflow-x-auto` for mobile scroll
 
 ## Database Schema
 

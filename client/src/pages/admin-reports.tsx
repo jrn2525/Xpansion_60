@@ -223,6 +223,7 @@ export default function AdminReportsPage() {
                   {runs.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No runs yet</p>
                   ) : (
+                    <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -249,6 +250,7 @@ export default function AdminReportsPage() {
                         ))}
                       </TableBody>
                     </Table>
+                    </div>
                   )}
                 </CardContent>
               )}

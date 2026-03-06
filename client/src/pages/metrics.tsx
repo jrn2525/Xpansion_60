@@ -54,12 +54,9 @@ import {
 import type { MetricDefinition, MetricThreshold } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
 
-const BAND_COLORS: Record<string, string> = {
-  excellent: "#22c55e",
-  good: "#3b82f6",
-  acceptable: "#f59e0b",
-  poor: "#ef4444",
-};
+import { bandColors } from "@/lib/semantic-colors";
+
+const BAND_COLORS: Record<string, string> = bandColors;
 
 function ThresholdEditor({
   metricId,
@@ -82,7 +79,7 @@ function ThresholdEditor({
         band: t.band,
         minValue: t.minValue,
         maxValue: t.maxValue,
-        color: t.color || BAND_COLORS[t.band] || "#6b7280",
+        color: t.color || BAND_COLORS[t.band] || "hsl(var(--muted-foreground))",
       }))
     );
     setInitialized(true);
@@ -121,7 +118,7 @@ function ThresholdEditor({
   function addThreshold() {
     setLocalThresholds((prev) => [
       ...prev,
-      { band: "acceptable", minValue: 0, maxValue: 100, color: "#f59e0b" },
+      { band: "acceptable", minValue: 0, maxValue: 100, color: bandColors.acceptable },
     ]);
   }
 

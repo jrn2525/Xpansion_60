@@ -32,11 +32,13 @@ import {
 import { Upload, FileText, RefreshCw, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { useTenantStore } from "@/lib/tenant-store";
 
-const statusColors: Record<string, string> = {
-  pending: "bg-muted text-muted-foreground",
-  completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
-  partial: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+import { statusColors } from "@/lib/semantic-colors";
+
+const importStatusColors: Record<string, string> = {
+  pending: statusColors.info,
+  completed: statusColors.success,
+  partial: statusColors.warning,
+  failed: statusColors.error,
 };
 
 export default function AdminImportsPage() {
@@ -152,8 +154,9 @@ export default function AdminImportsPage() {
           {isLoading ? (
             <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : jobs.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8" data-testid="text-no-imports">No imports yet</p>
+            <p className="text-muted-foreground text-center py-8" data-testid="text-no-imports">No imports yet. Upload a CSV file above to import metric data.</p>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -171,7 +174,7 @@ export default function AdminImportsPage() {
                   <TableRow key={job.id} data-testid={`row-import-${job.id}`}>
                     <TableCell className="flex items-center gap-2"><FileText className="h-4 w-4" />{job.fileName}</TableCell>
                     <TableCell>
-                      <Badge className={statusColors[job.status] || ""} data-testid={`badge-status-${job.id}`}>
+                      <Badge className={importStatusColors[job.status] || ""} data-testid={`badge-status-${job.id}`}>
                         {job.status === "completed" && <CheckCircle className="h-3 w-3 mr-1" />}
                         {job.status === "failed" && <XCircle className="h-3 w-3 mr-1" />}
                         {job.status === "partial" && <AlertTriangle className="h-3 w-3 mr-1" />}
@@ -198,6 +201,7 @@ export default function AdminImportsPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -222,7 +226,7 @@ export default function AdminImportsPage() {
                 {errors.map((e: any) => (
                   <TableRow key={e.id} data-testid={`row-error-${e.id}`}>
                     <TableCell>{e.rowNumber}</TableCell>
-                    <TableCell className="text-red-600">{e.errorMessage}</TableCell>
+                    <TableCell className="text-destructive">{e.errorMessage}</TableCell>
                     <TableCell className="font-mono text-xs max-w-[300px] truncate">{e.rawData}</TableCell>
                   </TableRow>
                 ))}

@@ -71,25 +71,15 @@ interface DataQualityResponse {
   };
 }
 
+import { statusColors, scoreColor, scoreBorderColor } from "@/lib/semantic-colors";
+
 const severityBadgeClasses: Record<string, string> = {
-  warning: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-  error: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-  info: "bg-muted text-muted-foreground",
+  warning: statusColors.warning,
+  error: statusColors.error,
+  info: statusColors.info,
 };
 
 const ruleTypes = ["period_continuity", "outlier_detection", "duplicate_detection"];
-
-function scoreColor(score: number): string {
-  if (score >= 80) return "text-green-600 dark:text-green-400";
-  if (score >= 60) return "text-yellow-600 dark:text-yellow-400";
-  return "text-red-600 dark:text-red-400";
-}
-
-function scoreBorderColor(score: number): string {
-  if (score >= 80) return "border-green-500";
-  if (score >= 60) return "border-yellow-500";
-  return "border-red-500";
-}
 
 export default function AdminDataQualityPage() {
   const { activeTenantId } = useTenantStore();
@@ -230,7 +220,7 @@ export default function AdminDataQualityPage() {
         {qualityScores.length === 0 && (
           <Card>
             <CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-scores">
-              No quality scores available
+              No quality scores yet. Scores are generated after data imports.
             </CardContent>
           </Card>
         )}
@@ -310,9 +300,10 @@ export default function AdminDataQualityPage() {
         <CardContent>
           {violations.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground" data-testid="text-no-violations">
-              No violations detected
+              No violations detected — your data is clean.
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -350,6 +341,7 @@ export default function AdminDataQualityPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </CardContent>
       </Card>

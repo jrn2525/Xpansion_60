@@ -72,22 +72,18 @@ interface RiskData {
   riskLocations: RiskEntry[];
 }
 
+import { scoreColor, scoreBgColor, deltaTrendColor } from "@/lib/semantic-colors";
+
 function getScoreColor(score: number): string {
-  if (score >= 70) return "text-green-600 dark:text-green-400";
-  if (score >= 50) return "text-yellow-600 dark:text-yellow-400";
-  return "text-red-600 dark:text-red-400";
+  return scoreColor(score);
 }
 
 function getScoreBg(score: number): string {
-  if (score >= 70) return "bg-green-100 dark:bg-green-900/30";
-  if (score >= 50) return "bg-yellow-100 dark:bg-yellow-900/30";
-  return "bg-red-100 dark:bg-red-900/30";
+  return scoreBgColor(score);
 }
 
 function getDeltaColor(delta: number): string {
-  if (delta > 0) return "text-green-600 dark:text-green-400";
-  if (delta < 0) return "text-red-600 dark:text-red-400";
-  return "text-muted-foreground";
+  return deltaTrendColor(delta);
 }
 
 export default function PortfolioPage() {
@@ -183,11 +179,11 @@ export default function PortfolioPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Improving Locations
               </CardTitle>
-              <TrendingUp className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             </CardHeader>
             <CardContent>
               <div
-                className="text-3xl font-bold text-green-600 dark:text-green-400"
+                className="text-3xl font-bold text-emerald-600 dark:text-emerald-400"
                 data-testid="text-improving-count"
               >
                 {overview?.improvingCount ?? 0}
@@ -201,11 +197,11 @@ export default function PortfolioPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Declining Locations
               </CardTitle>
-              <TrendingDown className="h-4 w-4 text-red-600 dark:text-red-400" />
+              <TrendingDown className="h-4 w-4 text-destructive" />
             </CardHeader>
             <CardContent>
               <div
-                className="text-3xl font-bold text-red-600 dark:text-red-400"
+                className="text-3xl font-bold text-destructive"
                 data-testid="text-declining-count"
               >
                 {overview?.decliningCount ?? 0}
@@ -219,7 +215,7 @@ export default function PortfolioPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 High/Critical Alerts
               </CardTitle>
-              <AlertTriangle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
             </CardHeader>
             <CardContent>
               <div
@@ -266,6 +262,7 @@ export default function PortfolioPage() {
                       No ranking data available
                     </p>
                   ) : (
+                    <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -292,6 +289,7 @@ export default function PortfolioPage() {
                         ))}
                       </TableBody>
                     </Table>
+                    </div>
                   )}
                 </TabsContent>
                 <TabsContent value="bottom">
@@ -300,6 +298,7 @@ export default function PortfolioPage() {
                       No ranking data available
                     </p>
                   ) : (
+                    <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -326,6 +325,7 @@ export default function PortfolioPage() {
                         ))}
                       </TableBody>
                     </Table>
+                    </div>
                   )}
                 </TabsContent>
               </Tabs>
@@ -352,6 +352,7 @@ export default function PortfolioPage() {
                 No at-risk locations detected
               </p>
             ) : (
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -388,6 +389,7 @@ export default function PortfolioPage() {
                   ))}
                 </TableBody>
               </Table>
+              </div>
             )}
           </CardContent>
         </Card>

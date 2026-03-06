@@ -35,17 +35,12 @@ import { Switch } from "@/components/ui/switch";
 import { Bell, Plus, Shield, CheckCircle, Eye, AlertTriangle, Play, Clock } from "lucide-react";
 import { useTenantStore } from "@/lib/tenant-store";
 
-const severityColors: Record<string, string> = {
-  low: "bg-muted text-muted-foreground",
-  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-  high: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
-  critical: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-};
+import { severityColors, statusColors } from "@/lib/semantic-colors";
 
-const statusColors: Record<string, string> = {
-  open: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-  ack: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
-  resolved: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
+const alertStatusColors: Record<string, string> = {
+  open: statusColors.error,
+  ack: statusColors.warning,
+  resolved: statusColors.success,
 };
 
 export default function AdminAlertsPage() {
@@ -289,8 +284,9 @@ export default function AdminAlertsPage() {
           {eventsLoading ? (
             <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : events.length === 0 ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-events">No alert events</CardContent></Card>
+            <Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-events">No alert events yet. Events will appear here when alert rules are triggered.</CardContent></Card>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -304,8 +300,8 @@ export default function AdminAlertsPage() {
               <TableBody>
                 {events.map((event: any) => (
                   <TableRow key={event.id} data-testid={`row-event-${event.id}`}>
-                    <TableCell><Badge className={statusColors[event.status] || ""} data-testid={`badge-event-status-${event.id}`}>{event.status}</Badge></TableCell>
-                    <TableCell><Badge className={severityColors[event.severity] || ""} data-testid={`badge-event-severity-${event.id}`}>{event.severity}</Badge></TableCell>
+                    <TableCell><Badge className={alertStatusColors[event.status] || ""} data-testid={`badge-event-status-${event.id}`}>{event.status}</Badge></TableCell>
+                    <TableCell><Badge className={severityColors[event.severity as keyof typeof severityColors] || ""} data-testid={`badge-event-severity-${event.id}`}>{event.severity}</Badge></TableCell>
                     <TableCell className="max-w-md truncate">{event.message}</TableCell>
                     <TableCell>{new Date(event.createdAt).toLocaleString()}</TableCell>
                     <TableCell className="space-x-2">
@@ -324,6 +320,7 @@ export default function AdminAlertsPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </TabsContent>
 
@@ -335,8 +332,9 @@ export default function AdminAlertsPage() {
           {rulesLoading ? (
             <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : rules.length === 0 ? (
-            <Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-rules">No alert rules yet</CardContent></Card>
+            <Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-rules">No alert rules yet. Create a rule to start monitoring your metrics.</CardContent></Card>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -360,9 +358,9 @@ export default function AdminAlertsPage() {
                   return (
                     <TableRow key={rule.id} data-testid={`row-rule-${rule.id}`}>
                       <TableCell className="font-medium">{rule.name}</TableCell>
-                      <TableCell><Badge className={severityColors[rule.severity] || ""}>{rule.severity}</Badge></TableCell>
+                      <TableCell><Badge className={severityColors[rule.severity as keyof typeof severityColors] || ""}>{rule.severity}</Badge></TableCell>
                       <TableCell>{condDesc}</TableCell>
-                      <TableCell>{rule.isActive ? <CheckCircle className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}</TableCell>
+                      <TableCell>{rule.isActive ? <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}</TableCell>
                       <TableCell>
                         <Button size="sm" variant="outline" onClick={() => openEditRule(rule)} data-testid={`button-edit-rule-${rule.id}`}>Edit</Button>
                       </TableCell>
@@ -371,6 +369,7 @@ export default function AdminAlertsPage() {
                 })}
               </TableBody>
             </Table>
+            </div>
           )}
         </TabsContent>
       </Tabs>

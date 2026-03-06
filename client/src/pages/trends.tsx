@@ -80,7 +80,7 @@ function TrendDirection({ data }: { data: TrendDataPoint[] }) {
   }
 
   return change > 0 ? (
-    <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+    <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
       <ArrowUpRight className="h-4 w-4" />
       <span className="text-sm font-medium">+{change.toFixed(1)}%</span>
     </div>
@@ -463,7 +463,7 @@ export default function TrendsPage() {
                         <ReferenceLine
                           key={`${t.band}-min`}
                           y={t.minValue}
-                          stroke={t.color || "#6b7280"}
+                          stroke={t.color || "hsl(var(--muted-foreground))"}
                           strokeDasharray="5 5"
                           strokeOpacity={0.5}
                         />
@@ -549,7 +549,7 @@ export default function TrendsPage() {
                     >
                       <div
                         className="h-3 w-3 rounded-full shrink-0"
-                        style={{ backgroundColor: t.color || "#6b7280" }}
+                        style={{ backgroundColor: t.color || "hsl(var(--muted-foreground))" }}
                       />
                       <div>
                         <p className="text-sm font-medium capitalize">

@@ -1,0 +1,151 @@
+Let’s go. 😈
+Paste this as Phase 4.1 v2:
+
+───
+
+Build Phase 4.1 v2 — Brand QA + UX Hardening for Franchise OS / Xpansion Console.
+
+Goal
+
+Lock brand quality, remove visual inconsistency, and harden UX/accessibility after Phase 4 implementation.
+
+Scope
+
+1. Brand token purity + semantic color normalization
+2. Full component visual regression cleanup
+3. Responsive/mobile hardening
+4. Accessibility remediation (WCAG AA baseline)
+5. UX/copy polish for action clarity
+6. Metadata + front-end quality verification
+
+───
+
+1) Brand Token Purity (strict)
+
+Requirements
+
+• Use design tokens for all UI colors.
+• No hardcoded random color values in components.
+• Exception: approved semantic status tokens only (success/warn/error/info).
+• Create a documented semantic color map and apply consistently across badges, alerts, toasts, and statuses.
+
+Deliverables
+
+• Token compliance report:
+• hardcoded colors found
+• files updated
+• remaining exceptions (if any, with justification)
+
+───
+
+2) Component Visual Regression Pass
+
+Components to verify/fix
+
+• Buttons (all variants + hover/focus/disabled/loading)
+• Inputs/selects/textareas
+• Dialogs/drawers/sheets
+• Tables/pagination/chips/tabs/toasts
+• Sidebar/topbar/navigation states
+• Cards/empty/error/loading states
+• Charts (line/bar/tooltip/legend/grid/axes)
+
+Requirements
+
+• Normalize spacing, border, radius, and shadow hierarchy
+• Align interaction states across component families
+• Eliminate style drift between admin and non-admin pages
+
+───
+
+3) Responsive + Mobile Hardening
+
+Breakpoints
+
+• 320, 375, 768, 1024, 1280+
+
+Requirements
+
+• No horizontal overflow on any major page
+• Sidebar and nav usable on mobile
+• Tables readable with clear mobile strategy (scroll/stack)
+• Dialogs fully usable on 375px width
+• Action buttons never clip or overlap
+
+───
+
+4) Accessibility Remediation
+
+Requirements
+
+• Keyboard navigation works for core flows
+• Focus rings are visible and consistent in light/dark
+• Contrast meets WCAG AA for text and controls
+• Proper labels/ARIA for forms and dialogs
+• Reduce-motion compatibility where animation exists
+
+Deliverable
+
+• Page-by-page accessibility table with pass/fail and fixes
+
+───
+
+5) UX + Copy Polish
+
+Requirements
+
+• Rewrite vague labels to action-oriented copy
+• Improve empty states with next best action
+• Improve error messages with “what to do next”
+• Ensure each page has clear hierarchy:
+• title
+• context sentence
+• primary CTA
+
+───
+
+6) Metadata + Front-End Quality
+
+Requirements
+
+• Verify route-level:
+• title
+• meta description
+• OG tags
+• Twitter tags
+• Keep auth redirect behavior documented:
+• /api/login may return HTML due to OIDC redirect
+• all other /api/* should return JSON
+• Remove dead styles/components where possible
+
+───
+
+7) Acceptance Criteria (must pass)
+
+• No off-brand color leakage outside approved semantic map
+• Semantic statuses use a documented token system consistently
+• Visual regressions fixed across all core components
+• Mobile pass complete with no critical layout breaks
+• WCAG AA contrast and focus visibility pass on key routes
+• Metadata present and correct on key routes
+• No regressions to existing business functionality
+• /api/* returns JSON except explicit auth redirect endpoint (/api/login)
+
+───
+
+8) QA Evidence Required
+
+Provide:
+
+1. Files changed
+2. Token purity audit results
+3. Semantic color map applied
+4. Accessibility pass table (page-by-page)
+5. Responsive pass table by breakpoint
+6. Before/after screenshot set (light + dark) for all major pages
+7. Metadata verification output per route
+8. Known remaining UX debt/TODOs
+
+───
+
+If you want after this, I’ll queue Phase 5 v2 so it’s tighter and revenue-first.
