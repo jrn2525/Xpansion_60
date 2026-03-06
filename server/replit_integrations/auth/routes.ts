@@ -109,6 +109,11 @@ export async function seedSuperAdmin(): Promise<void> {
     const updates: any = {};
     if (!existing.passwordHash) {
       updates.passwordHash = await bcrypt.hash(password, 12);
+    } else {
+      const matches = await bcrypt.compare(password, existing.passwordHash);
+      if (!matches) {
+        updates.passwordHash = await bcrypt.hash(password, 12);
+      }
     }
     if (existing.isSuperAdmin !== "true") {
       updates.isSuperAdmin = "true";
