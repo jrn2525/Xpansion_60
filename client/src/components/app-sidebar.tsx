@@ -17,6 +17,12 @@ import {
   ShieldCheck,
   Sun,
   Moon,
+  Crosshair,
+  ListChecks,
+  Target,
+  Trophy,
+  BookOpen,
+  FileText,
 } from "lucide-react";
 import {
   Sidebar,
@@ -46,6 +52,7 @@ import { useTenantStore } from "@/lib/tenant-store";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Command Center", url: "/command-center", icon: Crosshair },
   { title: "Portfolio", url: "/portfolio", icon: Briefcase },
   { title: "Tenants", url: "/tenants", icon: Building2 },
   { title: "Locations", url: "/locations", icon: MapPin },
@@ -54,10 +61,18 @@ const navItems = [
   { title: "Trends", url: "/trends", icon: TrendingUp },
 ];
 
+const operationsItems = [
+  { title: "Actions", url: "/actions", icon: ListChecks },
+  { title: "Goals", url: "/goals", icon: Target },
+  { title: "Benchmarking", url: "/benchmarking", icon: Trophy },
+  { title: "Playbooks", url: "/playbooks", icon: BookOpen },
+];
+
 const adminItems = [
   { title: "Imports", url: "/admin/imports", icon: Upload },
   { title: "Alerts", url: "/admin/alerts", icon: Bell },
   { title: "Reports", url: "/admin/reports", icon: FileBarChart },
+  { title: "Digests", url: "/admin/digests", icon: FileText },
   { title: "Notifications", url: "/admin/notifications", icon: Mail },
   { title: "Data Quality", url: "/admin/data-quality", icon: ShieldCheck },
   { title: "Audit Log", url: "/admin/audit", icon: History },
@@ -149,6 +164,29 @@ export function AppSidebar() {
                       isActive={isActive}
                     >
                       <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupLabel>Operations</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {operationsItems.map((item) => {
+                const isActive = location.startsWith(item.url);
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                    >
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
                       </Link>

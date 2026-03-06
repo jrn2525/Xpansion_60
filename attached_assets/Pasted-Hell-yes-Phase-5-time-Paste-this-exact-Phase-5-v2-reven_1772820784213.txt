@@ -1,0 +1,178 @@
+Hell yes. Phase 5 time. 😈
+
+Paste this exact Phase 5 v2 (revenue-first) prompt into Replit:
+
+───
+
+Build Phase 5 v2 — Growth Operating System for Franchise OS / Xpansion Console.
+
+Goal
+
+Make Xpansion Console drive measurable business outcomes weekly: better execution, clearer priorities, faster intervention, and improved location performance.
+
+Strategic Priorities
+
+1. Weekly action clarity for owners/managers
+2. Revenue-impact visibility by location
+3. Accountability loops (goal → action → result)
+4. Faster detection of underperformance and recovery plays
+
+───
+
+1) Weekly Command Center (Owner View)
+
+Scope
+
+Create a weekly “what matters now” layer for each tenant.
+
+Features
+
+• Weekly snapshot cards:
+• Top 3 wins
+• Top 3 risks
+• Critical unresolved alerts
+• Locations needing intervention
+• “This Week’s Priorities” list auto-generated from:
+• trend deterioration
+• threshold misses
+• low scorecard outcomes
+
+Endpoints
+
+• GET /api/tenants/:tenantId/weekly-command-center
+• POST /api/tenants/:tenantId/weekly-command-center/refresh
+
+UI
+
+• /command-center page
+• Priority list with direct “Create Action” buttons
+
+───
+
+2) Action Management + Accountability
+
+Scope
+
+Turn identified issues into trackable execution work.
+
+Features
+
+• Create actions from alerts, trends, scorecards, or manual
+• Assign owner + due date + location + linked metric
+• Status lifecycle: open, in_progress, blocked, done
+• Weekly check-in notes on each action
+• Overdue highlighting and escalation flags
+
+Endpoints
+
+• GET /api/tenants/:tenantId/actions?status=&owner=&locationId=&overdue=
+• POST /api/tenants/:tenantId/actions
+• PUT /api/tenants/:tenantId/actions/:actionId
+• POST /api/tenants/:tenantId/actions/:actionId/checkins
+
+Data model additions
+
+• actions
+• action_checkins
+
+UI
+
+• /actions page (kanban + list toggle)
+• Action detail drawer with timeline/check-ins
+
+───
+
+3) Revenue Opportunity Detection (MVP)
+
+Scope
+
+Identify and rank opportunities by potential impact.
+
+Features
+
+• Compute opportunity candidates from:
+• low conversion metrics
+• declining trend metrics
+• scorecard category weakness
+• Provide estimated impact score (Low/Med/High)
+• Link each opportunity to suggested playbook/action
+
+Endpoints
+
+• GET /api/tenants/:tenantId/opportunities
+• POST /api/tenants/:tenantId/opportunities/:id/create-action
+
+Data model additions
+
+• opportunities
+
+UI
+
+• Opportunity feed in /command-center and /actions
+
+───
+
+4) Goals + Variance Tracking
+
+Scope
+
+Add explicit targets and weekly variance monitoring.
+
+Features
+
+• Set goals by metric/location/period
+• Track variance:
+• target vs actual
+• trend direction
+• on-track / off-track status
+• Auto-flag goals that are off-track for 2+ consecutive periods
+
+Endpoints
+
+• GET /api/tenants/:tenantId/goals
+• POST /api/tenants/:tenantId/goals
+• PUT /api/tenants/:tenantId/goals/:goalId
+• GET /api/tenants/:tenantId/goals/variance
+
+Data model additions
+
+• goals
+
+UI
+
+• /goals page
+• Goal status board with filters and drill-down
+
+───
+
+5) Benchmarking + Playbook Application
+
+Scope
+
+Operationalize best practices from top locations.
+
+Features
+
+• Rank locations by:
+• score trend
+• alert burden
+• goal attainment
+• Define reusable playbooks (template actions)
+• Apply playbooks to selected underperforming locations
+
+Endpoints
+
+• GET /api/tenants/:tenantId/benchmarking
+• GET /api/tenants/:tenantId/playbooks
+• POST /api/tenants/:tenantId/playbooks
+• POST /api/tenants/:tenantId/playbooks/:playbookId/apply
+
+Data model additions
+
+• playbooks
+• playbook_steps
+• playbook_applications
+
+UI
+
+• /benchmarking p

@@ -625,6 +625,181 @@ export const insertDataQualityViolationSchema = createInsertSchema(dataQualityVi
   createdAt: true,
 });
 
+// ── Phase 5: Growth Operating System ──
+
+export const actions = pgTable("actions", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  locationId: integer("location_id").references(() => locations.id, { onDelete: "set null" }),
+  metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id, { onDelete: "set null" }),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 50 }).notNull().default("open"),
+  priority: varchar("priority", { length: 50 }).notNull().default("medium"),
+  ownerUserId: varchar("owner_user_id"),
+  sourceType: varchar("source_type", { length: 50 }),
+  sourceId: integer("source_id"),
+  dueDate: timestamp("due_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const actionCheckins = pgTable("action_checkins", {
+  id: serial("id").primaryKey(),
+  actionId: integer("action_id")
+    .notNull()
+    .references(() => actions.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  note: text("note").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const opportunities = pgTable("opportunities", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  locationId: integer("location_id").references(() => locations.id, { onDelete: "set null" }),
+  metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id, { onDelete: "set null" }),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  impactScore: varchar("impact_score", { length: 50 }).notNull().default("medium"),
+  sourceType: varchar("source_type", { length: 100 }),
+  status: varchar("status", { length: 50 }).notNull().default("open"),
+  actionId: integer("action_id").references(() => actions.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const goals = pgTable("goals", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  locationId: integer("location_id").references(() => locations.id, { onDelete: "set null" }),
+  metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id, { onDelete: "set null" }),
+  title: varchar("title", { length: 500 }).notNull(),
+  targetValue: real("target_value").notNull(),
+  currentValue: real("current_value"),
+  period: varchar("period", { length: 50 }).notNull().default("weekly"),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("on_track"),
+  consecutiveOffTrack: integer("consecutive_off_track").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const playbooks = pgTable("playbooks", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 100 }),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const playbookSteps = pgTable("playbook_steps", {
+  id: serial("id").primaryKey(),
+  playbookId: integer("playbook_id")
+    .notNull()
+    .references(() => playbooks.id, { onDelete: "cascade" }),
+  stepOrder: integer("step_order").notNull(),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id, { onDelete: "set null" }),
+});
+
+export const playbookApplications = pgTable("playbook_applications", {
+  id: serial("id").primaryKey(),
+  playbookId: integer("playbook_id")
+    .notNull()
+    .references(() => playbooks.id, { onDelete: "cascade" }),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  locationId: integer("location_id")
+    .notNull()
+    .references(() => locations.id, { onDelete: "cascade" }),
+  appliedByUserId: varchar("applied_by_user_id").notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("applied"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const digests = pgTable("digests", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  generatedByUserId: varchar("generated_by_user_id").notNull(),
+  winsJson: text("wins_json").notNull().default("[]"),
+  risksJson: text("risks_json").notNull().default("[]"),
+  blockedActionsJson: text("blocked_actions_json").notNull().default("[]"),
+  overdueActionsJson: text("overdue_actions_json").notNull().default("[]"),
+  recommendedMovesJson: text("recommended_moves_json").notNull().default("[]"),
+  summaryText: text("summary_text"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertActionSchema = createInsertSchema(actions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertActionCheckinSchema = createInsertSchema(actionCheckins).omit({
+  id: true,
+  createdAt: true,
+});
+export const insertOpportunitySchema = createInsertSchema(opportunities).omit({
+  id: true,
+  createdAt: true,
+});
+export const insertGoalSchema = createInsertSchema(goals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  consecutiveOffTrack: true,
+  currentValue: true,
+});
+export const insertPlaybookSchema = createInsertSchema(playbooks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export const insertPlaybookStepSchema = createInsertSchema(playbookSteps).omit({
+  id: true,
+});
+export const insertPlaybookApplicationSchema = createInsertSchema(playbookApplications).omit({
+  id: true,
+  createdAt: true,
+});
+export const insertDigestSchema = createInsertSchema(digests).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Action = typeof actions.$inferSelect;
+export type InsertAction = z.infer<typeof insertActionSchema>;
+export type ActionCheckin = typeof actionCheckins.$inferSelect;
+export type InsertActionCheckin = z.infer<typeof insertActionCheckinSchema>;
+export type Opportunity = typeof opportunities.$inferSelect;
+export type InsertOpportunity = z.infer<typeof insertOpportunitySchema>;
+export type Goal = typeof goals.$inferSelect;
+export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type Playbook = typeof playbooks.$inferSelect;
+export type InsertPlaybook = z.infer<typeof insertPlaybookSchema>;
+export type PlaybookStep = typeof playbookSteps.$inferSelect;
+export type InsertPlaybookStep = z.infer<typeof insertPlaybookStepSchema>;
+export type PlaybookApplication = typeof playbookApplications.$inferSelect;
+export type InsertPlaybookApplication = z.infer<typeof insertPlaybookApplicationSchema>;
+export type Digest = typeof digests.$inferSelect;
+export type InsertDigest = z.infer<typeof insertDigestSchema>;
+
 export type ScoreRun = typeof scoreRuns.$inferSelect;
 export type InsertScoreRun = z.infer<typeof insertScoreRunSchema>;
 export type ScoreRunDetail = typeof scoreRunDetails.$inferSelect;

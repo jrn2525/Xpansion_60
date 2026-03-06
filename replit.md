@@ -1,7 +1,7 @@
 # Xpansion Console — Franchise Command Center
 
 ## Overview
-Multi-tenant franchise management platform with RBAC, metrics engine, scorecards, trend analysis, CSV import pipeline, alert rules engine, scheduled reports, audit logging, real notifications (email/Slack), scheduled execution engine, alert workflow automation, executive portfolio dashboard, forecasting, anomaly detection, and data quality guardrails.
+Multi-tenant franchise management platform with RBAC, metrics engine, scorecards, trend analysis, CSV import pipeline, alert rules engine, scheduled reports, audit logging, real notifications (email/Slack), scheduled execution engine, alert workflow automation, executive portfolio dashboard, forecasting, anomaly detection, data quality guardrails, and Growth Operating System (weekly command center, action management, goals, benchmarking, playbooks, digests).
 
 ## Architecture
 - **Frontend**: React + TypeScript + Vite + Tailwind + shadcn + TanStack Query + wouter + Recharts
@@ -58,11 +58,22 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - `data_quality_rules` - Configurable quality rules (period_continuity, outlier_detection, duplicate_detection)
 - `data_quality_violations` - Quality check violations with severity/details
 
+### Phase 5 Tables (Growth Operating System)
+- `actions` - Trackable execution work items (status lifecycle: open/in_progress/blocked/done, priority, owner, linked metric/location)
+- `action_checkins` - Weekly check-in notes on actions
+- `opportunities` - Auto-detected or manual improvement opportunities (impact score, source type)
+- `goals` - Target vs actual variance tracking (on_track/at_risk/off_track, consecutive off-track counter)
+- `playbooks` - Reusable action templates
+- `playbook_steps` - Ordered steps within a playbook
+- `playbook_applications` - Record of playbook applications to locations
+- `digests` - Weekly executive summaries (wins, risks, blocked, overdue, recommended moves as JSON)
+
 ## Key Patterns
 - Tenant scoping enforced in service layer via `requireTenantAccess()` (Phase 1) and `requireAdminAccess()` (Phase 2+)
 - Global tenant selector in sidebar using `useTenantStore()` (useSyncExternalStore)
 - Phase 1 API routes: `/api/tenants/:tenantId/...` with `{ message }` error format
 - Phase 2+ API routes: `/api/admin/...` with `{ ok: true, data }` / `{ ok: false, error: { code, message } }` format
+- Phase 5 API routes: `/api/tenants/:tenantId/...` + `/api/admin/digests/:tenantId/...` with `{ ok: true, data }` format
 - Score run calculation: raw value -> threshold band -> normalized score (100/75/50/25) -> weighted sum
 - Trend endpoints generate period slots and fill with data, returning null for missing periods
 - Alert evaluation: cooldown (skip repeat), dedup (skip open duplicates), escalation (auto-bump severity)
@@ -76,12 +87,13 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - `/api/health` returns `{ ok: true, service: "xpansion-console", timestamp }` for uptime checks
 
 ## File Structure
-- `shared/schema.ts` - All Drizzle models, relations, Zod schemas, types (26 tables)
+- `shared/schema.ts` - All Drizzle models, relations, Zod schemas, types (34 tables)
 - `shared/models/auth.ts` - Auth user/session models
 - `server/db.ts` - Database connection pool
-- `server/storage.ts` - DatabaseStorage implementing IStorage interface (~100 methods)
+- `server/storage.ts` - DatabaseStorage implementing IStorage interface (~130 methods)
 - `server/routes.ts` - Phase 1 + portfolio + forecasting/anomaly API routes
 - `server/admin-routes.ts` - Phase 2+3 admin API routes (imports, alerts, reports, notifications, data quality, scheduler, audit)
+- `server/phase5-routes.ts` - Phase 5 Growth OS routes (command center, actions, opportunities, goals, benchmarking, playbooks, digests)
 - `server/services/notifications.ts` - Email (Resend) + Slack webhook notification service
 - `server/services/analytics.ts` - Forecast generation + anomaly detection
 - `server/services/scheduler.ts` - Scheduled execution engine (reports, alerts, escalation)
@@ -103,6 +115,12 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - `client/src/pages/admin-notifications.tsx` - Notification settings (email/slack) + test + delivery history
 - `client/src/pages/admin-data-quality.tsx` - Data quality rules + violations + quality scores
 - `client/src/pages/admin-audit.tsx` - Filterable audit log with diff viewer
+- `client/src/pages/command-center.tsx` - Weekly command center (wins, risks, alerts, priorities)
+- `client/src/pages/actions.tsx` - Action management (kanban + list view, detail drawer, check-ins)
+- `client/src/pages/goals.tsx` - Goal tracking with variance display
+- `client/src/pages/benchmarking.tsx` - Location ranking by composite performance
+- `client/src/pages/playbooks.tsx` - Reusable action templates, apply to locations
+- `client/src/pages/admin-digests.tsx` - Weekly executive digest generation + history
 
 ## Commands
 - `npm run dev` - Start dev server

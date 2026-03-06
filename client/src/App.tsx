@@ -25,21 +25,33 @@ import AdminAuditPage from "@/pages/admin-audit";
 import AdminNotificationsPage from "@/pages/admin-notifications";
 import AdminDataQualityPage from "@/pages/admin-data-quality";
 import PortfolioPage from "@/pages/portfolio";
+import CommandCenterPage from "@/pages/command-center";
+import ActionsPage from "@/pages/actions";
+import GoalsPage from "@/pages/goals";
+import BenchmarkingPage from "@/pages/benchmarking";
+import PlaybooksPage from "@/pages/playbooks";
+import AdminDigestsPage from "@/pages/admin-digests";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard | Xpansion Console",
+  "/command-center": "Command Center | Xpansion Console",
   "/portfolio": "Portfolio | Xpansion Console",
   "/tenants": "Tenants | Xpansion Console",
   "/locations": "Locations | Xpansion Console",
   "/metrics": "Metrics | Xpansion Console",
   "/scorecards": "Scorecards | Xpansion Console",
   "/trends": "Trends | Xpansion Console",
+  "/actions": "Actions | Xpansion Console",
+  "/goals": "Goals | Xpansion Console",
+  "/benchmarking": "Benchmarking | Xpansion Console",
+  "/playbooks": "Playbooks | Xpansion Console",
   "/admin/imports": "Data Imports | Xpansion Console",
   "/admin/alerts": "Alert Rules | Xpansion Console",
   "/admin/reports": "Reports | Xpansion Console",
   "/admin/audit": "Audit Log | Xpansion Console",
   "/admin/notifications": "Notifications | Xpansion Console",
   "/admin/data-quality": "Data Quality | Xpansion Console",
+  "/admin/digests": "Weekly Digests | Xpansion Console",
 };
 
 function RouteTitle() {
@@ -54,18 +66,24 @@ function AuthenticatedRouter() {
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
+      <Route path="/command-center" component={CommandCenterPage} />
       <Route path="/portfolio" component={PortfolioPage} />
       <Route path="/tenants" component={TenantsPage} />
       <Route path="/locations" component={LocationsPage} />
       <Route path="/metrics" component={MetricsPage} />
       <Route path="/scorecards" component={ScorecardsPage} />
       <Route path="/trends" component={TrendsPage} />
+      <Route path="/actions" component={ActionsPage} />
+      <Route path="/goals" component={GoalsPage} />
+      <Route path="/benchmarking" component={BenchmarkingPage} />
+      <Route path="/playbooks" component={PlaybooksPage} />
       <Route path="/admin/imports" component={AdminImportsPage} />
       <Route path="/admin/alerts" component={AdminAlertsPage} />
       <Route path="/admin/reports" component={AdminReportsPage} />
       <Route path="/admin/audit" component={AdminAuditPage} />
       <Route path="/admin/notifications" component={AdminNotificationsPage} />
       <Route path="/admin/data-quality" component={AdminDataQualityPage} />
+      <Route path="/admin/digests" component={AdminDigestsPage} />
       <Route component={NotFound} />
     </Switch>
   );

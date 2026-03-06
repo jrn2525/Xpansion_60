@@ -70,9 +70,33 @@ import {
   type InsertDataQualityRule,
   type DataQualityViolation,
   type InsertDataQualityViolation,
+  actions,
+  actionCheckins,
+  opportunities,
+  goals,
+  playbooks,
+  playbookSteps,
+  playbookApplications,
+  digests,
+  type Action,
+  type InsertAction,
+  type ActionCheckin,
+  type InsertActionCheckin,
+  type Opportunity,
+  type InsertOpportunity,
+  type Goal,
+  type InsertGoal,
+  type Playbook,
+  type InsertPlaybook,
+  type PlaybookStep,
+  type InsertPlaybookStep,
+  type PlaybookApplication,
+  type InsertPlaybookApplication,
+  type Digest,
+  type InsertDigest,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc, gte, lte } from "drizzle-orm";
+import { eq, and, desc, asc, gte, lte, lt, inArray, isNull, sql } from "drizzle-orm";
 
 export interface IStorage {
   getTenants(): Promise<Tenant[]>;
@@ -198,6 +222,37 @@ export interface IStorage {
   deleteDataQualityRule(id: number): Promise<boolean>;
   createDataQualityViolation(data: InsertDataQualityViolation): Promise<DataQualityViolation>;
   getDataQualityViolations(tenantId: number, filters?: { ruleId?: number; locationId?: number; importJobId?: number }): Promise<DataQualityViolation[]>;
+
+  getActions(tenantId: number, filters?: { status?: string; ownerUserId?: string; locationId?: number; overdue?: boolean }): Promise<Action[]>;
+  getAction(id: number): Promise<Action | undefined>;
+  createAction(data: InsertAction): Promise<Action>;
+  updateAction(id: number, data: Partial<InsertAction>): Promise<Action | undefined>;
+  getActionCheckins(actionId: number): Promise<ActionCheckin[]>;
+  createActionCheckin(data: InsertActionCheckin): Promise<ActionCheckin>;
+
+  getOpportunities(tenantId: number): Promise<Opportunity[]>;
+  getOpportunity(id: number): Promise<Opportunity | undefined>;
+  createOpportunity(data: InsertOpportunity): Promise<Opportunity>;
+  updateOpportunity(id: number, data: Partial<InsertOpportunity>): Promise<Opportunity | undefined>;
+
+  getGoals(tenantId: number, filters?: { locationId?: number; metricDefinitionId?: number; status?: string }): Promise<Goal[]>;
+  getGoal(id: number): Promise<Goal | undefined>;
+  createGoal(data: InsertGoal): Promise<Goal>;
+  updateGoal(id: number, data: Partial<Goal>): Promise<Goal | undefined>;
+
+  getPlaybooks(tenantId: number): Promise<Playbook[]>;
+  getPlaybook(id: number): Promise<Playbook | undefined>;
+  createPlaybook(data: InsertPlaybook): Promise<Playbook>;
+  updatePlaybook(id: number, data: Partial<InsertPlaybook>): Promise<Playbook | undefined>;
+  deletePlaybook(id: number): Promise<boolean>;
+  getPlaybookSteps(playbookId: number): Promise<PlaybookStep[]>;
+  createPlaybookStep(data: InsertPlaybookStep): Promise<PlaybookStep>;
+  deletePlaybookSteps(playbookId: number): Promise<boolean>;
+  getPlaybookApplications(tenantId: number): Promise<PlaybookApplication[]>;
+  createPlaybookApplication(data: InsertPlaybookApplication): Promise<PlaybookApplication>;
+
+  getDigests(tenantId: number): Promise<Digest[]>;
+  createDigest(data: InsertDigest): Promise<Digest>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -809,6 +864,139 @@ export class DatabaseStorage implements IStorage {
     if (filters?.locationId) conditions.push(eq(dataQualityViolations.locationId, filters.locationId));
     if (filters?.importJobId) conditions.push(eq(dataQualityViolations.importJobId, filters.importJobId));
     return db.select().from(dataQualityViolations).where(and(...conditions)).orderBy(desc(dataQualityViolations.createdAt)).limit(200);
+  }
+
+  // ── Phase 5: Growth Operating System ──
+
+  async getActions(tenantId: number, filters?: { status?: string; ownerUserId?: string; locationId?: number; overdue?: boolean }): Promise<Action[]> {
+    const conditions: any[] = [eq(actions.tenantId, tenantId)];
+    if (filters?.status) conditions.push(eq(actions.status, filters.status));
+    if (filters?.ownerUserId) conditions.push(eq(actions.ownerUserId, filters.ownerUserId));
+    if (filters?.locationId) conditions.push(eq(actions.locationId, filters.locationId));
+    if (filters?.overdue) conditions.push(lt(actions.dueDate, new Date()), sql`${actions.status} NOT IN ('done')`);
+    return db.select().from(actions).where(and(...conditions)).orderBy(desc(actions.createdAt));
+  }
+
+  async getAction(id: number): Promise<Action | undefined> {
+    const [action] = await db.select().from(actions).where(eq(actions.id, id));
+    return action;
+  }
+
+  async createAction(data: InsertAction): Promise<Action> {
+    const [action] = await db.insert(actions).values(data).returning();
+    return action;
+  }
+
+  async updateAction(id: number, data: Partial<InsertAction>): Promise<Action | undefined> {
+    const [action] = await db.update(actions).set({ ...data, updatedAt: new Date() }).where(eq(actions.id, id)).returning();
+    return action;
+  }
+
+  async getActionCheckins(actionId: number): Promise<ActionCheckin[]> {
+    return db.select().from(actionCheckins).where(eq(actionCheckins.actionId, actionId)).orderBy(desc(actionCheckins.createdAt));
+  }
+
+  async createActionCheckin(data: InsertActionCheckin): Promise<ActionCheckin> {
+    const [checkin] = await db.insert(actionCheckins).values(data).returning();
+    return checkin;
+  }
+
+  async getOpportunities(tenantId: number): Promise<Opportunity[]> {
+    return db.select().from(opportunities).where(eq(opportunities.tenantId, tenantId)).orderBy(desc(opportunities.createdAt));
+  }
+
+  async getOpportunity(id: number): Promise<Opportunity | undefined> {
+    const [opp] = await db.select().from(opportunities).where(eq(opportunities.id, id));
+    return opp;
+  }
+
+  async createOpportunity(data: InsertOpportunity): Promise<Opportunity> {
+    const [opp] = await db.insert(opportunities).values(data).returning();
+    return opp;
+  }
+
+  async updateOpportunity(id: number, data: Partial<InsertOpportunity>): Promise<Opportunity | undefined> {
+    const [opp] = await db.update(opportunities).set(data).where(eq(opportunities.id, id)).returning();
+    return opp;
+  }
+
+  async getGoals(tenantId: number, filters?: { locationId?: number; metricDefinitionId?: number; status?: string }): Promise<Goal[]> {
+    const conditions: any[] = [eq(goals.tenantId, tenantId)];
+    if (filters?.locationId) conditions.push(eq(goals.locationId, filters.locationId));
+    if (filters?.metricDefinitionId) conditions.push(eq(goals.metricDefinitionId, filters.metricDefinitionId));
+    if (filters?.status) conditions.push(eq(goals.status, filters.status));
+    return db.select().from(goals).where(and(...conditions)).orderBy(desc(goals.createdAt));
+  }
+
+  async getGoal(id: number): Promise<Goal | undefined> {
+    const [goal] = await db.select().from(goals).where(eq(goals.id, id));
+    return goal;
+  }
+
+  async createGoal(data: InsertGoal): Promise<Goal> {
+    const [goal] = await db.insert(goals).values(data).returning();
+    return goal;
+  }
+
+  async updateGoal(id: number, data: Partial<Goal>): Promise<Goal | undefined> {
+    const [goal] = await db.update(goals).set({ ...data, updatedAt: new Date() }).where(eq(goals.id, id)).returning();
+    return goal;
+  }
+
+  async getPlaybooks(tenantId: number): Promise<Playbook[]> {
+    return db.select().from(playbooks).where(eq(playbooks.tenantId, tenantId)).orderBy(asc(playbooks.name));
+  }
+
+  async getPlaybook(id: number): Promise<Playbook | undefined> {
+    const [pb] = await db.select().from(playbooks).where(eq(playbooks.id, id));
+    return pb;
+  }
+
+  async createPlaybook(data: InsertPlaybook): Promise<Playbook> {
+    const [pb] = await db.insert(playbooks).values(data).returning();
+    return pb;
+  }
+
+  async updatePlaybook(id: number, data: Partial<InsertPlaybook>): Promise<Playbook | undefined> {
+    const [pb] = await db.update(playbooks).set({ ...data, updatedAt: new Date() }).where(eq(playbooks.id, id)).returning();
+    return pb;
+  }
+
+  async deletePlaybook(id: number): Promise<boolean> {
+    const result = await db.delete(playbooks).where(eq(playbooks.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getPlaybookSteps(playbookId: number): Promise<PlaybookStep[]> {
+    return db.select().from(playbookSteps).where(eq(playbookSteps.playbookId, playbookId)).orderBy(asc(playbookSteps.stepOrder));
+  }
+
+  async createPlaybookStep(data: InsertPlaybookStep): Promise<PlaybookStep> {
+    const [step] = await db.insert(playbookSteps).values(data).returning();
+    return step;
+  }
+
+  async deletePlaybookSteps(playbookId: number): Promise<boolean> {
+    await db.delete(playbookSteps).where(eq(playbookSteps.playbookId, playbookId));
+    return true;
+  }
+
+  async getPlaybookApplications(tenantId: number): Promise<PlaybookApplication[]> {
+    return db.select().from(playbookApplications).where(eq(playbookApplications.tenantId, tenantId)).orderBy(desc(playbookApplications.createdAt));
+  }
+
+  async createPlaybookApplication(data: InsertPlaybookApplication): Promise<PlaybookApplication> {
+    const [app] = await db.insert(playbookApplications).values(data).returning();
+    return app;
+  }
+
+  async getDigests(tenantId: number): Promise<Digest[]> {
+    return db.select().from(digests).where(eq(digests.tenantId, tenantId)).orderBy(desc(digests.createdAt)).limit(50);
+  }
+
+  async createDigest(data: InsertDigest): Promise<Digest> {
+    const [digest] = await db.insert(digests).values(data).returning();
+    return digest;
   }
 }
 
