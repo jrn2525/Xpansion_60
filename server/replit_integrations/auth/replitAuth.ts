@@ -34,7 +34,7 @@ export function getSession() {
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true,
+      secure: process.env.NODE_ENV === "production",
       maxAge: sessionTtl,
     },
   });
@@ -134,7 +134,16 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const unauthorizedResponse = { ok: false, error: { code: "UNAUTHORIZED", message: "Unauthorized" } };
   const user = req.user as any;
 
-  if (!req.isAuthenticated() || !user.expires_at) {
+  if (!req.isAuthenticated() || !user) {
+    return res.status(401).json(unauthorizedResponse);
+  }
+
+  if (user.authType === "local") {
+    if (user.claims?.sub) return next();
+    return res.status(401).json(unauthorizedResponse);
+  }
+
+  if (!user.expires_at) {
     return res.status(401).json(unauthorizedResponse);
   }
 

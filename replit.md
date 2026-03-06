@@ -6,7 +6,11 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 ## Architecture
 - **Frontend**: React + TypeScript + Vite + Tailwind + shadcn + TanStack Query + wouter + Recharts
 - **Backend**: Node + Express + TypeScript + Drizzle ORM + PostgreSQL
-- **Auth**: Replit Auth (OpenID Connect) via `server/replit_integrations/auth/`
+- **Auth**: Dual auth — Replit Auth (OpenID Connect) for regular users + email/password login for superadmin via `server/replit_integrations/auth/`
+  - Superadmin seeded from `ADMIN_EMAIL`/`ADMIN_PASSWORD` env secrets (bcryptjs hashed, 12 rounds)
+  - Local auth sessions use `authType: "local"` flag; `isAuthenticated` middleware handles both session types
+  - Users table has `passwordHash` and `isSuperAdmin` columns
+  - Admin login form on landing page (Admin button in nav)
 - **Validation**: Zod on all write endpoints with `zod-validation-error` for clean errors
 - **Notifications**: Resend (email) + Slack webhooks with retry/backoff
 - **Scheduler**: setInterval-based execution engine (60s tick) with job locking

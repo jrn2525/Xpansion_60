@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   BarChart3,
   Building2,
@@ -9,6 +12,8 @@ import {
   Target,
   ClipboardCheck,
   ArrowRight,
+  KeyRound,
+  Loader2,
 } from "lucide-react";
 
 const features = [
@@ -51,6 +56,35 @@ const features = [
 ];
 
 export default function LandingPage() {
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  async function handleAdminLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoginError("");
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        window.location.href = "/";
+      } else {
+        setLoginError(data.error?.message || "Login failed");
+      }
+    } catch {
+      setLoginError("Network error");
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-background/90 border-b">
@@ -63,11 +97,63 @@ export default function LandingPage() {
               Xpansion Console
             </span>
           </div>
-          <Button asChild data-testid="button-login">
-            <a href="/api/login">Sign In</a>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setShowAdminLogin(!showAdminLogin)} data-testid="button-admin-login">
+              <KeyRound className="h-4 w-4 mr-1.5" />
+              Admin
+            </Button>
+            <Button asChild data-testid="button-login">
+              <a href="/api/login">Sign In</a>
+            </Button>
+          </div>
         </div>
       </nav>
+
+      {showAdminLogin && (
+        <div className="fixed top-14 right-6 z-50 w-80">
+          <Card className="shadow-lg border">
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <KeyRound className="h-4 w-4 text-primary" />
+                Admin Login
+              </div>
+              <form onSubmit={handleAdminLogin} className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="admin-email" className="text-xs">Email</Label>
+                  <Input
+                    id="admin-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="admin@example.com"
+                    required
+                    data-testid="input-admin-email"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="admin-password" className="text-xs">Password</Label>
+                  <Input
+                    id="admin-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                    required
+                    data-testid="input-admin-password"
+                  />
+                </div>
+                {loginError && (
+                  <p className="text-xs text-status-error-foreground" data-testid="text-login-error">{loginError}</p>
+                )}
+                <Button type="submit" className="w-full" disabled={isLoggingIn} data-testid="button-admin-submit">
+                  {isLoggingIn ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  {isLoggingIn ? "Signing in..." : "Sign In as Admin"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-12 items-center">

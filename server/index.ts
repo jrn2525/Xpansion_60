@@ -106,6 +106,13 @@ app.get("/api/health", (_req, res) => {
 (async () => {
   await registerRoutes(httpServer, app);
 
+  try {
+    const { seedSuperAdmin } = await import("./replit_integrations/auth/routes");
+    await seedSuperAdmin();
+  } catch (e) {
+    console.error("[SEED] Admin seed error:", e);
+  }
+
   app.use("/api", (_req: Request, res: Response) => {
     res.status(404).json({
       ok: false,
