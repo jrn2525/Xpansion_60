@@ -16,6 +16,13 @@ import {
   reports,
   reportRuns,
   auditLogs,
+  notificationSettings,
+  notificationDeliveries,
+  schedulerRuns,
+  metricForecasts,
+  metricAnomalies,
+  dataQualityRules,
+  dataQualityViolations,
   type Tenant,
   type InsertTenant,
   type TenantUser,
@@ -49,6 +56,20 @@ import {
   type InsertReportRun,
   type AuditLog,
   type InsertAuditLog,
+  type NotificationSetting,
+  type InsertNotificationSetting,
+  type NotificationDelivery,
+  type InsertNotificationDelivery,
+  type SchedulerRun,
+  type InsertSchedulerRun,
+  type MetricForecast,
+  type InsertMetricForecast,
+  type MetricAnomaly,
+  type InsertMetricAnomaly,
+  type DataQualityRule,
+  type InsertDataQualityRule,
+  type DataQualityViolation,
+  type InsertDataQualityViolation,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte } from "drizzle-orm";
@@ -150,6 +171,33 @@ export interface IStorage {
 
   createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
   getAuditLogs(tenantId: number, filters?: { entityType?: string; actorUserId?: string; start?: Date; end?: Date }): Promise<AuditLog[]>;
+
+  getNotificationSettings(tenantId: number): Promise<NotificationSetting | undefined>;
+  upsertNotificationSettings(tenantId: number, data: Partial<InsertNotificationSetting>): Promise<NotificationSetting>;
+  createNotificationDelivery(data: InsertNotificationDelivery): Promise<NotificationDelivery>;
+  getNotificationDeliveries(tenantId: number): Promise<NotificationDelivery[]>;
+  updateNotificationDelivery(id: number, data: Partial<NotificationDelivery>): Promise<NotificationDelivery | undefined>;
+
+  createSchedulerRun(data: InsertSchedulerRun): Promise<SchedulerRun>;
+  getSchedulerRuns(tenantId: number | null): Promise<SchedulerRun[]>;
+  getLatestSchedulerRun(jobKey: string): Promise<SchedulerRun | undefined>;
+  updateSchedulerRun(id: number, data: Partial<SchedulerRun>): Promise<SchedulerRun | undefined>;
+
+  createMetricForecast(data: InsertMetricForecast): Promise<MetricForecast>;
+  getMetricForecasts(metricDefinitionId: number, locationId: number): Promise<MetricForecast[]>;
+  deleteMetricForecasts(metricDefinitionId: number, locationId: number): Promise<boolean>;
+
+  createMetricAnomaly(data: InsertMetricAnomaly): Promise<MetricAnomaly>;
+  getMetricAnomalies(metricDefinitionId: number, locationId: number): Promise<MetricAnomaly[]>;
+  getMetricAnomaliesByTenant(tenantId: number): Promise<MetricAnomaly[]>;
+
+  getDataQualityRules(tenantId: number): Promise<DataQualityRule[]>;
+  getDataQualityRule(id: number): Promise<DataQualityRule | undefined>;
+  createDataQualityRule(data: InsertDataQualityRule): Promise<DataQualityRule>;
+  updateDataQualityRule(id: number, data: Partial<InsertDataQualityRule>): Promise<DataQualityRule | undefined>;
+  deleteDataQualityRule(id: number): Promise<boolean>;
+  createDataQualityViolation(data: InsertDataQualityViolation): Promise<DataQualityViolation>;
+  getDataQualityViolations(tenantId: number, filters?: { ruleId?: number; locationId?: number; importJobId?: number }): Promise<DataQualityViolation[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -638,6 +686,129 @@ export class DatabaseStorage implements IStorage {
     if (filters?.start) conditions.push(gte(auditLogs.createdAt, filters.start));
     if (filters?.end) conditions.push(lte(auditLogs.createdAt, filters.end));
     return db.select().from(auditLogs).where(and(...conditions)).orderBy(desc(auditLogs.createdAt));
+  }
+
+  async getNotificationSettings(tenantId: number): Promise<NotificationSetting | undefined> {
+    const [settings] = await db.select().from(notificationSettings).where(eq(notificationSettings.tenantId, tenantId));
+    return settings;
+  }
+
+  async upsertNotificationSettings(tenantId: number, data: Partial<InsertNotificationSetting>): Promise<NotificationSetting> {
+    const existing = await this.getNotificationSettings(tenantId);
+    if (existing) {
+      const [updated] = await db.update(notificationSettings).set({ ...data, updatedAt: new Date() }).where(eq(notificationSettings.id, existing.id)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(notificationSettings).values({ ...data, tenantId } as InsertNotificationSetting).returning();
+    return created;
+  }
+
+  async createNotificationDelivery(data: InsertNotificationDelivery): Promise<NotificationDelivery> {
+    const [delivery] = await db.insert(notificationDeliveries).values(data).returning();
+    return delivery;
+  }
+
+  async getNotificationDeliveries(tenantId: number): Promise<NotificationDelivery[]> {
+    return db.select().from(notificationDeliveries).where(eq(notificationDeliveries.tenantId, tenantId)).orderBy(desc(notificationDeliveries.createdAt)).limit(100);
+  }
+
+  async updateNotificationDelivery(id: number, data: Partial<NotificationDelivery>): Promise<NotificationDelivery | undefined> {
+    const [delivery] = await db.update(notificationDeliveries).set(data).where(eq(notificationDeliveries.id, id)).returning();
+    return delivery;
+  }
+
+  async createSchedulerRun(data: InsertSchedulerRun): Promise<SchedulerRun> {
+    const [run] = await db.insert(schedulerRuns).values(data).returning();
+    return run;
+  }
+
+  async getSchedulerRuns(tenantId: number | null): Promise<SchedulerRun[]> {
+    if (tenantId) {
+      return db.select().from(schedulerRuns).where(eq(schedulerRuns.tenantId, tenantId)).orderBy(desc(schedulerRuns.createdAt)).limit(50);
+    }
+    return db.select().from(schedulerRuns).orderBy(desc(schedulerRuns.createdAt)).limit(50);
+  }
+
+  async getLatestSchedulerRun(jobKey: string): Promise<SchedulerRun | undefined> {
+    const [run] = await db.select().from(schedulerRuns).where(eq(schedulerRuns.jobKey, jobKey)).orderBy(desc(schedulerRuns.createdAt)).limit(1);
+    return run;
+  }
+
+  async updateSchedulerRun(id: number, data: Partial<SchedulerRun>): Promise<SchedulerRun | undefined> {
+    const [run] = await db.update(schedulerRuns).set(data).where(eq(schedulerRuns.id, id)).returning();
+    return run;
+  }
+
+  async createMetricForecast(data: InsertMetricForecast): Promise<MetricForecast> {
+    const [forecast] = await db.insert(metricForecasts).values(data).returning();
+    return forecast;
+  }
+
+  async getMetricForecasts(metricDefinitionId: number, locationId: number): Promise<MetricForecast[]> {
+    return db.select().from(metricForecasts).where(and(eq(metricForecasts.metricDefinitionId, metricDefinitionId), eq(metricForecasts.locationId, locationId))).orderBy(asc(metricForecasts.periodStart));
+  }
+
+  async deleteMetricForecasts(metricDefinitionId: number, locationId: number): Promise<boolean> {
+    const result = await db.delete(metricForecasts).where(and(eq(metricForecasts.metricDefinitionId, metricDefinitionId), eq(metricForecasts.locationId, locationId))).returning();
+    return result.length >= 0;
+  }
+
+  async createMetricAnomaly(data: InsertMetricAnomaly): Promise<MetricAnomaly> {
+    const [anomaly] = await db.insert(metricAnomalies).values(data).returning();
+    return anomaly;
+  }
+
+  async getMetricAnomalies(metricDefinitionId: number, locationId: number): Promise<MetricAnomaly[]> {
+    return db.select().from(metricAnomalies).where(and(eq(metricAnomalies.metricDefinitionId, metricDefinitionId), eq(metricAnomalies.locationId, locationId))).orderBy(desc(metricAnomalies.createdAt));
+  }
+
+  async getMetricAnomaliesByTenant(tenantId: number): Promise<MetricAnomaly[]> {
+    const metrics = await this.getMetricDefinitions(tenantId);
+    if (metrics.length === 0) return [];
+    const metricIds = metrics.map(m => m.id);
+    const results: MetricAnomaly[] = [];
+    for (const mId of metricIds) {
+      const anomalies = await db.select().from(metricAnomalies).where(eq(metricAnomalies.metricDefinitionId, mId)).orderBy(desc(metricAnomalies.createdAt)).limit(20);
+      results.push(...anomalies);
+    }
+    return results.sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+  }
+
+  async getDataQualityRules(tenantId: number): Promise<DataQualityRule[]> {
+    return db.select().from(dataQualityRules).where(eq(dataQualityRules.tenantId, tenantId)).orderBy(asc(dataQualityRules.ruleName));
+  }
+
+  async getDataQualityRule(id: number): Promise<DataQualityRule | undefined> {
+    const [rule] = await db.select().from(dataQualityRules).where(eq(dataQualityRules.id, id));
+    return rule;
+  }
+
+  async createDataQualityRule(data: InsertDataQualityRule): Promise<DataQualityRule> {
+    const [rule] = await db.insert(dataQualityRules).values(data).returning();
+    return rule;
+  }
+
+  async updateDataQualityRule(id: number, data: Partial<InsertDataQualityRule>): Promise<DataQualityRule | undefined> {
+    const [rule] = await db.update(dataQualityRules).set({ ...data, updatedAt: new Date() }).where(eq(dataQualityRules.id, id)).returning();
+    return rule;
+  }
+
+  async deleteDataQualityRule(id: number): Promise<boolean> {
+    const result = await db.delete(dataQualityRules).where(eq(dataQualityRules.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async createDataQualityViolation(data: InsertDataQualityViolation): Promise<DataQualityViolation> {
+    const [violation] = await db.insert(dataQualityViolations).values(data).returning();
+    return violation;
+  }
+
+  async getDataQualityViolations(tenantId: number, filters?: { ruleId?: number; locationId?: number; importJobId?: number }): Promise<DataQualityViolation[]> {
+    const conditions = [eq(dataQualityViolations.tenantId, tenantId)];
+    if (filters?.ruleId) conditions.push(eq(dataQualityViolations.ruleId, filters.ruleId));
+    if (filters?.locationId) conditions.push(eq(dataQualityViolations.locationId, filters.locationId));
+    if (filters?.importJobId) conditions.push(eq(dataQualityViolations.importJobId, filters.importJobId));
+    return db.select().from(dataQualityViolations).where(and(...conditions)).orderBy(desc(dataQualityViolations.createdAt)).limit(200);
   }
 }
 

@@ -83,6 +83,23 @@ export default function AdminReportsPage() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
+  const { data: schedulerStatusData } = useQuery<any>({
+    queryKey: ["/api/admin/scheduler/status"],
+  });
+
+  const runSchedulerMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/scheduler/run-now");
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/report-runs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scheduler/status"] });
+      toast({ title: "Scheduler run complete", description: `Ran ${result?.data?.reports || 0} report(s)` });
+    },
+    onError: (e: Error) => toast({ title: "Run failed", description: e.message, variant: "destructive" }),
+  });
+
   const runMutation = useMutation({
     mutationFn: async (reportId: number) => {
       const res = await apiRequest("POST", `/api/admin/reports/${reportId}/run`);
@@ -140,6 +157,36 @@ export default function AdminReportsPage() {
           <Plus className="h-4 w-4 mr-2" /> Create Report
         </Button>
       </div>
+
+      <Card>
+        <CardContent className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Clock className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Report Scheduler</p>
+              <p className="text-xs text-muted-foreground">
+                {schedulerStatusData?.data?.schedulerActive ? "Active" : "Inactive"}
+                {schedulerStatusData?.data?.jobs?.length > 0 && (() => {
+                  const reportJob = schedulerStatusData.data.jobs.find((j: any) => j.jobType === "report");
+                  if (reportJob?.lastRun) {
+                    return ` · Last run: ${new Date(reportJob.lastRun.startedAt).toLocaleString()} · ${reportJob.lastRun.status}`;
+                  }
+                  return "";
+                })()}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => runSchedulerMutation.mutate()}
+            disabled={runSchedulerMutation.isPending}
+            data-testid="button-run-scheduler"
+          >
+            <Play className="h-3 w-3 mr-1" /> {runSchedulerMutation.isPending ? "Running..." : "Run All Now"}
+          </Button>
+        </CardContent>
+      </Card>
 
       {isLoading ? (
         <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>

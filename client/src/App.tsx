@@ -19,11 +19,15 @@ import AdminImportsPage from "@/pages/admin-imports";
 import AdminAlertsPage from "@/pages/admin-alerts";
 import AdminReportsPage from "@/pages/admin-reports";
 import AdminAuditPage from "@/pages/admin-audit";
+import AdminNotificationsPage from "@/pages/admin-notifications";
+import AdminDataQualityPage from "@/pages/admin-data-quality";
+import PortfolioPage from "@/pages/portfolio";
 
 function AuthenticatedRouter() {
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
+      <Route path="/portfolio" component={PortfolioPage} />
       <Route path="/tenants" component={TenantsPage} />
       <Route path="/locations" component={LocationsPage} />
       <Route path="/metrics" component={MetricsPage} />
@@ -33,6 +37,8 @@ function AuthenticatedRouter() {
       <Route path="/admin/alerts" component={AdminAlertsPage} />
       <Route path="/admin/reports" component={AdminReportsPage} />
       <Route path="/admin/audit" component={AdminAuditPage} />
+      <Route path="/admin/notifications" component={AdminNotificationsPage} />
+      <Route path="/admin/data-quality" component={AdminDataQualityPage} />
       <Route component={NotFound} />
     </Switch>
   );

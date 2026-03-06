@@ -1,0 +1,181 @@
+Build Phase 3 for Franchise OS / Xpansion Console.
+
+Phase 3 Goal
+Turn Phase 2 features into a fully automated operating system with real delivery, scheduling, and executive intelligence.
+
+1. Real Notifications (replace stubs)
+
+Scope
+Implement real outbound notifications for alert events and report deliveries.
+
+Channels (Phase 3)
+
+• Email (required)
+• Slack webhook (optional but implemented if webhook URL exists)
+
+Endpoints
+
+• GET /api/admin/notification-settings?tenantId=
+• PUT /api/admin/notification-settings/:tenantId
+• POST /api/admin/notification-test
+
+Behavior
+
+• Notification settings are tenant-scoped.
+• For alert events:
+• Trigger notifications on create (open)
+• Optional notifications on ack/resolved
+• For report runs:
+• Deliver report summary to configured recipients/channels
+• Retry failed sends with backoff (at least 3 attempts)
+• Persist delivery attempts + status for audit/debug
+
+Data model additions
+
+• notification_settings
+• notification_deliveries
+
+UI
+
+• /admin/notifications
+• sender config
+• recipient lists by severity/type
+• channel toggles
+• test notification button
+• delivery history table
+
+2. Scheduled Execution Engine (cron-backed)
+
+Scope
+Automate report runs and optional rule evaluation cadence.
+
+Endpoints
+
+• POST /api/admin/scheduler/run-now (manual trigger for diagnostics)
+• GET /api/admin/scheduler/status?tenantId=
+
+Behavior
+
+• Use server cron/scheduler to:
+• run active report definitions on schedule
+• evaluate active alert rules on schedule
+• Prevent duplicate concurrent runs for same job key
+• Track scheduler job runs with status + duration + error snapshot
+
+Data model additions
+
+• scheduler_runs
+
+UI
+
+• Add scheduler health widget on /admin/reports and /admin/alerts
+• Show last run, next run, success/fail indicator
+
+3. Alert Workflow Automation
+
+Scope
+Add policy controls and escalation paths.
+
+Features
+
+• Rule-level cooldown window (prevent alert spam)
+• Escalation policy:
+• if open > X minutes, escalate severity or notify escalations list
+• Dedup logic:
+• avoid duplicate open events for same tenant/location/metric/rule window
+
+Endpoints
+
+• Extend alert rules CRUD payload with:
+• cooldown_minutes
+• escalation_minutes
+• dedup_window_minutes
+
+UI
+
+• Enhance /admin/alerts rule editor with workflow settings
+• Event timeline shows escalation/dedup notes
+
+4. Executive Portfolio Dashboard
+
+Scope
+Add high-level portfolio insights across all locations.
+
+Endpoints
+
+• GET /api/tenants/:tenantId/portfolio/overview
+• GET /api/tenants/:tenantId/portfolio/rankings
+• GET /api/tenants/:tenantId/portfolio/risk
+
+Behavior
+
+• Overview cards:
+• weighted portfolio score
+• improving/declining location counts
+• open high/critical alert counts
+• Rankings:
+• top/bottom locations by score delta
+• Risk:
+• locations at risk based on threshold misses + trend deterioration
+
+UI
+
+• /portfolio page
+• executive cards
+• leaderboard
+• risk matrix/table
+• time-range selector
+
+5. Forecasting + Anomaly Detection (MVP)
+
+Scope
+Basic predictive layer on metric trends.
+
+Endpoints
+
+• GET /api/tenants/:tenantId/metrics/:metricId/forecast?locationId=&periods=
+• GET /api/tenants/:tenantId/metrics/:metricId/anomalies?locationId=
+
+Behavior
+
+• Forecast:
+• simple baseline model (moving average / linear trend)
+• return confidence band
+• Anomalies:
+• detect significant deviation vs recent baseline
+• emit anomaly records (optionally create alert event)
+
+Data model additions
+
+• metric_forecasts
+• metric_anomalies
+
+UI
+
+• Extend /trends:
+• forecast overlay
+• anomaly markers + tooltip explanation
+
+6. Data Quality Guardrails
+
+Scope
+Ensure cleaner data entering the system.
+
+Features
+
+• Required period continuity checks
+• Outlier detection at import-time (warn or reject by policy)
+• Duplicate row detection in CSV imports
+• Data quality score per location/metric
+
+Endpoints
+
+• GET /api/admin/data-quality?tenantId=
+• PUT /api/admin/data-quality/rules/:tenantId
+
+UI
+
+• /admin/data-quality
+• rule toggles
+• violations table
+• quality score trend

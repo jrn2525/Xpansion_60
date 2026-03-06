@@ -5,9 +5,13 @@ import { isAuthenticated } from "./replit_integrations/auth";
 import {
   insertAlertRuleSchema,
   insertReportSchema,
+  insertNotificationSettingsSchema,
+  insertDataQualityRuleSchema,
 } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
+import { notifyAlertEvent, notifyReportReady, sendEmail, sendSlackWebhook, sendNotification } from "./services/notifications";
+import { manualRunNow, getSchedulerStatus } from "./services/scheduler";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -70,6 +74,7 @@ adminRouter.post("/imports", upload.single("file"), async (req: any, res) => {
       mappingConfig: JSON.stringify(mapping),
     });
 
+    const importStartedAt = new Date();
     const csvText = req.file.buffer.toString("utf-8");
     const result = await processCSV(csvText, mapping, tenantId, locationId, job.id);
 
@@ -81,8 +86,9 @@ adminRouter.post("/imports", upload.single("file"), async (req: any, res) => {
       failedRows: result.failedRows,
     });
 
+    const qualityResult = await runDataQualityChecks(tenantId, locationId, job.id, importStartedAt);
     await audit(tenantId, req.user.claims.sub, "import_job", String(job.id), "create", null, updated);
-    res.status(201).json(ok(updated));
+    res.status(201).json(ok({ ...updated, qualityViolations: qualityResult.violations }));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
@@ -345,14 +351,137 @@ adminRouter.post("/alert-events/:eventId/resolve", async (req: any, res) => {
   }
 });
 
+async function runDataQualityChecks(tenantId: number, locationId: number, importJobId: number, importStartedAt: Date): Promise<{ violations: number }> {
+  let violations = 0;
+  try {
+    const rules = await storage.getDataQualityRules(tenantId);
+    const activeRules = rules.filter(r => r.isActive);
+    if (activeRules.length === 0) return { violations: 0 };
+
+    const metrics = await storage.getMetricDefinitions(tenantId);
+    const activeMetrics = metrics.filter(m => m.isActive);
+
+    for (const rule of activeRules) {
+      const config = (() => { try { return JSON.parse(rule.config); } catch { return {}; } })();
+
+      for (const metric of activeMetrics) {
+        const allValues = await storage.getMetricValues(metric.id, locationId);
+        if (allValues.length === 0) continue;
+
+        const newValues = allValues.filter(v => v.recordedAt && v.recordedAt >= importStartedAt);
+        if (newValues.length === 0) continue;
+
+        const existingValues = allValues.filter(v => !v.recordedAt || v.recordedAt < importStartedAt);
+
+        if (rule.ruleType === "duplicate_detection") {
+          const existingPeriods = new Set(
+            existingValues.map(v => `${v.periodStart?.toISOString()}-${v.periodEnd?.toISOString()}`)
+          );
+          const newPeriodsSeen = new Set<string>();
+          for (const v of newValues) {
+            const key = `${v.periodStart?.toISOString()}-${v.periodEnd?.toISOString()}`;
+            const isDupOfExisting = existingPeriods.has(key);
+            const isDupOfNewBatch = newPeriodsSeen.has(key);
+            if (isDupOfExisting || isDupOfNewBatch) {
+              violations++;
+              await storage.createDataQualityViolation({
+                tenantId,
+                ruleId: rule.id,
+                locationId,
+                metricDefinitionId: metric.id,
+                importJobId,
+                severity: config.policy === "reject" ? "error" : "warning",
+                message: `Duplicate period for ${metric.name}: ${v.periodStart?.toISOString().split("T")[0]} to ${v.periodEnd?.toISOString().split("T")[0]}${isDupOfExisting ? " (conflicts with existing data)" : " (duplicate within import)"}`,
+                detailJson: JSON.stringify({ value: v.value, periodStart: v.periodStart, periodEnd: v.periodEnd, source: isDupOfExisting ? "existing" : "batch" }),
+              });
+            }
+            newPeriodsSeen.add(key);
+          }
+        }
+
+        if (rule.ruleType === "outlier_detection") {
+          const baselineValues = existingValues.length >= 3 ? existingValues : allValues;
+          if (baselineValues.length < 3) continue;
+          const nums = baselineValues.map(v => v.value);
+          const mean = nums.reduce((a, b) => a + b, 0) / nums.length;
+          const stdDev = Math.sqrt(nums.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / nums.length) || 1;
+          const threshold = config.stdDevMultiplier || 3;
+          for (const v of newValues) {
+            const deviation = Math.abs(v.value - mean) / stdDev;
+            if (deviation > threshold) {
+              violations++;
+              await storage.createDataQualityViolation({
+                tenantId,
+                ruleId: rule.id,
+                locationId,
+                metricDefinitionId: metric.id,
+                importJobId,
+                severity: config.policy === "reject" ? "error" : "warning",
+                message: `Outlier in imported data for ${metric.name}: value ${v.value} deviates ${deviation.toFixed(1)}σ from baseline mean ${mean.toFixed(2)}`,
+                detailJson: JSON.stringify({ value: v.value, mean, stdDev, threshold, deviation: deviation.toFixed(2) }),
+              });
+            }
+          }
+        }
+
+        if (rule.ruleType === "period_continuity") {
+          const sorted = [...allValues].sort((a, b) => (a.periodStart?.getTime() || 0) - (b.periodStart?.getTime() || 0));
+          const newIds = new Set(newValues.map(v => v.id));
+          const maxGapDays = config.maxGapDays || 45;
+          for (let i = 1; i < sorted.length; i++) {
+            if (!newIds.has(sorted[i].id) && !newIds.has(sorted[i - 1].id)) continue;
+            const prevEnd = sorted[i - 1].periodEnd?.getTime() || 0;
+            const currStart = sorted[i].periodStart?.getTime() || 0;
+            const gapDays = Math.round((currStart - prevEnd) / (24 * 60 * 60 * 1000));
+            if (gapDays > maxGapDays) {
+              violations++;
+              await storage.createDataQualityViolation({
+                tenantId,
+                ruleId: rule.id,
+                locationId,
+                metricDefinitionId: metric.id,
+                importJobId,
+                severity: config.policy === "reject" ? "error" : "warning",
+                message: `Period gap for ${metric.name}: ${gapDays} days between periods (max allowed: ${maxGapDays})`,
+                detailJson: JSON.stringify({ previousEnd: sorted[i - 1].periodEnd, currentStart: sorted[i].periodStart, gapDays, maxGapDays }),
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error("[DATA QUALITY] Error running checks:", e);
+  }
+  return { violations };
+}
+
+async function shouldSkipCooldown(rule: any, locationId: number): Promise<boolean> {
+  if (!rule.cooldownMinutes || rule.cooldownMinutes <= 0) return false;
+  const events = await storage.getAlertEvents(rule.tenantId, {});
+  const recent = events.find(e => e.alertRuleId === rule.id && e.locationId === locationId);
+  if (!recent) return false;
+  return (Date.now() - (recent.createdAt?.getTime() || 0)) / 60000 < rule.cooldownMinutes;
+}
+
+async function shouldSkipDedup(rule: any, locationId: number, metricDefinitionId: number): Promise<boolean> {
+  if (!rule.dedupWindowMinutes || rule.dedupWindowMinutes <= 0) return false;
+  const events = await storage.getAlertEvents(rule.tenantId, { status: "open" });
+  const dup = events.find(e => e.alertRuleId === rule.id && e.locationId === locationId && e.metricDefinitionId === metricDefinitionId);
+  if (!dup) return false;
+  return (Date.now() - (dup.createdAt?.getTime() || 0)) / 60000 < rule.dedupWindowMinutes;
+}
+
 async function evaluateAlertRule(rule: any) {
   try {
     const condition = JSON.parse(rule.conditionJson);
-    const action = JSON.parse(rule.actionJson);
+    const locations = await storage.getLocations(rule.tenantId);
 
-    if (condition.type === "threshold_breach") {
-      const locations = await storage.getLocations(rule.tenantId);
-      for (const loc of locations) {
+    for (const loc of locations) {
+      if (await shouldSkipCooldown(rule, loc.id)) continue;
+      if (await shouldSkipDedup(rule, loc.id, condition.metricDefinitionId)) continue;
+
+      if (condition.type === "threshold_breach") {
         const values = await storage.getMetricValues(condition.metricDefinitionId, loc.id);
         if (values.length === 0) continue;
         const latest = values[values.length - 1];
@@ -360,7 +489,7 @@ async function evaluateAlertRule(rule: any) {
         if (condition.operator === "above" && latest.value > condition.threshold) breached = true;
         if (condition.operator === "below" && latest.value < condition.threshold) breached = true;
         if (breached) {
-          await storage.createAlertEvent({
+          const event = await storage.createAlertEvent({
             alertRuleId: rule.id,
             tenantId: rule.tenantId,
             locationId: loc.id,
@@ -370,16 +499,11 @@ async function evaluateAlertRule(rule: any) {
             message: `${rule.name}: Value ${latest.value} ${condition.operator} threshold ${condition.threshold} at ${loc.name}`,
             detailJson: JSON.stringify({ value: latest.value, threshold: condition.threshold, operator: condition.operator }),
           });
-          if (action.type === "email") {
-            console.log(`[EMAIL STUB] Alert "${rule.name}" triggered for ${loc.name}: ${latest.value} ${condition.operator} ${condition.threshold}`);
-          }
+          await notifyAlertEvent(rule.tenantId, event.message, event.severity, event.id);
         }
       }
-    }
 
-    if (condition.type === "trend_deterioration") {
-      const locations = await storage.getLocations(rule.tenantId);
-      for (const loc of locations) {
+      if (condition.type === "trend_deterioration") {
         const values = await storage.getMetricValues(condition.metricDefinitionId, loc.id);
         if (values.length < 2) continue;
         const current = values[values.length - 1];
@@ -387,7 +511,7 @@ async function evaluateAlertRule(rule: any) {
         if (previous.value === 0) continue;
         const dropPct = ((previous.value - current.value) / Math.abs(previous.value)) * 100;
         if (dropPct >= (condition.dropPercent || 10)) {
-          await storage.createAlertEvent({
+          const event = await storage.createAlertEvent({
             alertRuleId: rule.id,
             tenantId: rule.tenantId,
             locationId: loc.id,
@@ -397,9 +521,7 @@ async function evaluateAlertRule(rule: any) {
             message: `${rule.name}: Value dropped ${dropPct.toFixed(1)}% at ${loc.name} (${previous.value} → ${current.value})`,
             detailJson: JSON.stringify({ currentValue: current.value, previousValue: previous.value, dropPercent: dropPct }),
           });
-          if (action.type === "email") {
-            console.log(`[EMAIL STUB] Trend alert "${rule.name}" triggered for ${loc.name}: ${dropPct.toFixed(1)}% drop`);
-          }
+          await notifyAlertEvent(rule.tenantId, event.message, event.severity, event.id);
         }
       }
     }
@@ -558,6 +680,185 @@ adminRouter.get("/audit", async (req: any, res) => {
     if (req.query.end) filters.end = new Date(req.query.end as string);
     const logs = await storage.getAuditLogs(tenantId, filters);
     res.json(ok(logs));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.get("/notification-settings", async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.query.tenantId as string);
+    if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
+    const access = await requireAdminAccess(req, res, tenantId);
+    if (!access) return;
+    const settings = await storage.getNotificationSettings(tenantId);
+    res.json(ok(settings || null));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.put("/notification-settings/:tenantId", async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const access = await requireAdminAccess(req, res, tenantId);
+    if (!access) return;
+    const { tenantId: _, ...data } = req.body;
+    const before = await storage.getNotificationSettings(tenantId);
+    const settings = await storage.upsertNotificationSettings(tenantId, data);
+    await audit(tenantId, req.user.claims.sub, "notification_settings", String(settings.id), before ? "update" : "create", before, settings);
+    res.json(ok(settings));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.post("/notification-test", async (req: any, res) => {
+  try {
+    const { tenantId } = req.body;
+    if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
+    const access = await requireAdminAccess(req, res, tenantId);
+    if (!access) return;
+    const settings = await storage.getNotificationSettings(tenantId);
+    if (!settings) return res.status(400).json(err("NOT_CONFIGURED", "Notification settings not configured"));
+
+    const results: any[] = [];
+    if (settings.emailEnabled) {
+      const recipients: string[] = (() => { try { return JSON.parse(settings.recipientsJson); } catch { return []; } })();
+      for (const recipient of recipients) {
+        try {
+          await sendNotification(tenantId, "email", recipient, "Test Notification", "<p>This is a test notification from Xpansion Console.</p>", "test", "0");
+          results.push({ channel: "email", recipient, status: "sent" });
+        } catch (e: any) {
+          results.push({ channel: "email", recipient, status: "failed", error: e.message });
+        }
+      }
+    }
+    if (settings.slackEnabled && settings.slackWebhookUrl) {
+      try {
+        await sendNotification(tenantId, "slack", settings.slackWebhookUrl, "Test Notification", "This is a test from Xpansion Console", "test", "0");
+        results.push({ channel: "slack", status: "sent" });
+      } catch (e: any) {
+        results.push({ channel: "slack", status: "failed", error: e.message });
+      }
+    }
+    res.json(ok({ results }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.get("/notification-deliveries", async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.query.tenantId as string);
+    if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
+    const access = await requireAdminAccess(req, res, tenantId);
+    if (!access) return;
+    const deliveries = await storage.getNotificationDeliveries(tenantId);
+    res.json(ok(deliveries));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.post("/scheduler/run-now", async (req: any, res) => {
+  try {
+    const userId = req.user?.claims?.sub;
+    if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
+    const tenants = await storage.getTenants();
+    let hasAdminAccess = false;
+    for (const t of tenants) {
+      const tu = await storage.getTenantUserByUserId(t.id, userId);
+      if (tu && ["owner", "admin"].includes(tu.role)) { hasAdminAccess = true; break; }
+    }
+    if (!hasAdminAccess) return res.status(403).json(err("FORBIDDEN", "Admin access required"));
+    const result = await manualRunNow();
+    res.json(ok(result));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.get("/scheduler/status", async (req: any, res) => {
+  try {
+    const userId = req.user?.claims?.sub;
+    if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
+    const tenants = await storage.getTenants();
+    let hasAdminAccess = false;
+    for (const t of tenants) {
+      const tu = await storage.getTenantUserByUserId(t.id, userId);
+      if (tu && ["owner", "admin"].includes(tu.role)) { hasAdminAccess = true; break; }
+    }
+    if (!hasAdminAccess) return res.status(403).json(err("FORBIDDEN", "Admin access required"));
+    const tenantId = req.query.tenantId ? parseInt(req.query.tenantId as string) : undefined;
+    const status = await getSchedulerStatus(tenantId);
+    res.json(ok(status));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.get("/data-quality", async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.query.tenantId as string);
+    if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
+    const access = await requireAdminAccess(req, res, tenantId);
+    if (!access) return;
+    const rules = await storage.getDataQualityRules(tenantId);
+    const violations = await storage.getDataQualityViolations(tenantId);
+    const locations = await storage.getLocations(tenantId);
+    const metrics = await storage.getMetricDefinitions(tenantId);
+
+    const qualityScores: any[] = [];
+    for (const loc of locations) {
+      const locViolations = violations.filter(v => v.locationId === loc.id);
+      const metricScores: any[] = [];
+      for (const metric of metrics) {
+        const metricViolations = locViolations.filter(v => v.metricDefinitionId === metric.id);
+        const score = Math.max(0, 100 - metricViolations.length * 10);
+        metricScores.push({ metricId: metric.id, metricName: metric.name, score, violationCount: metricViolations.length });
+      }
+      const avgScore = metricScores.length > 0 ? metricScores.reduce((a, b) => a + b.score, 0) / metricScores.length : 100;
+      qualityScores.push({ locationId: loc.id, locationName: loc.name, score: Math.round(avgScore), metrics: metricScores });
+    }
+
+    res.json(ok({ rules, violations: violations.slice(0, 100), qualityScores }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.put("/data-quality/rules/:tenantId", async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const access = await requireAdminAccess(req, res, tenantId);
+    if (!access) return;
+    const { rules } = req.body;
+    if (!Array.isArray(rules)) return res.status(400).json(err("VALIDATION_ERROR", "rules must be an array"));
+
+    const results: any[] = [];
+    for (const rule of rules) {
+      if (rule.id) {
+        const updated = await storage.updateDataQualityRule(rule.id, {
+          ruleName: rule.ruleName,
+          ruleType: rule.ruleType,
+          config: rule.config || "{}",
+          isActive: rule.isActive ?? true,
+        });
+        if (updated) results.push(updated);
+      } else {
+        const created = await storage.createDataQualityRule({
+          tenantId,
+          ruleName: rule.ruleName,
+          ruleType: rule.ruleType,
+          config: rule.config || "{}",
+          isActive: rule.isActive ?? true,
+        });
+        results.push(created);
+      }
+    }
+    await audit(tenantId, req.user.claims.sub, "data_quality_rules", String(tenantId), "update", null, results);
+    res.json(ok(results));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }

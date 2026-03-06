@@ -1,13 +1,15 @@
 # Franchise OS Command Center
 
 ## Overview
-Multi-tenant franchise management platform with RBAC, metrics engine, scorecards, trend analysis, CSV import pipeline, alert rules engine, scheduled reports, and audit logging.
+Multi-tenant franchise management platform with RBAC, metrics engine, scorecards, trend analysis, CSV import pipeline, alert rules engine, scheduled reports, audit logging, real notifications (email/Slack), scheduled execution engine, alert workflow automation, executive portfolio dashboard, forecasting, anomaly detection, and data quality guardrails.
 
 ## Architecture
-- **Frontend**: React + TypeScript + Vite + Tailwind + shadcn + TanStack Query + wouter
+- **Frontend**: React + TypeScript + Vite + Tailwind + shadcn + TanStack Query + wouter + Recharts
 - **Backend**: Node + Express + TypeScript + Drizzle ORM + PostgreSQL
 - **Auth**: Replit Auth (OpenID Connect) via `server/replit_integrations/auth/`
 - **Validation**: Zod on all write endpoints with `zod-validation-error` for clean errors
+- **Notifications**: Resend (email) + Slack webhooks with retry/backoff
+- **Scheduler**: setInterval-based execution engine (60s tick) with job locking
 
 ## Database Schema
 
@@ -27,41 +29,64 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 ### Phase 2 Tables
 - `import_jobs` - CSV import job tracking (status, row counts, mapping config)
 - `import_row_errors` - Row-level error logging for failed CSV rows
-- `alert_rules` - Configurable alert conditions (threshold_breach, trend_deterioration)
+- `alert_rules` - Configurable alert conditions (threshold_breach, trend_deterioration) + cooldownMinutes, escalationMinutes, dedupWindowMinutes
 - `alert_events` - Triggered alert instances (open/ack/resolved lifecycle)
 - `reports` - Report definitions (type, config, schedule)
 - `report_runs` - Report execution history with JSON summaries
 - `audit_logs` - Entity-level audit trail (before/after snapshots)
 
+### Phase 3 Tables
+- `notification_settings` - Per-tenant notification config (email/slack toggles, recipients, severity filters)
+- `notification_deliveries` - Delivery log with status tracking (pending/sent/failed)
+- `scheduler_runs` - Execution history for scheduled jobs (report generation, alert evaluation, escalation)
+- `metric_forecasts` - Linear trend forecasts with 95% confidence intervals
+- `metric_anomalies` - Z-score based anomaly detections
+- `data_quality_rules` - Configurable quality rules (period_continuity, outlier_detection, duplicate_detection)
+- `data_quality_violations` - Quality check violations with severity/details
+
 ## Key Patterns
-- Tenant scoping enforced in service layer via `requireTenantAccess()` (Phase 1) and `requireAdminAccess()` (Phase 2)
+- Tenant scoping enforced in service layer via `requireTenantAccess()` (Phase 1) and `requireAdminAccess()` (Phase 2+)
 - Global tenant selector in sidebar using `useTenantStore()` (useSyncExternalStore)
 - Phase 1 API routes: `/api/tenants/:tenantId/...` with `{ message }` error format
-- Phase 2 API routes: `/api/admin/...` with `{ ok: true, data }` / `{ ok: false, error: { code, message } }` format
+- Phase 2+ API routes: `/api/admin/...` with `{ ok: true, data }` / `{ ok: false, error: { code, message } }` format
 - Score run calculation: raw value -> threshold band -> normalized score (100/75/50/25) -> weighted sum
 - Trend endpoints generate period slots and fill with data, returning null for missing periods
-- Alert evaluation runs on rule create/update — checks all tenant locations for threshold breaches or trend deterioration
-- CSV import pipeline: multipart upload -> parse -> map fields -> create metric_values -> log row errors
-- `isAuthenticated` middleware returns standardized `{ ok: false, error }` JSON on 401
+- Alert evaluation: cooldown (skip repeat), dedup (skip open duplicates), escalation (auto-bump severity)
+- Notifications: alert events + report completions -> email (Resend) + Slack webhook with retry/backoff
+- Scheduler: 60s interval, job locking via scheduler_runs, report generation + alert evaluation + escalation checks
+- Forecasting: linear regression on historical values, 1.96σ confidence bands
+- Anomaly detection: rolling 6-period window, flags >2σ deviations
+- Idempotency: X-Idempotency-Key header support on mutation endpoints
+- CSV import pipeline: multipart upload -> parse -> map fields -> create metric_values -> log row errors -> run data quality checks (scoped to newly imported rows vs existing baseline)
+- Data quality checks: duplicate_detection (new vs existing + intra-batch), outlier_detection (new values vs baseline mean/σ), period_continuity (gap detection with configurable maxGapDays); severity driven by rule config policy (warn/reject)
 - `/api/health` returns `{ ok: true, service: "xpansion-console", timestamp }` for uptime checks
-- Unmatched `/api/*` routes return JSON 404 (never HTML)
-- Centralized error middleware returns structured JSON `{ ok, error: { code, message } }`
 
 ## File Structure
-- `shared/schema.ts` - All Drizzle models, relations, Zod schemas, types
+- `shared/schema.ts` - All Drizzle models, relations, Zod schemas, types (26 tables)
 - `shared/models/auth.ts` - Auth user/session models
 - `server/db.ts` - Database connection pool
-- `server/storage.ts` - DatabaseStorage implementing IStorage interface
-- `server/routes.ts` - Phase 1 API routes with Zod validation
-- `server/admin-routes.ts` - Phase 2 admin API routes (imports, alerts, reports, audit)
+- `server/storage.ts` - DatabaseStorage implementing IStorage interface (~100 methods)
+- `server/routes.ts` - Phase 1 + portfolio + forecasting/anomaly API routes
+- `server/admin-routes.ts` - Phase 2+3 admin API routes (imports, alerts, reports, notifications, data quality, scheduler, audit)
+- `server/services/notifications.ts` - Email (Resend) + Slack webhook notification service
+- `server/services/analytics.ts` - Forecast generation + anomaly detection
+- `server/services/scheduler.ts` - Scheduled execution engine (reports, alerts, escalation)
 - `server/seed.ts` - Seed data (Sunrise Burgers demo tenant)
 - `client/src/App.tsx` - Main app with auth gating and sidebar layout
 - `client/src/components/app-sidebar.tsx` - Navigation + tenant selector + admin nav group
 - `client/src/lib/tenant-store.ts` - Global tenant state
-- `client/src/pages/` - Dashboard, Tenants, Locations, Metrics, Scorecards, Trends
+- `client/src/pages/dashboard.tsx` - Main dashboard
+- `client/src/pages/portfolio.tsx` - Executive portfolio dashboard (scores, rankings, risk matrix)
+- `client/src/pages/tenants.tsx` - Tenant management
+- `client/src/pages/locations.tsx` - Location management
+- `client/src/pages/metrics.tsx` - Metric definitions
+- `client/src/pages/scorecards.tsx` - Scorecard templates and runs
+- `client/src/pages/trends.tsx` - Trend analysis with forecast overlay + anomaly markers
 - `client/src/pages/admin-imports.tsx` - CSV import upload/history/errors
-- `client/src/pages/admin-alerts.tsx` - Alert rules CRUD + events table
-- `client/src/pages/admin-reports.tsx` - Report definitions + manual run + history
+- `client/src/pages/admin-alerts.tsx` - Alert rules (with workflow automation) + events + scheduler widget
+- `client/src/pages/admin-reports.tsx` - Report definitions + manual run + history + scheduler widget
+- `client/src/pages/admin-notifications.tsx` - Notification settings (email/slack) + test + delivery history
+- `client/src/pages/admin-data-quality.tsx` - Data quality rules + violations + quality scores
 - `client/src/pages/admin-audit.tsx` - Filterable audit log with diff viewer
 
 ## Commands

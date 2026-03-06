@@ -12,6 +12,9 @@ import {
   Bell,
   FileBarChart,
   History,
+  Briefcase,
+  Mail,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -40,6 +43,7 @@ import { useTenantStore } from "@/lib/tenant-store";
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Portfolio", url: "/portfolio", icon: Briefcase },
   { title: "Tenants", url: "/tenants", icon: Building2 },
   { title: "Locations", url: "/locations", icon: MapPin },
   { title: "Metrics", url: "/metrics", icon: BarChart3 },
@@ -51,6 +55,8 @@ const adminItems = [
   { title: "Imports", url: "/admin/imports", icon: Upload },
   { title: "Alerts", url: "/admin/alerts", icon: Bell },
   { title: "Reports", url: "/admin/reports", icon: FileBarChart },
+  { title: "Notifications", url: "/admin/notifications", icon: Mail },
+  { title: "Data Quality", url: "/admin/data-quality", icon: ShieldCheck },
   { title: "Audit Log", url: "/admin/audit", icon: History },
 ];
 

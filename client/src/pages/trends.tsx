@@ -29,9 +29,15 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  Area,
+  ComposedChart,
+  Scatter,
 } from "recharts";
 import type { MetricDefinition, Location, MetricThreshold } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
+import { useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface TrendDataPoint {
   label: string;
@@ -102,6 +108,10 @@ export default function TrendsPage() {
     enabled: !!activeTenantId,
   });
 
+  const { toast } = useToast();
+  const [showForecast, setShowForecast] = useState(true);
+  const [showAnomalies, setShowAnomalies] = useState(true);
+
   const canQuery =
     !!activeTenantId && !!selectedMetricId && !!selectedLocationId;
 
@@ -118,6 +128,45 @@ export default function TrendsPage() {
     enabled: canQuery,
   });
 
+  const { data: forecastData } = useQuery<any>({
+    queryKey: ["/api/tenants", activeTenantId, "metrics", selectedMetricId, `forecast?locationId=${selectedLocationId}&periods=3`],
+    enabled: canQuery && showForecast,
+  });
+
+  const { data: anomalyData } = useQuery<any>({
+    queryKey: ["/api/tenants", activeTenantId, "metrics", selectedMetricId, `anomalies?locationId=${selectedLocationId}`],
+    enabled: canQuery && showAnomalies,
+  });
+
+  const generateForecastMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/tenants/${activeTenantId}/metrics/${selectedMetricId}/forecast`, {
+        locationId: parseInt(selectedLocationId),
+        periods: 3,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants", activeTenantId, "metrics", selectedMetricId] });
+      toast({ title: "Forecast generated" });
+    },
+    onError: (e: Error) => toast({ title: "Forecast failed", description: e.message, variant: "destructive" }),
+  });
+
+  const detectAnomaliesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/tenants/${activeTenantId}/metrics/${selectedMetricId}/anomalies/detect`, {
+        locationId: parseInt(selectedLocationId),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants", activeTenantId, "metrics", selectedMetricId] });
+      toast({ title: "Anomaly detection complete" });
+    },
+    onError: (e: Error) => toast({ title: "Detection failed", description: e.message, variant: "destructive" }),
+  });
+
   if (!activeTenantId) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
@@ -130,12 +179,51 @@ export default function TrendsPage() {
     );
   }
 
-  const chartData = trendData?.data.map((d) => ({
-    ...d,
-    displayValue: d.value,
-  })) || [];
+  const forecasts = forecastData?.data || forecastData || [];
+  const anomalies = anomalyData?.data || anomalyData || [];
 
-  const hasData = chartData.some((d) => d.value !== null);
+  const chartData = (trendData?.data || []).map((d) => {
+    const anomaly = anomalies.find((a: any) => {
+      if (!a.metricValueId) return false;
+      return true;
+    });
+    return {
+      ...d,
+      displayValue: d.value,
+      isAnomaly: false,
+    };
+  });
+
+  if (showForecast && forecasts.length > 0) {
+    for (const f of forecasts) {
+      const label = f.periodStart ? new Date(f.periodStart).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : `F${forecasts.indexOf(f) + 1}`;
+      chartData.push({
+        label,
+        periodStart: f.periodStart,
+        periodEnd: f.periodEnd,
+        value: null,
+        displayValue: null,
+        forecastValue: f.forecastValue,
+        confidenceLow: f.confidenceLow,
+        confidenceHigh: f.confidenceHigh,
+        isAnomaly: false,
+      } as any);
+    }
+  }
+
+  if (showAnomalies && anomalies.length > 0) {
+    for (const a of anomalies) {
+      const match = chartData.find((d: any) => d.displayValue === a.actualValue);
+      if (match) {
+        (match as any).isAnomaly = true;
+        (match as any).anomalyMessage = a.message;
+        (match as any).anomalyValue = a.actualValue;
+        (match as any).baselineValue = a.baselineValue;
+      }
+    }
+  }
+
+  const hasData = chartData.some((d) => d.value !== null || (d as any).forecastValue);
   const selectedMetric = metricsList?.find(
     (m) => m.id === parseInt(selectedMetricId)
   );
@@ -282,12 +370,48 @@ export default function TrendsPage() {
           </div>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-1">
+            <CardHeader className="flex flex-row items-center justify-between gap-1 flex-wrap">
               <CardTitle className="text-base">
                 {trendData?.metric?.name || "Metric"} -{" "}
                 {trendData?.location?.name || "Location"}
               </CardTitle>
-              <Badge variant="secondary">{selectedPeriod}</Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={showForecast ? "default" : "outline"}
+                  onClick={() => setShowForecast(!showForecast)}
+                  data-testid="button-toggle-forecast"
+                >
+                  Forecast
+                </Button>
+                <Button
+                  size="sm"
+                  variant={showAnomalies ? "default" : "outline"}
+                  onClick={() => setShowAnomalies(!showAnomalies)}
+                  data-testid="button-toggle-anomalies"
+                >
+                  Anomalies
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => generateForecastMutation.mutate()}
+                  disabled={generateForecastMutation.isPending}
+                  data-testid="button-generate-forecast"
+                >
+                  {generateForecastMutation.isPending ? "Generating..." : "Refresh Forecast"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => detectAnomaliesMutation.mutate()}
+                  disabled={detectAnomaliesMutation.isPending}
+                  data-testid="button-detect-anomalies"
+                >
+                  {detectAnomaliesMutation.isPending ? "Detecting..." : "Detect Anomalies"}
+                </Button>
+                <Badge variant="secondary">{selectedPeriod}</Badge>
+              </div>
             </CardHeader>
             <CardContent>
               {!hasData ? (
@@ -300,7 +424,7 @@ export default function TrendsPage() {
               ) : (
                 <div className="h-[350px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData}>
+                    <ComposedChart data={chartData}>
                       <CartesianGrid
                         strokeDasharray="3 3"
                         className="stroke-border"
@@ -321,12 +445,19 @@ export default function TrendsPage() {
                           borderRadius: "6px",
                           color: "hsl(var(--popover-foreground))",
                         }}
-                        formatter={(value: any) => [
-                          value !== null
-                            ? `${value}${selectedMetric?.unit ? ` ${selectedMetric.unit}` : ""}`
-                            : "No data",
-                          trendData?.metric?.name || "Value",
-                        ]}
+                        content={({ payload, label }: any) => {
+                          if (!payload || payload.length === 0) return null;
+                          const point = payload[0]?.payload;
+                          return (
+                            <div className="bg-popover border rounded-md p-2 text-sm shadow-md">
+                              <p className="font-medium">{label}</p>
+                              {point?.displayValue != null && <p>Value: {point.displayValue}{selectedMetric?.unit ? ` ${selectedMetric.unit}` : ""}</p>}
+                              {point?.forecastValue != null && <p className="text-blue-500">Forecast: {point.forecastValue}</p>}
+                              {point?.confidenceLow != null && <p className="text-blue-400 text-xs">CI: {point.confidenceLow} - {point.confidenceHigh}</p>}
+                              {point?.isAnomaly && <p className="text-red-500 font-medium">Anomaly: {point.anomalyMessage}</p>}
+                            </div>
+                          );
+                        }}
                       />
                       {trendData?.thresholds?.map((t) => (
                         <ReferenceLine
@@ -337,17 +468,68 @@ export default function TrendsPage() {
                           strokeOpacity={0.5}
                         />
                       ))}
+                      {showForecast && (
+                        <Area
+                          type="monotone"
+                          dataKey="confidenceHigh"
+                          stroke="none"
+                          fill="hsl(220, 70%, 60%)"
+                          fillOpacity={0.1}
+                          connectNulls={false}
+                        />
+                      )}
+                      {showForecast && (
+                        <Area
+                          type="monotone"
+                          dataKey="confidenceLow"
+                          stroke="none"
+                          fill="hsl(var(--background))"
+                          fillOpacity={1}
+                          connectNulls={false}
+                        />
+                      )}
                       <Line
                         type="monotone"
                         dataKey="displayValue"
                         stroke="hsl(var(--primary))"
                         strokeWidth={2}
-                        dot={{ r: 4, fill: "hsl(var(--primary))" }}
+                        dot={(props: any) => {
+                          const { cx, cy, payload } = props;
+                          if (payload?.isAnomaly) {
+                            return (
+                              <circle key={`anomaly-${cx}-${cy}`} cx={cx} cy={cy} r={7} fill="hsl(0, 84%, 60%)" stroke="white" strokeWidth={2} />
+                            );
+                          }
+                          return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={4} fill="hsl(var(--primary))" />;
+                        }}
                         activeDot={{ r: 6 }}
                         connectNulls={false}
                       />
-                    </LineChart>
+                      {showForecast && (
+                        <Line
+                          type="monotone"
+                          dataKey="forecastValue"
+                          stroke="hsl(220, 70%, 60%)"
+                          strokeWidth={2}
+                          strokeDasharray="6 3"
+                          dot={{ r: 4, fill: "hsl(220, 70%, 60%)" }}
+                          connectNulls={false}
+                        />
+                      )}
+                    </ComposedChart>
                   </ResponsiveContainer>
+                </div>
+              )}
+              {anomalies.length > 0 && showAnomalies && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm font-medium">Detected Anomalies</p>
+                  {anomalies.map((a: any, idx: number) => (
+                    <div key={idx} className="flex items-center gap-2 text-sm p-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+                      <span className="text-red-700 dark:text-red-300">{a.message}</span>
+                      <Badge variant="secondary" className="ml-auto">{a.severity}</Badge>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>

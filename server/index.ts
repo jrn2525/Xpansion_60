@@ -24,6 +24,33 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+const idempotencyCache = new Map<string, { status: number; body: any; timestamp: number }>();
+const IDEMPOTENCY_TTL = 5 * 60 * 1000;
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, val] of idempotencyCache) {
+    if (now - val.timestamp > IDEMPOTENCY_TTL) idempotencyCache.delete(key);
+  }
+}, 60 * 1000);
+
+app.use((req: any, res, next) => {
+  const idempotencyKey = req.headers["x-idempotency-key"] as string | undefined;
+  if (!idempotencyKey || req.method === "GET") return next();
+
+  const cached = idempotencyCache.get(idempotencyKey);
+  if (cached) {
+    return res.status(cached.status).json(cached.body);
+  }
+
+  const originalJson = res.json.bind(res);
+  res.json = function (body: any) {
+    idempotencyCache.set(idempotencyKey, { status: res.statusCode, body, timestamp: Date.now() });
+    return originalJson(body);
+  };
+  next();
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",

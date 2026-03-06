@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Plus, Shield, CheckCircle, Eye, AlertTriangle } from "lucide-react";
+import { Bell, Plus, Shield, CheckCircle, Eye, AlertTriangle, Play, Clock } from "lucide-react";
 import { useTenantStore } from "@/lib/tenant-store";
 
 const severityColors: Record<string, string> = {
@@ -64,6 +64,9 @@ export default function AdminAlertsPage() {
   const [conditionThreshold, setConditionThreshold] = useState("");
   const [conditionDropPercent, setConditionDropPercent] = useState("10");
   const [ruleIsActive, setRuleIsActive] = useState(true);
+  const [cooldownMinutes, setCooldownMinutes] = useState("0");
+  const [escalationMinutes, setEscalationMinutes] = useState("0");
+  const [dedupWindowMinutes, setDedupWindowMinutes] = useState("0");
 
   const { data: rulesResponse, isLoading: rulesLoading } = useQuery<any>({
     queryKey: ["/api/admin/alert-rules", `?tenantId=${activeTenantId}`],
@@ -136,6 +139,23 @@ export default function AdminAlertsPage() {
     },
   });
 
+  const { data: schedulerStatusData } = useQuery<any>({
+    queryKey: ["/api/admin/scheduler/status"],
+  });
+
+  const runNowMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/scheduler/run-now");
+      return res.json();
+    },
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/alert-events"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scheduler/status"] });
+      toast({ title: "Scheduler run complete", description: `Evaluated ${result?.data?.alerts || 0} alert rules` });
+    },
+    onError: (e: Error) => toast({ title: "Run failed", description: e.message, variant: "destructive" }),
+  });
+
   function resetForm() {
     setRuleName("");
     setRuleSeverity("medium");
@@ -145,6 +165,9 @@ export default function AdminAlertsPage() {
     setConditionThreshold("");
     setConditionDropPercent("10");
     setRuleIsActive(true);
+    setCooldownMinutes("0");
+    setEscalationMinutes("0");
+    setDedupWindowMinutes("0");
   }
 
   function openEditRule(rule: any) {
@@ -152,6 +175,9 @@ export default function AdminAlertsPage() {
     setRuleName(rule.name);
     setRuleSeverity(rule.severity);
     setRuleIsActive(rule.isActive);
+    setCooldownMinutes(String(rule.cooldownMinutes || "0"));
+    setEscalationMinutes(String(rule.escalationMinutes || "0"));
+    setDedupWindowMinutes(String(rule.dedupWindowMinutes || "0"));
     try {
       const cond = JSON.parse(rule.conditionJson);
       setConditionType(cond.type || "threshold_breach");
@@ -175,6 +201,9 @@ export default function AdminAlertsPage() {
       conditionJson,
       actionJson: JSON.stringify({ type: "alert_event" }),
       isActive: ruleIsActive,
+      cooldownMinutes: parseInt(cooldownMinutes) || 0,
+      escalationMinutes: parseInt(escalationMinutes) || 0,
+      dedupWindowMinutes: parseInt(dedupWindowMinutes) || 0,
     };
 
     if (editingRule) {
@@ -194,7 +223,39 @@ export default function AdminAlertsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold" data-testid="text-page-title">Alert Management</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold" data-testid="text-page-title">Alert Management</h1>
+      </div>
+
+      <Card>
+        <CardContent className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Clock className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Scheduler</p>
+              <p className="text-xs text-muted-foreground">
+                {schedulerStatusData?.data?.schedulerActive ? "Active" : "Inactive"}
+                {schedulerStatusData?.data?.jobs?.length > 0 && (() => {
+                  const alertJob = schedulerStatusData.data.jobs.find((j: any) => j.jobType === "alert_evaluation");
+                  if (alertJob?.lastRun) {
+                    return ` · Last run: ${new Date(alertJob.lastRun.startedAt).toLocaleString()} · ${alertJob.lastRun.status}`;
+                  }
+                  return "";
+                })()}
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => runNowMutation.mutate()}
+            disabled={runNowMutation.isPending}
+            data-testid="button-run-now"
+          >
+            <Play className="h-3 w-3 mr-1" /> {runNowMutation.isPending ? "Running..." : "Run Now"}
+          </Button>
+        </CardContent>
+      </Card>
 
       <Tabs defaultValue="events">
         <TabsList>
@@ -379,6 +440,24 @@ export default function AdminAlertsPage() {
                 <Input type="number" value={conditionDropPercent} onChange={(e) => setConditionDropPercent(e.target.value)} data-testid="input-condition-drop" />
               </div>
             )}
+            <div className="border-t pt-4 mt-2">
+              <p className="text-sm font-medium mb-3">Workflow Automation</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">Cooldown (min)</Label>
+                  <Input type="number" min="0" value={cooldownMinutes} onChange={(e) => setCooldownMinutes(e.target.value)} data-testid="input-cooldown" />
+                </div>
+                <div>
+                  <Label className="text-xs">Escalation (min)</Label>
+                  <Input type="number" min="0" value={escalationMinutes} onChange={(e) => setEscalationMinutes(e.target.value)} data-testid="input-escalation" />
+                </div>
+                <div>
+                  <Label className="text-xs">Dedup Window (min)</Label>
+                  <Input type="number" min="0" value={dedupWindowMinutes} onChange={(e) => setDedupWindowMinutes(e.target.value)} data-testid="input-dedup" />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Cooldown prevents repeat alerts. Escalation bumps severity on unresolved events. Dedup suppresses duplicates.</p>
+            </div>
             <div className="flex items-center gap-2">
               <Switch checked={ruleIsActive} onCheckedChange={setRuleIsActive} data-testid="switch-rule-active" />
               <Label>Active</Label>
