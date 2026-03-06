@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
+console.log("[BOOT] xpansion-console server entrypoint loaded:", import.meta.filename ?? import.meta.url ?? "unknown-file");
+
 const app = express();
 const httpServer = createServer(app);
 
@@ -32,6 +34,13 @@ export function log(message: string, source = "express") {
 
   console.log(`${formattedTime} [${source}] ${message}`);
 }
+
+app.use((req, _res, next) => {
+  if (req.path.startsWith("/api")) {
+    console.log("[API HIT]", req.method, req.path);
+  }
+  next();
+});
 
 app.use((req, res, next) => {
   const start = Date.now();
