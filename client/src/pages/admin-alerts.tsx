@@ -36,7 +36,7 @@ import { Bell, Plus, Shield, CheckCircle, Eye, AlertTriangle, Play, Clock } from
 import { useTenantStore } from "@/lib/tenant-store";
 
 const severityColors: Record<string, string> = {
-  low: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+  low: "bg-muted text-muted-foreground",
   medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
   high: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300",
   critical: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
@@ -362,7 +362,7 @@ export default function AdminAlertsPage() {
                       <TableCell className="font-medium">{rule.name}</TableCell>
                       <TableCell><Badge className={severityColors[rule.severity] || ""}>{rule.severity}</Badge></TableCell>
                       <TableCell>{condDesc}</TableCell>
-                      <TableCell>{rule.isActive ? <CheckCircle className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-gray-400" />}</TableCell>
+                      <TableCell>{rule.isActive ? <CheckCircle className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}</TableCell>
                       <TableCell>
                         <Button size="sm" variant="outline" onClick={() => openEditRule(rule)} data-testid={`button-edit-rule-${rule.id}`}>Edit</Button>
                       </TableCell>

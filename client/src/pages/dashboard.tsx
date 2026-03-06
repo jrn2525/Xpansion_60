@@ -37,7 +37,9 @@ function StatCard({
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <Icon className="h-4 w-4 text-muted-foreground" />
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+          <Icon className="h-4 w-4 text-primary" />
+        </div>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold" data-testid={testId}>
@@ -81,10 +83,12 @@ export default function DashboardPage() {
   if (!activeTenantId) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 mb-4">
+          <Building2 className="h-6 w-6 text-primary" />
+        </div>
         <h2 className="text-xl font-semibold mb-2">No Tenant Selected</h2>
         <p className="text-muted-foreground max-w-md">
-          Select a tenant from the sidebar or create a new one to get started.
+          Select a tenant from the sidebar or create one to get started.
         </p>
       </div>
     );
@@ -98,7 +102,7 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-dashboard-title">
+        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-dashboard-title">
           {tenant?.name || "Dashboard"}
         </h1>
         <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -192,7 +196,7 @@ export default function DashboardPage() {
                     data-testid={`row-location-${loc.id}`}
                   >
                     <div className="flex items-center gap-3">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
+                      <MapPin className="h-4 w-4 text-primary/60" />
                       <div>
                         <p className="text-sm font-medium">{loc.name}</p>
                         <p className="text-xs text-muted-foreground">
@@ -230,7 +234,7 @@ export default function DashboardPage() {
                     data-testid={`row-metric-${metric.id}`}
                   >
                     <div className="flex items-center gap-3">
-                      <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                      <BarChart3 className="h-4 w-4 text-primary/60" />
                       <div>
                         <p className="text-sm font-medium">{metric.name}</p>
                         <p className="text-xs text-muted-foreground">

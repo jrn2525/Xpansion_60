@@ -452,8 +452,8 @@ export default function TrendsPage() {
                             <div className="bg-popover border rounded-md p-2 text-sm shadow-md">
                               <p className="font-medium">{label}</p>
                               {point?.displayValue != null && <p>Value: {point.displayValue}{selectedMetric?.unit ? ` ${selectedMetric.unit}` : ""}</p>}
-                              {point?.forecastValue != null && <p className="text-blue-500">Forecast: {point.forecastValue}</p>}
-                              {point?.confidenceLow != null && <p className="text-blue-400 text-xs">CI: {point.confidenceLow} - {point.confidenceHigh}</p>}
+                              {point?.forecastValue != null && <p className="text-primary">Forecast: {point.forecastValue}</p>}
+                              {point?.confidenceLow != null && <p className="text-muted-foreground text-xs">CI: {point.confidenceLow} - {point.confidenceHigh}</p>}
                               {point?.isAnomaly && <p className="text-red-500 font-medium">Anomaly: {point.anomalyMessage}</p>}
                             </div>
                           );
@@ -473,7 +473,7 @@ export default function TrendsPage() {
                           type="monotone"
                           dataKey="confidenceHigh"
                           stroke="none"
-                          fill="hsl(220, 70%, 60%)"
+                          fill="hsl(var(--primary))"
                           fillOpacity={0.1}
                           connectNulls={false}
                         />
@@ -509,10 +509,10 @@ export default function TrendsPage() {
                         <Line
                           type="monotone"
                           dataKey="forecastValue"
-                          stroke="hsl(220, 70%, 60%)"
+                          stroke="hsl(var(--chart-5))"
                           strokeWidth={2}
                           strokeDasharray="6 3"
-                          dot={{ r: 4, fill: "hsl(220, 70%, 60%)" }}
+                          dot={{ r: 4, fill: "hsl(var(--chart-5))" }}
                           connectNulls={false}
                         />
                       )}

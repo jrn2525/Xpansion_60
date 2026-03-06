@@ -1,0 +1,448 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Length 1737 >>
+stream
+BT
+/F1 11 Tf
+50 742 Td
+14 TL
+(PHASE 4: BRANDING & UX SYSTEM IMPLEMENTATION) Tj
+T*
+() Tj
+T*
+(Build **Phase 4: Branding & UX System Implementation** for Franchise OS / Xpansion Console ) Tj
+T*
+(using the uploaded Xpansion Code brand guide.) Tj
+T*
+() Tj
+T*
+(PHASE 4 GOAL) Tj
+T*
+(Apply the full Xpansion Code visual identity, UI tokens, and brand tone across the app so it ) Tj
+T*
+(feels premium, consistent, and production-ready.) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(1\) BRAND SYSTEM IMPLEMENTATION \(GLOBAL\)) Tj
+T*
+() Tj
+T*
+(BRAND PHILOSOPHY) Tj
+T*
+(Implement a high-performance, modern interface built on clarity, precision, and bold execution.) Tj
+T*
+(Visual tone: dark foundation + energetic red accents + strong contrast.) Tj
+T*
+() Tj
+T*
+(CORE PALETTE \(MUST BE USED\)) Tj
+T*
+(? Primary Red: `#EA1C24`) Tj
+T*
+(? Secondary Red: `#C7372C`) Tj
+T*
+(? Deep Crimson: `#710D0B`) Tj
+T*
+(? Near Black: `#191211`) Tj
+T*
+(? Charcoal: `#4A4743`) Tj
+T*
+(? Neutral Gray: `#94938F`) Tj
+T*
+(? Light Neutral: `#D6D7D2`) Tj
+T*
+() Tj
+T*
+(TARGET COLOR RATIO) Tj
+T*
+(? 60% dark foundation colors) Tj
+T*
+(? 20% light neutral surfaces) Tj
+T*
+(? 10% primary red highlights) Tj
+T*
+(? 10% supporting grays) Tj
+T*
+() Tj
+T*
+(DESIGN TOKENS \(REQUIRED\)) Tj
+T*
+(Create/standardize tokens:) Tj
+T*
+(? `color.primary = #EA1C24`) Tj
+T*
+(? `color.primaryHover = #C7372C`) Tj
+T*
+(? `color.accent = #710D0B`) Tj
+T*
+(? `color.background = #191211`) Tj
+T*
+(? `color.surface = #4A4743`) Tj
+T*
+(? `color.textPrimary = #D6D7D2`) Tj
+T*
+(? `color.textSecondary = #94938F`) Tj
+T*
+(? `color.lightBackground = #D6D7D2`) Tj
+T*
+() Tj
+T*
+(Implement as global CSS variables + Tailwind theme extension.) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(2\) LIGHT + DARK MODE SYSTEM) Tj
+T*
+() Tj
+ET
+endstream
+endobj
+3 0 obj
+<< /Length 1728 >>
+stream
+BT
+/F1 11 Tf
+50 742 Td
+14 TL
+(LIGHT MODE MAPPING) Tj
+T*
+(? Primary Background: `#D6D7D2`) Tj
+T*
+(? Secondary Panels: `#FFFFFF`) Tj
+T*
+(? Primary Text: `#191211`) Tj
+T*
+(? Secondary Text: `#4A4743`) Tj
+T*
+(? Buttons: `#EA1C24`) Tj
+T*
+(? Button Hover: `#C7372C`) Tj
+T*
+(? Borders/Dividers: `#94938F`) Tj
+T*
+() Tj
+T*
+(DARK MODE MAPPING) Tj
+T*
+(? Primary Background: `#191211`) Tj
+T*
+(? Secondary Surface: `#4A4743`) Tj
+T*
+(? Primary Text: `#D6D7D2`) Tj
+T*
+(? Secondary Text: `#94938F`) Tj
+T*
+(? Primary Button: `#EA1C24`) Tj
+T*
+(? Button Hover: `#C7372C`) Tj
+T*
+(? Accent: `#710D0B`) Tj
+T*
+() Tj
+T*
+(REQUIREMENTS) Tj
+T*
+(? Theme toggle persists user preference.) Tj
+T*
+(? Ensure WCAG AA contrast for text/buttons/chips.) Tj
+T*
+(? Remove any off-brand default blues/purples/greens unless semantic status requires it.) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(3\) UI COMPONENT RE-SKIN \(DESIGN SYSTEM PASS\)) Tj
+T*
+() Tj
+T*
+(Apply new brand tokens to all reusable components:) Tj
+T*
+(? Buttons \(all variants, hover/focus/disabled\)) Tj
+T*
+(? Inputs, selects, textareas) Tj
+T*
+(? Dialogs/modals/drawers) Tj
+T*
+(? Cards/panels) Tj
+T*
+(? Tables \(headers, row hover, borders\)) Tj
+T*
+(? Tabs, badges/chips, alerts) Tj
+T*
+(? Sidebar/nav/header) Tj
+T*
+(? Empty/loading/error states) Tj
+T*
+(? Charts \(axes/grid/lines/tooltips/legend\)) Tj
+T*
+() Tj
+T*
+(CHART STYLING RULES) Tj
+T*
+(? Primary series uses `#EA1C24`) Tj
+T*
+(? Secondary/supporting series use neutral grays and crimson accents) Tj
+T*
+(? Gridlines subtle and low-contrast) Tj
+T*
+(? Tooltip surfaces follow theme surface tokens) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(4\) PAGE-LEVEL BRANDING PASS \(ALL ROUTES\)) Tj
+T*
+() Tj
+T*
+(Apply consistent brand styling and hierarchy to:) Tj
+ET
+endstream
+endobj
+4 0 obj
+<< /Length 1466 >>
+stream
+BT
+/F1 11 Tf
+50 742 Td
+14 TL
+(? `/` Dashboard) Tj
+T*
+(? `/tenants`) Tj
+T*
+(? `/locations`) Tj
+T*
+(? `/metrics`) Tj
+T*
+(? `/scorecards`) Tj
+T*
+(? `/trends`) Tj
+T*
+(? `/admin/imports`) Tj
+T*
+(? `/admin/alerts`) Tj
+T*
+(? `/admin/reports`) Tj
+T*
+(? `/admin/audit`) Tj
+T*
+(? `/portfolio` \(if present from Phase 3\)) Tj
+T*
+() Tj
+T*
+(PAGE UX REQUIREMENTS) Tj
+T*
+(? Consistent spacing scale) Tj
+T*
+(? Clear visual hierarchy \(H1/H2/body/meta\)) Tj
+T*
+(? Uniform CTA styling) Tj
+T*
+(? Consistent empty states + helper text) Tj
+T*
+(? Cleaner table readability and action alignment) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(5\) BRAND VOICE + COPY POLISH) Tj
+T*
+() Tj
+T*
+(Update UI copy to match Xpansion tone:) Tj
+T*
+(? Direct) Tj
+T*
+(? Confident) Tj
+T*
+(? Practical) Tj
+T*
+(? High-performance \(no fluff\)) Tj
+T*
+() Tj
+T*
+(COPY TARGETS) Tj
+T*
+(? Navigation labels) Tj
+T*
+(? Page headers/subheaders) Tj
+T*
+(? Empty states) Tj
+T*
+(? Error/success toasts) Tj
+T*
+(? Form helper text) Tj
+T*
+(? Button labels \(action-first verbs\)) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(6\) APP SHELL + IDENTITY) Tj
+T*
+() Tj
+T*
+(ADD/UPDATE) Tj
+T*
+(? Product title: ?Xpansion Console? \(or ?Franchise OS Command Center? where appropriate\)) Tj
+T*
+(? Favicon and app icon treatment aligned to brand palette) Tj
+T*
+(? Login/landing hero styling aligned to brand system) Tj
+T*
+(? Sidebar/header identity lockup and spacing) Tj
+T*
+() Tj
+T*
+(METADATA) Tj
+T*
+(? Add proper `<title>` templates per route) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Length 1475 >>
+stream
+BT
+/F1 11 Tf
+50 742 Td
+14 TL
+(? Add meta description) Tj
+T*
+(? Add Open Graph and Twitter tags for clean sharing previews) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(7\) ACCESSIBILITY + QUALITY GUARDRAILS) Tj
+T*
+() Tj
+T*
+(? Maintain keyboard accessibility on all controls.) Tj
+T*
+(? Ensure focus rings are visible in both themes.) Tj
+T*
+(? Verify contrast ratios across all major components.) Tj
+T*
+(? No hardcoded random colors in components; all colors must come from tokens.) Tj
+T*
+(? No regressions in existing functionality.) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(8\) ACCEPTANCE CRITERIA \(MUST PASS\)) Tj
+T*
+() Tj
+T*
+(? Global tokens implemented and used consistently) Tj
+T*
+(? Light/dark themes match brand guide mappings) Tj
+T*
+(? All primary components re-skinned to brand) Tj
+T*
+(? All major pages visually consistent and on-brand) Tj
+T*
+(? No default off-brand color leakage in UI) Tj
+T*
+(? Route titles/meta/OG tags implemented) Tj
+T*
+(? Accessibility checks pass \(focus visibility + contrast\)) Tj
+T*
+(? Existing Phase 1/2/3 behaviors remain functional) Tj
+T*
+() Tj
+T*
+(---) Tj
+T*
+() Tj
+T*
+(9\) WHEN DONE, OUTPUT) Tj
+T*
+() Tj
+T*
+(1. List of files changed) Tj
+T*
+(2. Token/theme files updated) Tj
+T*
+(3. Component library files re-skinned) Tj
+T*
+(4. Routes/pages updated) Tj
+T*
+(5. Metadata/SEO files updated) Tj
+T*
+(6. Accessibility checks performed + results) Tj
+T*
+(7. Before/after screenshots summary \(by page\)) Tj
+T*
+(8. Known design gaps/TODOs \(if any\)) Tj
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 10 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 2 0 R >>
+endobj
+7 0 obj
+<< /Type /Page /Parent 10 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 3 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /Parent 10 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 4 0 R >>
+endobj
+9 0 obj
+<< /Type /Page /Parent 10 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R >> >> /Contents 5 0 R >>
+endobj
+10 0 obj
+<< /Type /Pages /Kids [ 6 0 R 7 0 R 8 0 R 9 0 R ] /Count 4 >>
+endobj
+11 0 obj
+<< /Type /Catalog /Pages 10 0 R >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000001874 00000 n 
+0000003654 00000 n 
+0000005172 00000 n 
+0000006699 00000 n 
+0000006826 00000 n 
+0000006953 00000 n 
+0000007080 00000 n 
+0000007207 00000 n 
+0000007285 00000 n 
+trailer
+<< /Size 12 /Root 11 0 R >>
+startxref
+7336
+%%EOF

@@ -15,6 +15,8 @@ import {
   Briefcase,
   Mail,
   ShieldCheck,
+  Sun,
+  Moon,
 } from "lucide-react";
 import {
   Sidebar,
@@ -37,6 +39,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/components/theme-provider";
 import { useQuery } from "@tanstack/react-query";
 import type { Tenant } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
@@ -63,6 +66,7 @@ const adminItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   const { data: tenantsList, isLoading: tenantsLoading } = useQuery<Tenant[]>({
     queryKey: ["/api/tenants"],
@@ -83,15 +87,17 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="p-4 border-b border-sidebar-border">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-bold">
-            F
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold tracking-tight">
+            X
           </div>
           <div className="flex flex-col">
-            <span className="text-sm font-semibold" data-testid="text-app-title">
-              Franchise OS
+            <span className="text-sm font-semibold tracking-tight" data-testid="text-app-title">
+              Xpansion Console
             </span>
-            <span className="text-xs text-muted-foreground">Command Center</span>
+            <span className="text-[11px] text-sidebar-foreground/50 tracking-wide uppercase">
+              Command Center
+            </span>
           </div>
         </div>
 
@@ -182,19 +188,27 @@ export function AppSidebar() {
         <div className="flex items-center gap-3">
           <Avatar className="h-8 w-8">
             <AvatarImage src={user?.profileImageUrl || ""} />
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+            <AvatarFallback className="text-xs bg-primary/20 text-primary">{initials}</AvatarFallback>
           </Avatar>
           <div className="flex flex-col flex-1 min-w-0">
             <span className="text-sm font-medium truncate" data-testid="text-user-name">
               {user?.firstName || user?.email || "User"}
             </span>
-            <span className="text-xs text-muted-foreground truncate">
+            <span className="text-xs text-sidebar-foreground/50 truncate">
               {user?.email || ""}
             </span>
           </div>
           <button
+            onClick={toggleTheme}
+            className="p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover-elevate"
+            data-testid="button-theme-toggle"
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
+          <button
             onClick={() => logout()}
-            className="p-1.5 rounded-md text-muted-foreground hover-elevate"
+            className="p-1.5 rounded-md text-sidebar-foreground/50 hover:text-sidebar-foreground hover-elevate"
             data-testid="button-logout"
           >
             <LogOut className="h-4 w-4" />

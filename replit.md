@@ -1,4 +1,4 @@
-# Franchise OS Command Center
+# Xpansion Console — Franchise Command Center
 
 ## Overview
 Multi-tenant franchise management platform with RBAC, metrics engine, scorecards, trend analysis, CSV import pipeline, alert rules engine, scheduled reports, audit logging, real notifications (email/Slack), scheduled execution engine, alert workflow automation, executive portfolio dashboard, forecasting, anomaly detection, and data quality guardrails.
@@ -10,6 +10,16 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - **Validation**: Zod on all write endpoints with `zod-validation-error` for clean errors
 - **Notifications**: Resend (email) + Slack webhooks with retry/backoff
 - **Scheduler**: setInterval-based execution engine (60s tick) with job locking
+
+## Brand System (Phase 4)
+- **Identity**: Xpansion Console (product name), brand icon "X" in primary red
+- **Core Palette**: Primary Red #EA1C24, Secondary Red #C7372C, Deep Crimson #710D0B, Near Black #191211, Charcoal #4A4743, Neutral Gray #94938F, Light Neutral #D6D7D2
+- **Theming**: Light + Dark mode via ThemeProvider (localStorage-persisted, default dark), all colors via CSS custom properties in HSL format
+- **Fonts**: Inter (sans), JetBrains Mono (mono)
+- **Color tokens**: Defined in `client/src/index.css` (:root for light, .dark for dark), consumed via Tailwind theme extension in `tailwind.config.ts`
+- **Theme toggle**: In sidebar footer (data-testid="button-theme-toggle"), inline script in index.html prevents flash
+- **SEO**: Route-level document.title updates ("PageName | Xpansion Console"), OG/Twitter meta tags, SVG favicon
+- **Off-brand colors**: Blues removed (replaced with token-based or neutral classes), green/yellow/red kept for semantic status indicators only
 
 ## Database Schema
 
@@ -72,8 +82,9 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - `server/services/analytics.ts` - Forecast generation + anomaly detection
 - `server/services/scheduler.ts` - Scheduled execution engine (reports, alerts, escalation)
 - `server/seed.ts` - Seed data (Sunrise Burgers demo tenant)
-- `client/src/App.tsx` - Main app with auth gating and sidebar layout
-- `client/src/components/app-sidebar.tsx` - Navigation + tenant selector + admin nav group
+- `client/src/App.tsx` - Main app with ThemeProvider, auth gating, route titles, sidebar layout
+- `client/src/components/app-sidebar.tsx` - Navigation + tenant selector + admin nav + theme toggle
+- `client/src/components/theme-provider.tsx` - Light/dark theme provider with localStorage persistence
 - `client/src/lib/tenant-store.ts` - Global tenant state
 - `client/src/pages/dashboard.tsx` - Main dashboard
 - `client/src/pages/portfolio.tsx` - Executive portfolio dashboard (scores, rankings, risk matrix)

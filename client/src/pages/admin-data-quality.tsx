@@ -74,7 +74,7 @@ interface DataQualityResponse {
 const severityBadgeClasses: Record<string, string> = {
   warning: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300",
   error: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
-  info: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300",
+  info: "bg-muted text-muted-foreground",
 };
 
 const ruleTypes = ["period_continuity", "outlier_detection", "duplicate_detection"];
