@@ -28,6 +28,10 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - All API routes prefixed with `/api/tenants/:tenantId/`
 - Score run calculation: raw value -> threshold band -> normalized score (100/75/50/25) -> weighted sum
 - Trend endpoints generate period slots and fill with data, returning null for missing periods
+- API routes mounted first; SPA fallback explicitly skips `/api/*` paths
+- `/api/health` returns `{ ok, service, timestamp }` for uptime checks
+- Unmatched `/api/*` routes return JSON 404 (never HTML)
+- Centralized error middleware returns structured JSON `{ ok, error: { code, message } }`
 
 ## File Structure
 - `shared/schema.ts` - All Drizzle models, relations, Zod schemas, types

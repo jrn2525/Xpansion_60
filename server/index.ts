@@ -59,25 +59,41 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get("/api/health", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "franchise-os-console",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 (async () => {
   await registerRoutes(httpServer, app);
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+  app.use("/api", (_req: Request, res: Response) => {
+    res.status(404).json({
+      ok: false,
+      error: { code: "NOT_FOUND", message: "API route not found" },
+    });
+  });
 
+  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     console.error("Internal Server Error:", err);
 
     if (res.headersSent) {
       return next(err);
     }
 
-    return res.status(status).json({ message });
+    const status = err.status || err.statusCode || 500;
+    return res.status(status).json({
+      ok: false,
+      error: {
+        code: err.code || "INTERNAL_ERROR",
+        message: err.message || "Unexpected server error",
+      },
+    });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -85,10 +101,6 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
