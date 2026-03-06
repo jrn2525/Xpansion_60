@@ -1,0 +1,73 @@
+Edit the main server bootstrap file (usually server/index.ts or server/app.ts) and enforce this exact route order:
+
+1. JSON middleware and API routes first
+2. API 404 + API error middleware
+3. Static frontend serving
+4. SPA fallback for non-API only
+
+Use this implementation pattern:
+
+import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
+import apiRouter from "./routes"; // adjust import to your API router
+
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// 1) API routes FIRST
+app.get("/api/health", (_req, res) => {
+res.json({
+ok: true,
+service: "xpansion-console",
+timestamp: new Date().toISOString(),
+});
+});
+
+app.use("/api", apiRouter);
+
+// 2) API 404 + API error handling BEFORE static fallback
+app.use("/api", (_req, res) => {
+res.status(404).json({
+ok: false,
+error: { code: "NOT_FOUND", message: "API route not found" },
+});
+});
+
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+if (!req.path.startsWith("/api")) return next(err);
+console.error("API Error:", err);
+if (res.headersSent) return;
+res.status(err?.status || 500).json({
+ok: false,
+error: {
+code: err?.code || "INTERNAL_ERROR",
+message: err?.message || "Unexpected server error",
+},
+});
+});
+
+// 3) Static frontend
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const clientDistPath = path.resolve(__dirname, "../dist/public"); // adjust to your build output
+app.use(express.static(clientDistPath));
+
+// 4) SPA fallback ONLY for non-API routes
+app.get("*", (req, res, next) => {
+if (req.path.startsWith("/api")) return next();
+res.sendFile(path.join(clientDistPath, "index.html"));
+});
+
+Also ensure there is only one catch-all app.get("*") in the file.
+
+───
+
+After deploy, run this test set:
+
+• GET /api/health → JSON 200
+• GET /api/auth/me → JSON 401/200
+• GET /api/admin/tenants → JSON 401/200
+• GET /api/nope → JSON 404
+• No /api/* route should return HTML

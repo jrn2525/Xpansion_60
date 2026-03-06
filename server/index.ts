@@ -62,7 +62,7 @@ app.use((req, res, next) => {
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
-    service: "franchise-os-console",
+    service: "xpansion-console",
     timestamp: new Date().toISOString(),
   });
 });
@@ -77,19 +77,15 @@ app.get("/api/health", (_req, res) => {
     });
   });
 
-  app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
-    console.error("Internal Server Error:", err);
-
-    if (res.headersSent) {
-      return next(err);
-    }
-
-    const status = err.status || err.statusCode || 500;
-    return res.status(status).json({
+  app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    if (!req.path.startsWith("/api")) return next(err);
+    console.error("API Error:", err);
+    if (res.headersSent) return;
+    res.status(err?.status || err?.statusCode || 500).json({
       ok: false,
       error: {
-        code: err.code || "INTERNAL_ERROR",
-        message: err.message || "Unexpected server error",
+        code: err?.code || "INTERNAL_ERROR",
+        message: err?.message || "Unexpected server error",
       },
     });
   });
