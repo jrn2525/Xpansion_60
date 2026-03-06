@@ -1,0 +1,166 @@
+import { useLocation, Link } from "wouter";
+import {
+  LayoutDashboard,
+  Building2,
+  MapPin,
+  BarChart3,
+  ClipboardCheck,
+  TrendingUp,
+  LogOut,
+  ChevronDown,
+} from "lucide-react";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarHeader,
+  SidebarFooter,
+} from "@/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/hooks/use-auth";
+import { useQuery } from "@tanstack/react-query";
+import type { Tenant } from "@shared/schema";
+import { useTenantStore } from "@/lib/tenant-store";
+
+const navItems = [
+  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Tenants", url: "/tenants", icon: Building2 },
+  { title: "Locations", url: "/locations", icon: MapPin },
+  { title: "Metrics", url: "/metrics", icon: BarChart3 },
+  { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck },
+  { title: "Trends", url: "/trends", icon: TrendingUp },
+];
+
+export function AppSidebar() {
+  const [location] = useLocation();
+  const { user, logout } = useAuth();
+
+  const { data: tenantsList, isLoading: tenantsLoading } = useQuery<Tenant[]>({
+    queryKey: ["/api/tenants"],
+  });
+
+  const { activeTenantId, setActiveTenantId } = useTenantStore();
+
+  const activeTenant = tenantsList?.find((t) => t.id === activeTenantId);
+
+  if (tenantsList && tenantsList.length > 0 && !activeTenantId) {
+    setActiveTenantId(tenantsList[0].id);
+  }
+
+  const initials = user
+    ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"
+    : "U";
+
+  return (
+    <Sidebar>
+      <SidebarHeader className="p-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground text-sm font-bold">
+            F
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold" data-testid="text-app-title">
+              Franchise OS
+            </span>
+            <span className="text-xs text-muted-foreground">Command Center</span>
+          </div>
+        </div>
+
+        {tenantsLoading ? (
+          <Skeleton className="h-9 w-full mt-3" />
+        ) : tenantsList && tenantsList.length > 0 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex items-center justify-between gap-1 w-full mt-3 px-3 py-2 rounded-md bg-sidebar-accent text-sm text-sidebar-accent-foreground hover-elevate"
+                data-testid="button-tenant-selector"
+              >
+                <span className="truncate font-medium">
+                  {activeTenant?.name || "Select Tenant"}
+                </span>
+                <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              {tenantsList.map((t) => (
+                <DropdownMenuItem
+                  key={t.id}
+                  onClick={() => setActiveTenantId(t.id)}
+                  data-testid={`menu-item-tenant-${t.id}`}
+                >
+                  <Building2 className="mr-2 h-4 w-4" />
+                  {t.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const isActive =
+                  item.url === "/"
+                    ? location === "/"
+                    : location.startsWith(item.url);
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                    >
+                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter className="border-t border-sidebar-border p-3">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={user?.profileImageUrl || ""} />
+            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col flex-1 min-w-0">
+            <span className="text-sm font-medium truncate" data-testid="text-user-name">
+              {user?.firstName || user?.email || "User"}
+            </span>
+            <span className="text-xs text-muted-foreground truncate">
+              {user?.email || ""}
+            </span>
+          </div>
+          <button
+            onClick={() => logout()}
+            className="p-1.5 rounded-md text-muted-foreground hover-elevate"
+            data-testid="button-logout"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+      </SidebarFooter>
+    </Sidebar>
+  );
+}
