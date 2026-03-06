@@ -54,7 +54,7 @@ import {
 import type { MetricDefinition, MetricThreshold } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
 
-import { bandColors } from "@/lib/semantic-colors";
+import { bandColors, chartTokens } from "@/lib/semantic-colors";
 
 const BAND_COLORS: Record<string, string> = bandColors;
 
@@ -79,7 +79,7 @@ function ThresholdEditor({
         band: t.band,
         minValue: t.minValue,
         maxValue: t.maxValue,
-        color: t.color || BAND_COLORS[t.band] || "hsl(var(--muted-foreground))",
+        color: t.color || BAND_COLORS[t.band] || chartTokens.muted,
       }))
     );
     setInitialized(true);

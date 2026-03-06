@@ -360,7 +360,7 @@ export default function AdminAlertsPage() {
                       <TableCell className="font-medium">{rule.name}</TableCell>
                       <TableCell><Badge className={severityColors[rule.severity as keyof typeof severityColors] || ""}>{rule.severity}</Badge></TableCell>
                       <TableCell>{condDesc}</TableCell>
-                      <TableCell>{rule.isActive ? <CheckCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}</TableCell>
+                      <TableCell>{rule.isActive ? <CheckCircle className="h-4 w-4 text-status-success-foreground" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}</TableCell>
                       <TableCell>
                         <Button size="sm" variant="outline" onClick={() => openEditRule(rule)} data-testid={`button-edit-rule-${rule.id}`}>Edit</Button>
                       </TableCell>

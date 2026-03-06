@@ -80,11 +80,11 @@ export default function AdminAuditPage() {
           const aVal = afterObj?.[key];
           const changed = JSON.stringify(bVal) !== JSON.stringify(aVal);
           return (
-            <div key={key} className={changed ? "bg-amber-500/10 px-2 py-1 rounded" : "px-2 py-1"}>
+            <div key={key} className={changed ? "bg-status-warning/10 px-2 py-1 rounded" : "px-2 py-1"}>
               <span className="text-muted-foreground">{key}:</span>{" "}
-              {beforeObj && <span className="text-destructive line-through">{JSON.stringify(bVal)}</span>}
+              {beforeObj && <span className="text-status-error-foreground line-through">{JSON.stringify(bVal)}</span>}
               {beforeObj && afterObj && " → "}
-              {afterObj && <span className="text-emerald-600 dark:text-emerald-400">{JSON.stringify(aVal)}</span>}
+              {afterObj && <span className="text-status-success-foreground">{JSON.stringify(aVal)}</span>}
             </div>
           );
         })}

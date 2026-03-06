@@ -179,11 +179,11 @@ export default function PortfolioPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Improving Locations
               </CardTitle>
-              <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <TrendingUp className="h-4 w-4 text-status-success-foreground" />
             </CardHeader>
             <CardContent>
               <div
-                className="text-3xl font-bold text-emerald-600 dark:text-emerald-400"
+                className="text-3xl font-bold text-status-success-foreground"
                 data-testid="text-improving-count"
               >
                 {overview?.improvingCount ?? 0}
@@ -197,11 +197,11 @@ export default function PortfolioPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Declining Locations
               </CardTitle>
-              <TrendingDown className="h-4 w-4 text-destructive" />
+              <TrendingDown className="h-4 w-4 text-status-error-foreground" />
             </CardHeader>
             <CardContent>
               <div
-                className="text-3xl font-bold text-destructive"
+                className="text-3xl font-bold text-status-error-foreground"
                 data-testid="text-declining-count"
               >
                 {overview?.decliningCount ?? 0}
@@ -215,7 +215,7 @@ export default function PortfolioPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 High/Critical Alerts
               </CardTitle>
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertTriangle className="h-4 w-4 text-status-warning-foreground" />
             </CardHeader>
             <CardContent>
               <div

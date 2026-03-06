@@ -1,0 +1,87 @@
+Perfect. Here’s the Phase 4.1 Punch List v2 (tight + executable).
+
+P1 — Must Fix Before Calling 4.1 Done
+
+1. Semantic Status Token Policy (Lock It)
+
+• Replace ad hoc status classes with tokenized system:
+• --status-success-*
+• --status-warning-*
+• --status-error-*
+• --status-info-*
+• Apply across badges, toasts, alerts, row states, and chart markers.
+• Definition of done: zero raw status utility classes in app components except token definitions.
+
+2. Token Purity Sweep
+
+• Remove all hardcoded non-brand colors in component files (hex/rgb/hsl literals).
+• Keep literals only inside global token files.
+• Definition of done: grep scan report attached (no hits outside token files).
+
+3. Contrast Pass (WCAG AA)
+
+• Validate text + button + chip + table contrast in both themes.
+• Focus especially on muted text on dark surfaces.
+• Definition of done: page-by-page pass table with no critical fails.
+
+4. Mobile Breakpoint Hard Pass
+
+• Verify 320/375 on admin pages with tables/dialogs:
+• /admin/imports
+• /admin/alerts
+• /admin/reports
+• /admin/audit
+• Definition of done: no clipped CTA, no modal overflow, no unreadable action rows.
+
+───
+
+P2 — High-Value Polish
+
+5. Navigation State Consistency
+
+• Normalize sidebar active/hover/focus states across all nav groups.
+• Ensure same spacing, icon alignment, and contrast.
+
+6. Typography Normalization
+
+• Standardize H1/H2/subtext scales by page template.
+• Keep predictable spacing between title/context/primary CTA.
+
+7. Chart Readability System
+
+• Ensure axis labels, gridlines, legends, tooltips meet contrast/readability baseline in both themes.
+• Keep one primary series color strategy + consistent secondary hierarchy.
+
+8. Empty/Error State Rewrite
+
+• Every empty state includes next action.
+• Every error toast includes clear recovery instruction.
+
+───
+
+P3 — Nice-to-Have (If Time)
+
+9. Micro-interactions Cleanup
+
+• Harmonize hover/focus motion timings.
+• Respect reduced-motion preference globally.
+
+10. Front-End Hygiene
+
+• Remove dead classes/components and duplicate variants introduced during branding pass.
+
+───
+
+Verification Checklist to return with completion
+
+1. Files changed
+2. Token purity grep output
+3. Semantic status token map
+4. WCAG pass/fail table by route/theme
+5. Breakpoint pass/fail table (320/375/768/1024)
+6. Before/after screenshots list (light + dark)
+7. Remaining known visual debt
+
+───
+
+If you want, I can also convert this punch list into a strict Replit execution prompt (with “do not skip evidence” language).

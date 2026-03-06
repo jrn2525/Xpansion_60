@@ -539,8 +539,8 @@ export default function ScorecardsPage() {
                   <span
                     className={`text-xs font-medium ${
                       Math.abs(totalWeight - 1) < 0.01
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-amber-600 dark:text-amber-400"
+                        ? "text-status-success-foreground"
+                        : "text-status-warning-foreground"
                     }`}
                   >
                     Total: {(totalWeight * 100).toFixed(0)}%

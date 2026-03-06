@@ -38,6 +38,7 @@ import { useTenantStore } from "@/lib/tenant-store";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { chartTokens, anomalyStyles } from "@/lib/semantic-colors";
 
 interface TrendDataPoint {
   label: string;
@@ -80,12 +81,12 @@ function TrendDirection({ data }: { data: TrendDataPoint[] }) {
   }
 
   return change > 0 ? (
-    <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+    <div className="flex items-center gap-1 text-status-success-foreground">
       <ArrowUpRight className="h-4 w-4" />
       <span className="text-sm font-medium">+{change.toFixed(1)}%</span>
     </div>
   ) : (
-    <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
+    <div className="flex items-center gap-1 text-status-error-foreground">
       <ArrowDownRight className="h-4 w-4" />
       <span className="text-sm font-medium">{change.toFixed(1)}%</span>
     </div>
@@ -440,10 +441,10 @@ export default function TrendsPage() {
                       />
                       <Tooltip
                         contentStyle={{
-                          backgroundColor: "hsl(var(--popover))",
-                          border: "1px solid hsl(var(--border))",
+                          backgroundColor: chartTokens.popover,
+                          border: `1px solid ${chartTokens.border}`,
                           borderRadius: "6px",
-                          color: "hsl(var(--popover-foreground))",
+                          color: chartTokens.popoverForeground,
                         }}
                         content={({ payload, label }: any) => {
                           if (!payload || payload.length === 0) return null;
@@ -454,7 +455,7 @@ export default function TrendsPage() {
                               {point?.displayValue != null && <p>Value: {point.displayValue}{selectedMetric?.unit ? ` ${selectedMetric.unit}` : ""}</p>}
                               {point?.forecastValue != null && <p className="text-primary">Forecast: {point.forecastValue}</p>}
                               {point?.confidenceLow != null && <p className="text-muted-foreground text-xs">CI: {point.confidenceLow} - {point.confidenceHigh}</p>}
-                              {point?.isAnomaly && <p className="text-red-500 font-medium">Anomaly: {point.anomalyMessage}</p>}
+                              {point?.isAnomaly && <p className="text-status-error-foreground font-medium">Anomaly: {point.anomalyMessage}</p>}
                             </div>
                           );
                         }}
@@ -463,7 +464,7 @@ export default function TrendsPage() {
                         <ReferenceLine
                           key={`${t.band}-min`}
                           y={t.minValue}
-                          stroke={t.color || "hsl(var(--muted-foreground))"}
+                          stroke={t.color || chartTokens.muted}
                           strokeDasharray="5 5"
                           strokeOpacity={0.5}
                         />
@@ -473,7 +474,7 @@ export default function TrendsPage() {
                           type="monotone"
                           dataKey="confidenceHigh"
                           stroke="none"
-                          fill="hsl(var(--primary))"
+                          fill={chartTokens.primary}
                           fillOpacity={0.1}
                           connectNulls={false}
                         />
@@ -483,7 +484,7 @@ export default function TrendsPage() {
                           type="monotone"
                           dataKey="confidenceLow"
                           stroke="none"
-                          fill="hsl(var(--background))"
+                          fill={chartTokens.background}
                           fillOpacity={1}
                           connectNulls={false}
                         />
@@ -491,16 +492,16 @@ export default function TrendsPage() {
                       <Line
                         type="monotone"
                         dataKey="displayValue"
-                        stroke="hsl(var(--primary))"
+                        stroke={chartTokens.primary}
                         strokeWidth={2}
                         dot={(props: any) => {
                           const { cx, cy, payload } = props;
                           if (payload?.isAnomaly) {
                             return (
-                              <circle key={`anomaly-${cx}-${cy}`} cx={cx} cy={cy} r={7} fill="hsl(0, 84%, 60%)" stroke="white" strokeWidth={2} />
+                              <circle key={`anomaly-${cx}-${cy}`} cx={cx} cy={cy} r={7} fill={chartTokens.error} stroke={chartTokens.background} strokeWidth={2} />
                             );
                           }
-                          return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={4} fill="hsl(var(--primary))" />;
+                          return <circle key={`dot-${cx}-${cy}`} cx={cx} cy={cy} r={4} fill={chartTokens.primary} />;
                         }}
                         activeDot={{ r: 6 }}
                         connectNulls={false}
@@ -509,10 +510,10 @@ export default function TrendsPage() {
                         <Line
                           type="monotone"
                           dataKey="forecastValue"
-                          stroke="hsl(var(--chart-5))"
+                          stroke={chartTokens.forecast}
                           strokeWidth={2}
                           strokeDasharray="6 3"
-                          dot={{ r: 4, fill: "hsl(var(--chart-5))" }}
+                          dot={{ r: 4, fill: chartTokens.forecast }}
                           connectNulls={false}
                         />
                       )}
@@ -524,9 +525,9 @@ export default function TrendsPage() {
                 <div className="mt-4 space-y-2">
                   <p className="text-sm font-medium">Detected Anomalies</p>
                   {anomalies.map((a: any, idx: number) => (
-                    <div key={idx} className="flex items-center gap-2 text-sm p-2 rounded bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
-                      <span className="text-red-700 dark:text-red-300">{a.message}</span>
+                    <div key={idx} className="flex items-center gap-2 text-sm p-2 rounded bg-status-error/10 border border-status-error/30">
+                      <AlertCircle className="h-4 w-4 text-status-error shrink-0" />
+                      <span className="text-status-error-foreground">{a.message}</span>
                       <Badge variant="secondary" className="ml-auto">{a.severity}</Badge>
                     </div>
                   ))}
@@ -549,7 +550,7 @@ export default function TrendsPage() {
                     >
                       <div
                         className="h-3 w-3 rounded-full shrink-0"
-                        style={{ backgroundColor: t.color || "hsl(var(--muted-foreground))" }}
+                        style={{ backgroundColor: t.color || chartTokens.muted }}
                       />
                       <div>
                         <p className="text-sm font-medium capitalize">

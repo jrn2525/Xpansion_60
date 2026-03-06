@@ -19,9 +19,11 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - **Color tokens**: Defined in `client/src/index.css` (:root for light, .dark for dark), consumed via Tailwind theme extension in `tailwind.config.ts`
 - **Theme toggle**: In sidebar footer (data-testid="button-theme-toggle"), inline script in index.html prevents flash
 - **SEO**: Route-level document.title updates ("PageName | Xpansion Console"), OG/Twitter meta tags, SVG favicon
-- **Off-brand colors**: Blues removed (replaced with token-based or neutral classes), green/yellow/red kept for semantic status indicators only
-- **Semantic color system**: `client/src/lib/semantic-colors.ts` — shared `statusColors` (success/warning/error/info/neutral), `severityColors` (low/medium/high/critical), `bandColors` (chart hex), `bandBadgeStyles` (badge classes), `scoreColor()`, `deltaTrendColor()` — all pages import from here
-- **Accessibility**: Global `:focus-visible` ring via CSS, dialog max-width capped at `calc(100vw - 2rem)`, all tables wrapped in `overflow-x-auto` for mobile scroll
+- **Off-brand colors**: Blues removed; all semantic status colors flow through token system
+- **Semantic status tokens**: CSS vars `--status-{success,warning,error,info}` + `--status-{...}-fg` in index.css (both themes), registered in tailwind.config.ts as `status.success`, `status.warning`, `status.error`, `status.info` with `.foreground` variants. Zero raw semantic utility classes in page/component files.
+- **Semantic color system**: `client/src/lib/semantic-colors.ts` — shared `statusColors`, `severityColors`, `bandColors`, `bandBadgeStyles`, `scoreColor()`, `scoreBorderColor()`, `scoreBgColor()`, `deltaTrendColor()`, `anomalyStyles` — all pages import from here
+- **WCAG AA**: All text/background pairs pass ≥4.5:1 contrast ratio in both themes (verified via automated check)
+- **Accessibility**: Global `:focus-visible` ring via CSS, dialog max-width capped at `calc(100vw - 2rem)`, all tables wrapped in `overflow-x-auto` for mobile scroll, `prefers-reduced-motion` kills all animations/transitions
 
 ## Database Schema
 

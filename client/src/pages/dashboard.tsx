@@ -185,7 +185,7 @@ export default function DashboardPage() {
             {activeLocations.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                 <AlertCircle className="h-4 w-4" />
-                <span>No locations configured yet</span>
+                <span>No locations configured yet. Add a location to start tracking performance.</span>
               </div>
             ) : (
               <div className="space-y-3">
@@ -223,7 +223,7 @@ export default function DashboardPage() {
             {activeMetrics.length === 0 ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                 <AlertCircle className="h-4 w-4" />
-                <span>No metrics defined yet</span>
+                <span>No metrics defined yet. Create metrics to measure franchise KPIs.</span>
               </div>
             ) : (
               <div className="space-y-3">
