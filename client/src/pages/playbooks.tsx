@@ -39,8 +39,22 @@ import {
   History,
   Calendar,
   User,
+  TrendingUp,
+  BarChart3,
+  Lightbulb,
+  Loader2,
+  RefreshCw,
 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { Location } from "@shared/schema";
+import { severityColors } from "@/lib/semantic-colors";
 
 interface PlaybookStep {
   title: string;
@@ -78,6 +92,33 @@ interface TenantUserWithName {
   lastName?: string;
 }
 
+interface EffectivenessRanking {
+  playbookId: number;
+  applications: number;
+  avgUplift: number;
+  totalUplift: number;
+}
+
+interface EffectivenessSnapshot {
+  id: number;
+  playbookId: number;
+  locationId: number;
+  applicationId: number;
+  preAvgValue: number;
+  postAvgValue: number;
+  upliftPercent: number;
+  prePeriods: number;
+  postPeriods: number;
+  computedAt: string | null;
+}
+
+interface PlaybookRecommendation {
+  playbookId: number;
+  avgUplift: number;
+  applications: number;
+  relevanceScore: number;
+}
+
 export default function PlaybooksPage() {
   const { activeTenantId } = useTenantStore();
   const { toast } = useToast();
@@ -91,6 +132,7 @@ export default function PlaybooksPage() {
   const [editForm, setEditForm] = useState({ name: "", description: "", category: "" });
   const [editSteps, setEditSteps] = useState<PlaybookStep[]>([]);
   const [showArchived, setShowArchived] = useState(false);
+  const [activeTab, setActiveTab] = useState("playbooks");
   const [applyOverrides, setApplyOverrides] = useState({
     ownerUserId: "",
     priority: "medium",
@@ -115,6 +157,29 @@ export default function PlaybooksPage() {
   const { data: applicationsData, isLoading: applicationsLoading } = useQuery<{ ok: boolean; data: PlaybookApplication[] }>({
     queryKey: ["/api/tenants", activeTenantId, "playbooks", showApplications, "applications"],
     enabled: !!activeTenantId && showApplications !== null,
+  });
+
+  const { data: effectivenessData, isLoading: effectivenessLoading } = useQuery<{ ok: boolean; data: { rankings: EffectivenessRanking[]; snapshots: EffectivenessSnapshot[] } }>({
+    queryKey: ["/api/tenants", activeTenantId, "playbooks/effectiveness"],
+    enabled: !!activeTenantId && activeTab === "effectiveness",
+  });
+
+  const { data: recommendationsData } = useQuery<{ ok: boolean; data: PlaybookRecommendation[] }>({
+    queryKey: ["/api/tenants", activeTenantId, "playbooks/recommendations"],
+    enabled: !!activeTenantId && activeTab === "effectiveness",
+  });
+
+  const computeEffectivenessMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", `/api/tenants/${activeTenantId}/playbooks/compute-effectiveness`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants", activeTenantId, "playbooks/effectiveness"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants", activeTenantId, "playbooks/recommendations"] });
+      toast({ title: "Effectiveness computed" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Computation failed", description: error.message, variant: "destructive" });
+    },
   });
 
   const createMutation = useMutation({
@@ -238,6 +303,15 @@ export default function PlaybooksPage() {
     );
   }
 
+  const effectivenessRankings = effectivenessData?.data?.rankings || [];
+  const effectivenessSnapshots = effectivenessData?.data?.snapshots || [];
+  const recommendations = recommendationsData?.data || [];
+
+  function getPlaybookName(playbookId: number): string {
+    const pb = pbs.find(p => p.id === playbookId);
+    return pb?.name || `Playbook #${playbookId}`;
+  }
+
   return (
     <div className="p-6 space-y-4 max-w-7xl">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -246,7 +320,7 @@ export default function PlaybooksPage() {
           <p className="text-muted-foreground text-sm">Reusable action templates for underperforming locations</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {archivedPbs.length > 0 && (
+          {activeTab === "playbooks" && archivedPbs.length > 0 && (
             <Button
               variant="outline"
               onClick={() => setShowArchived(!showArchived)}
@@ -256,12 +330,186 @@ export default function PlaybooksPage() {
               {showArchived ? "Hide" : "Show"} Archived ({archivedPbs.length})
             </Button>
           )}
-          <Button onClick={() => setShowCreate(true)} data-testid="button-create-playbook">
-            <Plus className="h-4 w-4 mr-2" />
-            New Playbook
-          </Button>
+          {activeTab === "playbooks" && (
+            <Button onClick={() => setShowCreate(true)} data-testid="button-create-playbook">
+              <Plus className="h-4 w-4 mr-2" />
+              New Playbook
+            </Button>
+          )}
+          {activeTab === "effectiveness" && (
+            <Button
+              variant="outline"
+              onClick={() => computeEffectivenessMutation.mutate()}
+              disabled={computeEffectivenessMutation.isPending}
+              data-testid="button-compute-effectiveness"
+            >
+              {computeEffectivenessMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Compute Effectiveness
+            </Button>
+          )}
         </div>
       </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="playbooks" data-testid="tab-playbooks">
+            <BookOpen className="h-4 w-4 mr-1" />
+            Playbooks
+          </TabsTrigger>
+          <TabsTrigger value="effectiveness" data-testid="tab-effectiveness">
+            <BarChart3 className="h-4 w-4 mr-1" />
+            Effectiveness
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="effectiveness" className="space-y-6 mt-4">
+          {effectivenessLoading ? (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16" />)}
+            </div>
+          ) : (
+            <>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4" />
+                    Effectiveness Rankings
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {effectivenessRankings.length === 0 ? (
+                    <p className="text-muted-foreground text-center py-4" data-testid="text-no-effectiveness">
+                      No effectiveness data yet. Apply playbooks to locations and then compute effectiveness.
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Playbook</TableHead>
+                            <TableHead>Applications</TableHead>
+                            <TableHead>Avg Uplift</TableHead>
+                            <TableHead>Trend</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {effectivenessRankings.map((ranking) => (
+                            <TableRow key={ranking.playbookId} data-testid={`row-effectiveness-${ranking.playbookId}`}>
+                              <TableCell className="font-medium" data-testid={`text-eff-playbook-${ranking.playbookId}`}>
+                                {getPlaybookName(ranking.playbookId)}
+                              </TableCell>
+                              <TableCell data-testid={`text-eff-apps-${ranking.playbookId}`}>{ranking.applications}</TableCell>
+                              <TableCell>
+                                <span
+                                  className={ranking.avgUplift > 0 ? "text-status-success-foreground font-medium" : ranking.avgUplift < 0 ? "text-status-error-foreground font-medium" : "text-muted-foreground"}
+                                  data-testid={`text-eff-uplift-${ranking.playbookId}`}
+                                >
+                                  {ranking.avgUplift > 0 ? "+" : ""}{ranking.avgUplift.toFixed(1)}%
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                {ranking.avgUplift > 0 ? (
+                                  <TrendingUp className="h-4 w-4 text-status-success-foreground" />
+                                ) : ranking.avgUplift < 0 ? (
+                                  <TrendingUp className="h-4 w-4 text-status-error-foreground rotate-180" />
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {effectivenessSnapshots.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4" />
+                      Uplift Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Playbook</TableHead>
+                            <TableHead>Location</TableHead>
+                            <TableHead>Pre Avg</TableHead>
+                            <TableHead>Post Avg</TableHead>
+                            <TableHead>Uplift</TableHead>
+                            <TableHead>Periods (Pre/Post)</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {effectivenessSnapshots.slice(0, 20).map((snap) => {
+                            const loc = locations.find(l => l.id === snap.locationId);
+                            return (
+                              <TableRow key={snap.id} data-testid={`row-snapshot-${snap.id}`}>
+                                <TableCell className="text-sm">{getPlaybookName(snap.playbookId)}</TableCell>
+                                <TableCell className="text-sm">{loc?.name || `#${snap.locationId}`}</TableCell>
+                                <TableCell className="text-sm">{snap.preAvgValue.toFixed(2)}</TableCell>
+                                <TableCell className="text-sm">{snap.postAvgValue.toFixed(2)}</TableCell>
+                                <TableCell>
+                                  <span className={snap.upliftPercent > 0 ? "text-status-success-foreground font-medium" : snap.upliftPercent < 0 ? "text-status-error-foreground font-medium" : ""}>
+                                    {snap.upliftPercent > 0 ? "+" : ""}{snap.upliftPercent.toFixed(1)}%
+                                  </span>
+                                </TableCell>
+                                <TableCell className="text-sm text-muted-foreground">{snap.prePeriods} / {snap.postPeriods}</TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {recommendations.length > 0 && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Lightbulb className="h-4 w-4" />
+                      Recommendations
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      {recommendations.map((rec, idx) => (
+                        <div key={rec.playbookId} className="flex items-center justify-between gap-4" data-testid={`row-recommendation-${rec.playbookId}`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm text-muted-foreground shrink-0 w-5 text-right">{idx + 1}.</span>
+                            <span className="text-sm font-medium truncate" data-testid={`text-rec-name-${rec.playbookId}`}>
+                              {getPlaybookName(rec.playbookId)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                            <Badge variant="secondary">{rec.applications} uses</Badge>
+                            <Badge className={rec.avgUplift > 0 ? severityColors.low : severityColors.medium}>
+                              {rec.avgUplift > 0 ? "+" : ""}{rec.avgUplift.toFixed(1)}% uplift
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="playbooks" className="mt-4">
 
       {activePbs.length === 0 && !showArchived ? (
         <Card>
@@ -396,6 +644,9 @@ export default function PlaybooksPage() {
           )}
         </div>
       )}
+
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">

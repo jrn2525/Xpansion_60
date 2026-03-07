@@ -921,6 +921,134 @@ export const incidentNotesRelations = relations(incidentNotes, ({ one }) => ({
   }),
 }));
 
+// Phase 5.4: Intelligence + Automation at Scale
+
+export const riskSnapshots = pgTable("risk_snapshots", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  locationId: integer("location_id").notNull().references(() => locations.id, { onDelete: "cascade" }),
+  metricDefinitionId: integer("metric_definition_id").notNull().references(() => metricDefinitions.id, { onDelete: "cascade" }),
+  riskScore: real("risk_score").notNull(),
+  trendSlope: real("trend_slope").notNull().default(0),
+  varianceInstability: real("variance_instability").notNull().default(0),
+  alertBurden: real("alert_burden").notNull().default(0),
+  unresolvedActions: integer("unresolved_actions").notNull().default(0),
+  earlyWarnings: text("early_warnings"),
+  forecastValue: real("forecast_value"),
+  confidenceLow: real("confidence_low"),
+  confidenceHigh: real("confidence_high"),
+  computedAt: timestamp("computed_at").defaultNow(),
+});
+
+export const weeklyPlans = pgTable("weekly_plans", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  weekKey: varchar("week_key", { length: 20 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("draft"),
+  generatedAt: timestamp("generated_at").defaultNow(),
+  approvedByUserId: varchar("approved_by_user_id"),
+  approvedAt: timestamp("approved_at"),
+  rejectedByUserId: varchar("rejected_by_user_id"),
+  rejectedAt: timestamp("rejected_at"),
+});
+
+export const weeklyPlanItems = pgTable("weekly_plan_items", {
+  id: serial("id").primaryKey(),
+  planId: integer("plan_id").notNull().references(() => weeklyPlans.id, { onDelete: "cascade" }),
+  locationId: integer("location_id").references(() => locations.id),
+  metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  priority: varchar("priority", { length: 50 }).notNull().default("medium"),
+  priorityScore: real("priority_score").notNull().default(0),
+  suggestedOwnerUserId: varchar("suggested_owner_user_id"),
+  suggestedDueDate: timestamp("suggested_due_date"),
+  actionId: integer("action_id"),
+});
+
+export const playbookEffectivenessSnapshots = pgTable("playbook_effectiveness_snapshots", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  playbookId: integer("playbook_id").notNull().references(() => playbooks.id, { onDelete: "cascade" }),
+  locationId: integer("location_id").notNull().references(() => locations.id, { onDelete: "cascade" }),
+  applicationId: integer("application_id").notNull().references(() => playbookApplications.id, { onDelete: "cascade" }),
+  preAvgValue: real("pre_avg_value").notNull(),
+  postAvgValue: real("post_avg_value").notNull(),
+  upliftPercent: real("uplift_percent").notNull(),
+  prePeriods: integer("pre_periods").notNull(),
+  postPeriods: integer("post_periods").notNull(),
+  computedAt: timestamp("computed_at").defaultNow(),
+});
+
+export const executiveReports = pgTable("executive_reports", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  generatedByUserId: varchar("generated_by_user_id").notNull(),
+  weekKey: varchar("week_key", { length: 20 }).notNull(),
+  improvedJson: text("improved_json"),
+  worsenedJson: text("worsened_json"),
+  risksJson: text("risks_json"),
+  recommendedMovesJson: text("recommended_moves_json"),
+  summaryMarkdown: text("summary_markdown"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const interventionQueue = pgTable("intervention_queue", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  locationId: integer("location_id").references(() => locations.id),
+  metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id),
+  type: varchar("type", { length: 100 }).notNull(),
+  severity: varchar("severity", { length: 50 }).notNull().default("medium"),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  riskScore: real("risk_score"),
+  status: varchar("status", { length: 50 }).notNull().default("open"),
+  assignedToUserId: varchar("assigned_to_user_id"),
+  assignedAt: timestamp("assigned_at"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const automationSettings = pgTable("automation_settings", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }).unique(),
+  maxActionsPerWeek: integer("max_actions_per_week").notNull().default(20),
+  blockedCategories: text("blocked_categories"),
+  confidenceThreshold: real("confidence_threshold").notNull().default(0.7),
+  requireApproval: varchar("require_approval", { length: 10 }).notNull().default("true"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const automationDecisionLogs = pgTable("automation_decision_logs", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  decisionType: varchar("decision_type", { length: 100 }).notNull(),
+  entityType: varchar("entity_type", { length: 100 }).notNull(),
+  entityId: varchar("entity_id", { length: 255 }).notNull(),
+  actorUserId: varchar("actor_user_id").notNull(),
+  reason: text("reason"),
+  detailsJson: text("details_json"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRiskSnapshotSchema = createInsertSchema(riskSnapshots).omit({ id: true });
+export const insertWeeklyPlanSchema = createInsertSchema(weeklyPlans).omit({ id: true });
+export const insertWeeklyPlanItemSchema = createInsertSchema(weeklyPlanItems).omit({ id: true });
+export const insertPlaybookEffectivenessSnapshotSchema = createInsertSchema(playbookEffectivenessSnapshots).omit({ id: true });
+export const insertExecutiveReportSchema = createInsertSchema(executiveReports).omit({ id: true });
+export const insertInterventionSchema = createInsertSchema(interventionQueue).omit({ id: true });
+export const insertAutomationSettingsSchema = createInsertSchema(automationSettings).omit({ id: true });
+export const insertAutomationDecisionLogSchema = createInsertSchema(automationDecisionLogs).omit({ id: true });
+
+export const weeklyPlansRelations = relations(weeklyPlans, ({ many }) => ({
+  items: many(weeklyPlanItems),
+}));
+
+export const weeklyPlanItemsRelations = relations(weeklyPlanItems, ({ one }) => ({
+  plan: one(weeklyPlans, { fields: [weeklyPlanItems.planId], references: [weeklyPlans.id] }),
+}));
+
 export type ScoreRun = typeof scoreRuns.$inferSelect;
 export type InsertScoreRun = z.infer<typeof insertScoreRunSchema>;
 export type ScoreRunDetail = typeof scoreRunDetails.$inferSelect;
@@ -960,3 +1088,19 @@ export type Incident = typeof incidents.$inferSelect;
 export type InsertIncident = z.infer<typeof insertIncidentSchema>;
 export type IncidentNote = typeof incidentNotes.$inferSelect;
 export type InsertIncidentNote = z.infer<typeof insertIncidentNoteSchema>;
+export type RiskSnapshot = typeof riskSnapshots.$inferSelect;
+export type InsertRiskSnapshot = z.infer<typeof insertRiskSnapshotSchema>;
+export type WeeklyPlan = typeof weeklyPlans.$inferSelect;
+export type InsertWeeklyPlan = z.infer<typeof insertWeeklyPlanSchema>;
+export type WeeklyPlanItem = typeof weeklyPlanItems.$inferSelect;
+export type InsertWeeklyPlanItem = z.infer<typeof insertWeeklyPlanItemSchema>;
+export type PlaybookEffectivenessSnapshot = typeof playbookEffectivenessSnapshots.$inferSelect;
+export type InsertPlaybookEffectivenessSnapshot = z.infer<typeof insertPlaybookEffectivenessSnapshotSchema>;
+export type ExecutiveReport = typeof executiveReports.$inferSelect;
+export type InsertExecutiveReport = z.infer<typeof insertExecutiveReportSchema>;
+export type Intervention = typeof interventionQueue.$inferSelect;
+export type InsertIntervention = z.infer<typeof insertInterventionSchema>;
+export type AutomationSetting = typeof automationSettings.$inferSelect;
+export type InsertAutomationSetting = z.infer<typeof insertAutomationSettingsSchema>;
+export type AutomationDecisionLog = typeof automationDecisionLogs.$inferSelect;
+export type InsertAutomationDecisionLog = z.infer<typeof insertAutomationDecisionLogSchema>;

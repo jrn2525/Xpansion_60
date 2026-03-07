@@ -1,0 +1,83 @@
+• intervention_queue
+• intervention_assignments
+
+UI
+
+• /superadmin/tower
+• portfolio heatmap
+• tenant leaderboard
+• intervention queue
+• assignment controls
+
+───
+
+6) Automation Safety Controls
+
+Scope
+
+Prevent over-automation risk and ensure human oversight.
+
+Requirements
+
+• All auto-generated plans/actions require explicit approval by default
+• Add automation guardrail settings per tenant:
+• max actions auto-created per week
+• blocked categories
+• confidence threshold for suggestions
+• Full audit trail for every generated recommendation and approval/rejection
+
+Endpoints
+
+• GET /api/tenants/:tenantId/automation-settings
+• PUT /api/tenants/:tenantId/automation-settings
+
+Data model additions
+
+• automation_settings
+• automation_decision_logs
+
+───
+
+7) API / Security Standards (Required)
+
+Requirements
+
+• Standardized API shape:
+• success: { "ok": true, "data": ... }
+• error: { "ok": false, "error": { "code", "message", "details" } }
+• Auth required for all new endpoints
+• Superadmin guard for /api/superadmin/*
+• Strict tenant scoping on tenant endpoints
+• Zod validation for all write payloads
+• Audit log for all mutations + automation decisions
+• Rate-limit high-impact automation endpoints
+
+───
+
+8) Acceptance Criteria (must pass)
+
+• Risk engine produces explainable risk scores and forecasts
+• Weekly plans can be generated, approved, and converted to actions
+• Playbook effectiveness metrics are computed and visible
+• Executive narrative reports generate and store successfully
+• Superadmin command tower shows cross-tenant intelligence
+• Automation safety settings are enforced and audited
+• All new endpoints return standardized JSON shape
+• Tenant/superadmin access boundaries are enforced correctly
+
+───
+
+9) When done, output
+
+1. Files changed
+2. SQL migrations added/updated
+3. New/updated tables and indexes
+4. Endpoints added (method + path)
+5. Zod schemas added/updated
+6. UI routes/pages added
+7. Acceptance checklist with pass/fail evidence
+8. Known gaps/TODOs + recommended Phase 5.5 scope
+
+───
+
+When done, send output + URL and I’ll run Phase 5.4 QA sweep immediately.

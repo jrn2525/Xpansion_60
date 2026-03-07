@@ -1,0 +1,175 @@
+Build Phase 5.4 — Intelligence + Automation at Scale for Franchise OS / Xpansion Console.
+
+Goal
+
+Evolve from monitoring + manual response to proactive intelligence and guided execution at scale across locations and tenants.
+
+───
+
+1) Predictive Risk Engine v2
+
+Scope
+
+Upgrade forecasting and risk detection to identify likely performance breakdowns before thresholds fail.
+
+Features
+
+• Risk score per location + metric (0–100)
+• Near-term forecast with confidence intervals
+• Early warning flags:
+• likely threshold breach next period
+• likely goal miss
+• likely score deterioration
+• Risk contributors (explainability):
+• trend slope
+• variance instability
+• alert burden
+• unresolved actions
+
+Endpoints
+
+• GET /api/tenants/:tenantId/risk/overview?period=
+• GET /api/tenants/:tenantId/risk/location/:locationId
+• GET /api/tenants/:tenantId/risk/metric/:metricId
+• POST /api/tenants/:tenantId/risk/recompute
+
+Data model additions
+
+• risk_snapshots
+• risk_contributors
+• forecast_runs_v2 (or extend existing forecast tables)
+
+UI
+
+• /risk page
+• risk heatmap
+• top at-risk locations
+• risk trend chart
+• contributor panel (“why this is risky”)
+
+───
+
+2) Autonomous Weekly Planning
+
+Scope
+
+Generate weekly execution plans automatically from current performance/risk state.
+
+Features
+
+• Auto-generated weekly plan per tenant/location:
+• top priorities
+• recommended actions
+• due dates
+• suggested owners
+• Prioritization score:
+• impact × urgency × confidence
+• Plan approval flow:
+• draft → approved → pushed to actions queue
+• Optional auto-create actions on approval
+
+Endpoints
+
+• GET /api/tenants/:tenantId/weekly-plans?status=
+• POST /api/tenants/:tenantId/weekly-plans/generate
+• POST /api/tenants/:tenantId/weekly-plans/:planId/approve
+• POST /api/tenants/:tenantId/weekly-plans/:planId/reject
+• POST /api/tenants/:tenantId/weekly-plans/:planId/push-actions
+
+Data model additions
+
+• weekly_plans
+• weekly_plan_items
+• weekly_plan_approvals
+
+UI
+
+• /weekly-plans
+• plan board
+• approve/reject workflow
+• push-to-actions controls
+• owner workload visibility
+
+───
+
+3) Playbook Effectiveness Analytics
+
+Scope
+
+Quantify which playbooks actually produce measurable improvement.
+
+Features
+
+• Track KPI uplift after playbook application
+• Compare pre/post windows (e.g., 2–4 periods)
+• Effectiveness score per playbook
+• Scenario matching:
+• recommend best playbook for current issue pattern
+
+Endpoints
+
+• GET /api/tenants/:tenantId/playbooks/effectiveness
+• GET /api/tenants/:tenantId/playbooks/:playbookId/effectiveness
+• GET /api/tenants/:tenantId/playbooks/recommendations?locationId=&metricId=
+
+Data model additions
+
+• playbook_effectiveness_snapshots
+• playbook_recommendation_logs
+
+UI
+
+• Extend /playbooks
+• effectiveness rankings
+• uplift trends
+• recommendation reasons
+
+───
+
+4) Executive Narrative Reports (AI-Style Summaries)
+
+Scope
+
+Produce concise weekly executive narratives that explain performance and prescribe next actions.
+
+Features
+
+• Narrative sections:
+• what improved
+• what worsened
+• biggest risks
+• recommended next 5 moves
+• Include linked evidence:
+• metrics
+• incidents
+• actions
+• goals
+• Export/share-ready format (JSON + markdown)
+
+Endpoints
+
+• POST /api/admin/executive-reports/:tenantId/run
+• GET /api/admin/executive-reports/:tenantId/history
+• GET /api/admin/executive-reports/:tenantId/:reportId
+
+Data model additions
+
+• executive_reports
+• executive_report_sections
+
+UI
+
+• /admin/executive-reports
+• run now
+• history
+• detailed report viewer
+
+───
+
+5) Multi-Tenant Superadmin Command Tower
+
+Scope
+
+Add cross-tenant operational oversight for superadmin users.
+
+Features

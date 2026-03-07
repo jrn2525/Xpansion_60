@@ -34,6 +34,10 @@ import AdminDigestsPage from "@/pages/admin-digests";
 import AdminSecurityPage from "@/pages/admin-security";
 import AdminActivityPage from "@/pages/admin-activity";
 import AdminOpsPage from "@/pages/admin-ops";
+import RiskPage from "@/pages/risk";
+import WeeklyPlansPage from "@/pages/weekly-plans";
+import AdminExecutiveReportsPage from "@/pages/admin-executive-reports";
+import SuperadminTowerPage from "@/pages/superadmin-tower";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard | Xpansion Console",
@@ -58,6 +62,10 @@ const routeTitles: Record<string, string> = {
   "/admin/security": "Security | Xpansion Console",
   "/admin/activity": "Activity Log | Xpansion Console",
   "/admin/ops": "Ops Health | Xpansion Console",
+  "/risk": "Risk Dashboard | Xpansion Console",
+  "/weekly-plans": "Weekly Plans | Xpansion Console",
+  "/admin/executive-reports": "Executive Reports | Xpansion Console",
+  "/superadmin/tower": "Command Tower | Xpansion Console",
 };
 
 function RouteTitle() {
@@ -93,6 +101,10 @@ function AuthenticatedRouter() {
       <Route path="/admin/security" component={AdminSecurityPage} />
       <Route path="/admin/activity" component={AdminActivityPage} />
       <Route path="/admin/ops" component={AdminOpsPage} />
+      <Route path="/risk" component={RiskPage} />
+      <Route path="/weekly-plans" component={WeeklyPlansPage} />
+      <Route path="/admin/executive-reports" component={AdminExecutiveReportsPage} />
+      <Route path="/superadmin/tower" component={SuperadminTowerPage} />
       <Route component={NotFound} />
     </Switch>
   );

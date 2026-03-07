@@ -26,6 +26,9 @@ import {
   Shield,
   Activity,
   Server,
+  AlertTriangle,
+  Calendar,
+  Radio,
 } from "lucide-react";
 import {
   Sidebar,
@@ -69,6 +72,8 @@ const operationsItems = [
   { title: "Goals", url: "/goals", icon: Target },
   { title: "Benchmarking", url: "/benchmarking", icon: Trophy },
   { title: "Playbooks", url: "/playbooks", icon: BookOpen },
+  { title: "Risk", url: "/risk", icon: AlertTriangle },
+  { title: "Weekly Plans", url: "/weekly-plans", icon: Calendar },
 ];
 
 const adminItems = [
@@ -82,6 +87,8 @@ const adminItems = [
   { title: "Security", url: "/admin/security", icon: Shield },
   { title: "Activity Log", url: "/admin/activity", icon: Activity },
   { title: "Ops Health", url: "/admin/ops", icon: Server },
+  { title: "Executive Reports", url: "/admin/executive-reports", icon: FileText },
+  { title: "Command Tower", url: "/superadmin/tower", icon: Radio },
 ];
 
 export function AppSidebar() {

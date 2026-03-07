@@ -113,6 +113,30 @@ import {
   type InsertIncident,
   type IncidentNote,
   type InsertIncidentNote,
+  riskSnapshots,
+  weeklyPlans,
+  weeklyPlanItems,
+  playbookEffectivenessSnapshots,
+  executiveReports,
+  interventionQueue,
+  automationSettings,
+  automationDecisionLogs,
+  type RiskSnapshot,
+  type InsertRiskSnapshot,
+  type WeeklyPlan,
+  type InsertWeeklyPlan,
+  type WeeklyPlanItem,
+  type InsertWeeklyPlanItem,
+  type PlaybookEffectivenessSnapshot,
+  type InsertPlaybookEffectivenessSnapshot,
+  type ExecutiveReport,
+  type InsertExecutiveReport,
+  type Intervention,
+  type InsertIntervention,
+  type AutomationSetting,
+  type InsertAutomationSetting,
+  type AutomationDecisionLog,
+  type InsertAutomationDecisionLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, lt, inArray, isNull, sql } from "drizzle-orm";
@@ -302,6 +326,36 @@ export interface IStorage {
 
   getAuditLogsGlobal(filters?: { entityType?: string; action?: string; actorUserId?: string; start?: Date; end?: Date; limit?: number; offset?: number }): Promise<AuditLog[]>;
   deleteSessionsByUserId(userId: string): Promise<number>;
+
+  getRiskSnapshots(tenantId: number, filters?: { locationId?: number; metricDefinitionId?: number }): Promise<RiskSnapshot[]>;
+  createRiskSnapshot(data: InsertRiskSnapshot): Promise<RiskSnapshot>;
+  deleteRiskSnapshots(tenantId: number): Promise<void>;
+
+  getWeeklyPlans(tenantId: number, status?: string): Promise<WeeklyPlan[]>;
+  getWeeklyPlan(id: number): Promise<WeeklyPlan | undefined>;
+  createWeeklyPlan(data: InsertWeeklyPlan): Promise<WeeklyPlan>;
+  updateWeeklyPlan(id: number, data: Partial<InsertWeeklyPlan>): Promise<WeeklyPlan | undefined>;
+  getWeeklyPlanItems(planId: number): Promise<WeeklyPlanItem[]>;
+  createWeeklyPlanItem(data: InsertWeeklyPlanItem): Promise<WeeklyPlanItem>;
+  updateWeeklyPlanItem(id: number, data: Partial<InsertWeeklyPlanItem>): Promise<WeeklyPlanItem | undefined>;
+
+  getPlaybookEffectiveness(tenantId: number, playbookId?: number): Promise<PlaybookEffectivenessSnapshot[]>;
+  createPlaybookEffectivenessSnapshot(data: InsertPlaybookEffectivenessSnapshot): Promise<PlaybookEffectivenessSnapshot>;
+
+  getExecutiveReports(tenantId: number): Promise<ExecutiveReport[]>;
+  getExecutiveReport(id: number): Promise<ExecutiveReport | undefined>;
+  createExecutiveReport(data: InsertExecutiveReport): Promise<ExecutiveReport>;
+
+  getInterventions(filters?: { tenantId?: number; status?: string; severity?: string }): Promise<Intervention[]>;
+  getIntervention(id: number): Promise<Intervention | undefined>;
+  createIntervention(data: InsertIntervention): Promise<Intervention>;
+  updateIntervention(id: number, data: Partial<InsertIntervention>): Promise<Intervention | undefined>;
+
+  getAutomationSettings(tenantId: number): Promise<AutomationSetting | undefined>;
+  upsertAutomationSettings(tenantId: number, data: Partial<InsertAutomationSetting>): Promise<AutomationSetting>;
+
+  getAutomationDecisionLogs(tenantId: number, limit?: number): Promise<AutomationDecisionLog[]>;
+  createAutomationDecisionLog(data: InsertAutomationDecisionLog): Promise<AutomationDecisionLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1185,6 +1239,130 @@ export class DatabaseStorage implements IStorage {
   async deleteSessionsByUserId(userId: string): Promise<number> {
     const result = await db.execute(sql`DELETE FROM sessions WHERE sess::text LIKE ${'%"sub":"' + userId + '"%'}`);
     return Number(result.rowCount ?? 0);
+  }
+
+  async getRiskSnapshots(tenantId: number, filters?: { locationId?: number; metricDefinitionId?: number }): Promise<RiskSnapshot[]> {
+    const conditions = [eq(riskSnapshots.tenantId, tenantId)];
+    if (filters?.locationId) conditions.push(eq(riskSnapshots.locationId, filters.locationId));
+    if (filters?.metricDefinitionId) conditions.push(eq(riskSnapshots.metricDefinitionId, filters.metricDefinitionId));
+    return db.select().from(riskSnapshots).where(and(...conditions)).orderBy(desc(riskSnapshots.riskScore));
+  }
+
+  async createRiskSnapshot(data: InsertRiskSnapshot): Promise<RiskSnapshot> {
+    const [snap] = await db.insert(riskSnapshots).values(data).returning();
+    return snap;
+  }
+
+  async deleteRiskSnapshots(tenantId: number): Promise<void> {
+    await db.delete(riskSnapshots).where(eq(riskSnapshots.tenantId, tenantId));
+  }
+
+  async getWeeklyPlans(tenantId: number, status?: string): Promise<WeeklyPlan[]> {
+    const conditions = [eq(weeklyPlans.tenantId, tenantId)];
+    if (status) conditions.push(eq(weeklyPlans.status, status));
+    return db.select().from(weeklyPlans).where(and(...conditions)).orderBy(desc(weeklyPlans.generatedAt));
+  }
+
+  async getWeeklyPlan(id: number): Promise<WeeklyPlan | undefined> {
+    const [plan] = await db.select().from(weeklyPlans).where(eq(weeklyPlans.id, id));
+    return plan;
+  }
+
+  async createWeeklyPlan(data: InsertWeeklyPlan): Promise<WeeklyPlan> {
+    const [plan] = await db.insert(weeklyPlans).values(data).returning();
+    return plan;
+  }
+
+  async updateWeeklyPlan(id: number, data: Partial<InsertWeeklyPlan>): Promise<WeeklyPlan | undefined> {
+    const [plan] = await db.update(weeklyPlans).set(data).where(eq(weeklyPlans.id, id)).returning();
+    return plan;
+  }
+
+  async getWeeklyPlanItems(planId: number): Promise<WeeklyPlanItem[]> {
+    return db.select().from(weeklyPlanItems).where(eq(weeklyPlanItems.planId, planId)).orderBy(desc(weeklyPlanItems.priorityScore));
+  }
+
+  async createWeeklyPlanItem(data: InsertWeeklyPlanItem): Promise<WeeklyPlanItem> {
+    const [item] = await db.insert(weeklyPlanItems).values(data).returning();
+    return item;
+  }
+
+  async updateWeeklyPlanItem(id: number, data: Partial<InsertWeeklyPlanItem>): Promise<WeeklyPlanItem | undefined> {
+    const [item] = await db.update(weeklyPlanItems).set(data).where(eq(weeklyPlanItems.id, id)).returning();
+    return item;
+  }
+
+  async getPlaybookEffectiveness(tenantId: number, playbookId?: number): Promise<PlaybookEffectivenessSnapshot[]> {
+    const conditions = [eq(playbookEffectivenessSnapshots.tenantId, tenantId)];
+    if (playbookId) conditions.push(eq(playbookEffectivenessSnapshots.playbookId, playbookId));
+    return db.select().from(playbookEffectivenessSnapshots).where(and(...conditions)).orderBy(desc(playbookEffectivenessSnapshots.computedAt));
+  }
+
+  async createPlaybookEffectivenessSnapshot(data: InsertPlaybookEffectivenessSnapshot): Promise<PlaybookEffectivenessSnapshot> {
+    const [snap] = await db.insert(playbookEffectivenessSnapshots).values(data).returning();
+    return snap;
+  }
+
+  async getExecutiveReports(tenantId: number): Promise<ExecutiveReport[]> {
+    return db.select().from(executiveReports).where(eq(executiveReports.tenantId, tenantId)).orderBy(desc(executiveReports.createdAt));
+  }
+
+  async getExecutiveReport(id: number): Promise<ExecutiveReport | undefined> {
+    const [report] = await db.select().from(executiveReports).where(eq(executiveReports.id, id));
+    return report;
+  }
+
+  async createExecutiveReport(data: InsertExecutiveReport): Promise<ExecutiveReport> {
+    const [report] = await db.insert(executiveReports).values(data).returning();
+    return report;
+  }
+
+  async getInterventions(filters?: { tenantId?: number; status?: string; severity?: string }): Promise<Intervention[]> {
+    const conditions = [];
+    if (filters?.tenantId) conditions.push(eq(interventionQueue.tenantId, filters.tenantId));
+    if (filters?.status) conditions.push(eq(interventionQueue.status, filters.status));
+    if (filters?.severity) conditions.push(eq(interventionQueue.severity, filters.severity));
+    if (conditions.length === 0) return db.select().from(interventionQueue).orderBy(desc(interventionQueue.riskScore));
+    return db.select().from(interventionQueue).where(and(...conditions)).orderBy(desc(interventionQueue.riskScore));
+  }
+
+  async getIntervention(id: number): Promise<Intervention | undefined> {
+    const [item] = await db.select().from(interventionQueue).where(eq(interventionQueue.id, id));
+    return item;
+  }
+
+  async createIntervention(data: InsertIntervention): Promise<Intervention> {
+    const [item] = await db.insert(interventionQueue).values(data).returning();
+    return item;
+  }
+
+  async updateIntervention(id: number, data: Partial<InsertIntervention>): Promise<Intervention | undefined> {
+    const [item] = await db.update(interventionQueue).set(data).where(eq(interventionQueue.id, id)).returning();
+    return item;
+  }
+
+  async getAutomationSettings(tenantId: number): Promise<AutomationSetting | undefined> {
+    const [settings] = await db.select().from(automationSettings).where(eq(automationSettings.tenantId, tenantId));
+    return settings;
+  }
+
+  async upsertAutomationSettings(tenantId: number, data: Partial<InsertAutomationSetting>): Promise<AutomationSetting> {
+    const existing = await this.getAutomationSettings(tenantId);
+    if (existing) {
+      const [updated] = await db.update(automationSettings).set({ ...data, updatedAt: new Date() }).where(eq(automationSettings.tenantId, tenantId)).returning();
+      return updated;
+    }
+    const [created] = await db.insert(automationSettings).values({ tenantId, ...data } as InsertAutomationSetting).returning();
+    return created;
+  }
+
+  async getAutomationDecisionLogs(tenantId: number, limit?: number): Promise<AutomationDecisionLog[]> {
+    return db.select().from(automationDecisionLogs).where(eq(automationDecisionLogs.tenantId, tenantId)).orderBy(desc(automationDecisionLogs.createdAt)).limit(limit || 100);
+  }
+
+  async createAutomationDecisionLog(data: InsertAutomationDecisionLog): Promise<AutomationDecisionLog> {
+    const [log] = await db.insert(automationDecisionLogs).values(data).returning();
+    return log;
   }
 }
 
