@@ -23,6 +23,9 @@ import {
   Trophy,
   BookOpen,
   FileText,
+  Shield,
+  Activity,
+  Server,
 } from "lucide-react";
 import {
   Sidebar,
@@ -76,6 +79,9 @@ const adminItems = [
   { title: "Notifications", url: "/admin/notifications", icon: Mail },
   { title: "Data Quality", url: "/admin/data-quality", icon: ShieldCheck },
   { title: "Audit Log", url: "/admin/audit", icon: History },
+  { title: "Security", url: "/admin/security", icon: Shield },
+  { title: "Activity Log", url: "/admin/activity", icon: Activity },
+  { title: "Ops Health", url: "/admin/ops", icon: Server },
 ];
 
 export function AppSidebar() {

@@ -63,6 +63,11 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - `data_quality_rules` - Configurable quality rules (period_continuity, outlier_detection, duplicate_detection)
 - `data_quality_violations` - Quality check violations with severity/details
 
+### Phase 5.3 Tables (Observability + Incident Ops)
+- `security_ip_blocks` - Blocked IP addresses with reason, expiry, blockedBy
+- `incidents` - Security incidents (auth_failure, brute_force, suspicious_ip, anomaly) with severity/status lifecycle, ack/resolve tracking
+- `incident_notes` - Timeline notes on incidents (authorUserId, content)
+
 ### Phase 5 Tables (Growth Operating System)
 - `actions` - Trackable execution work items (status lifecycle: open/in_progress/blocked/done, priority, owner, linked metric/location)
 - `action_checkins` - Weekly check-in notes on actions
@@ -132,6 +137,10 @@ Multi-tenant franchise management platform with RBAC, metrics engine, scorecards
 - `client/src/pages/benchmarking.tsx` - Location ranking by composite performance
 - `client/src/pages/playbooks.tsx` - Reusable action templates, apply to locations
 - `client/src/pages/admin-digests.tsx` - Weekly executive digest generation + history
+- `client/src/pages/admin-security.tsx` - Security dashboard (metrics, IP blocks, incidents, force-logout, unlock)
+- `client/src/pages/admin-activity.tsx` - Global admin activity log with filters + diff viewer
+- `client/src/pages/admin-ops.tsx` - Ops health dashboard (uptime, DB, memory, scheduler runs)
+- `server/security-routes.ts` - Security admin API routes (dashboard, IP blocks, incidents, force-logout, unlock, activity, ops health)
 
 ## Commands
 - `npm run dev` - Start dev server

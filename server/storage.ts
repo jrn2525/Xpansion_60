@@ -104,6 +104,15 @@ import {
   type InsertDigestSchedulerRun,
   type BenchmarkingConfig,
   type InsertBenchmarkingConfig,
+  securityIpBlocks,
+  incidents,
+  incidentNotes,
+  type SecurityIpBlock,
+  type InsertSecurityIpBlock,
+  type Incident,
+  type InsertIncident,
+  type IncidentNote,
+  type InsertIncidentNote,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, lt, inArray, isNull, sql } from "drizzle-orm";
@@ -277,6 +286,22 @@ export interface IStorage {
   getPlaybookApplicationsByPlaybook(playbookId: number): Promise<PlaybookApplication[]>;
 
   getTenantUsersWithNames(tenantId: number): Promise<Array<{ id: number; userId: string; role: string; username: string | null }>>;
+
+  getIpBlocks(): Promise<SecurityIpBlock[]>;
+  getIpBlockByAddress(ip: string): Promise<SecurityIpBlock | undefined>;
+  createIpBlock(data: InsertSecurityIpBlock): Promise<SecurityIpBlock>;
+  deleteIpBlock(id: number): Promise<boolean>;
+
+  getIncidents(filters?: { tenantId?: number; status?: string; severity?: string; type?: string }): Promise<Incident[]>;
+  getIncident(id: number): Promise<Incident | undefined>;
+  createIncident(data: InsertIncident): Promise<Incident>;
+  updateIncident(id: number, data: Partial<InsertIncident>): Promise<Incident | undefined>;
+
+  getIncidentNotes(incidentId: number): Promise<IncidentNote[]>;
+  createIncidentNote(data: InsertIncidentNote): Promise<IncidentNote>;
+
+  getAuditLogsGlobal(filters?: { entityType?: string; action?: string; actorUserId?: string; start?: Date; end?: Date; limit?: number; offset?: number }): Promise<AuditLog[]>;
+  deleteSessionsByUserId(userId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1088,6 +1113,78 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(users, eq(tenantUsers.userId, users.id))
       .where(eq(tenantUsers.tenantId, tenantId));
     return rows;
+  }
+
+  async getIpBlocks(): Promise<SecurityIpBlock[]> {
+    return db.select().from(securityIpBlocks).orderBy(desc(securityIpBlocks.createdAt));
+  }
+
+  async getIpBlockByAddress(ip: string): Promise<SecurityIpBlock | undefined> {
+    const [block] = await db.select().from(securityIpBlocks).where(eq(securityIpBlocks.ipAddress, ip));
+    return block;
+  }
+
+  async createIpBlock(data: InsertSecurityIpBlock): Promise<SecurityIpBlock> {
+    const [block] = await db.insert(securityIpBlocks).values(data).returning();
+    return block;
+  }
+
+  async deleteIpBlock(id: number): Promise<boolean> {
+    const result = await db.delete(securityIpBlocks).where(eq(securityIpBlocks.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getIncidents(filters?: { tenantId?: number; status?: string; severity?: string; type?: string }): Promise<Incident[]> {
+    const conditions = [];
+    if (filters?.tenantId) conditions.push(eq(incidents.tenantId, filters.tenantId));
+    if (filters?.status) conditions.push(eq(incidents.status, filters.status));
+    if (filters?.severity) conditions.push(eq(incidents.severity, filters.severity));
+    if (filters?.type) conditions.push(eq(incidents.type, filters.type));
+    if (conditions.length === 0) return db.select().from(incidents).orderBy(desc(incidents.detectedAt));
+    return db.select().from(incidents).where(and(...conditions)).orderBy(desc(incidents.detectedAt));
+  }
+
+  async getIncident(id: number): Promise<Incident | undefined> {
+    const [incident] = await db.select().from(incidents).where(eq(incidents.id, id));
+    return incident;
+  }
+
+  async createIncident(data: InsertIncident): Promise<Incident> {
+    const [incident] = await db.insert(incidents).values(data).returning();
+    return incident;
+  }
+
+  async updateIncident(id: number, data: Partial<InsertIncident>): Promise<Incident | undefined> {
+    const [updated] = await db.update(incidents).set(data).where(eq(incidents.id, id)).returning();
+    return updated;
+  }
+
+  async getIncidentNotes(incidentId: number): Promise<IncidentNote[]> {
+    return db.select().from(incidentNotes).where(eq(incidentNotes.incidentId, incidentId)).orderBy(asc(incidentNotes.createdAt));
+  }
+
+  async createIncidentNote(data: InsertIncidentNote): Promise<IncidentNote> {
+    const [note] = await db.insert(incidentNotes).values(data).returning();
+    return note;
+  }
+
+  async getAuditLogsGlobal(filters?: { entityType?: string; action?: string; actorUserId?: string; start?: Date; end?: Date; limit?: number; offset?: number }): Promise<AuditLog[]> {
+    const conditions = [];
+    if (filters?.entityType) conditions.push(eq(auditLogs.entityType, filters.entityType));
+    if (filters?.action) conditions.push(eq(auditLogs.action, filters.action));
+    if (filters?.actorUserId) conditions.push(eq(auditLogs.actorUserId, filters.actorUserId));
+    if (filters?.start) conditions.push(gte(auditLogs.createdAt, filters.start));
+    if (filters?.end) conditions.push(lte(auditLogs.createdAt, filters.end));
+    const lim = filters?.limit || 200;
+    const off = filters?.offset || 0;
+    const q = db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(lim).offset(off);
+    if (conditions.length === 0) return q;
+    return db.select().from(auditLogs).where(and(...conditions)).orderBy(desc(auditLogs.createdAt)).limit(lim).offset(off);
+  }
+
+  async deleteSessionsByUserId(userId: string): Promise<number> {
+    const result = await db.execute(sql`DELETE FROM sessions WHERE sess::text LIKE ${'%"sub":"' + userId + '"%'}`);
+    return Number(result.rowCount ?? 0);
   }
 }
 

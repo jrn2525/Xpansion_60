@@ -31,6 +31,9 @@ import GoalsPage from "@/pages/goals";
 import BenchmarkingPage from "@/pages/benchmarking";
 import PlaybooksPage from "@/pages/playbooks";
 import AdminDigestsPage from "@/pages/admin-digests";
+import AdminSecurityPage from "@/pages/admin-security";
+import AdminActivityPage from "@/pages/admin-activity";
+import AdminOpsPage from "@/pages/admin-ops";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard | Xpansion Console",
@@ -52,6 +55,9 @@ const routeTitles: Record<string, string> = {
   "/admin/notifications": "Notifications | Xpansion Console",
   "/admin/data-quality": "Data Quality | Xpansion Console",
   "/admin/digests": "Weekly Digests | Xpansion Console",
+  "/admin/security": "Security | Xpansion Console",
+  "/admin/activity": "Activity Log | Xpansion Console",
+  "/admin/ops": "Ops Health | Xpansion Console",
 };
 
 function RouteTitle() {
@@ -84,6 +90,9 @@ function AuthenticatedRouter() {
       <Route path="/admin/notifications" component={AdminNotificationsPage} />
       <Route path="/admin/data-quality" component={AdminDataQualityPage} />
       <Route path="/admin/digests" component={AdminDigestsPage} />
+      <Route path="/admin/security" component={AdminSecurityPage} />
+      <Route path="/admin/activity" component={AdminActivityPage} />
+      <Route path="/admin/ops" component={AdminOpsPage} />
       <Route component={NotFound} />
     </Switch>
   );

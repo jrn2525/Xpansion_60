@@ -868,6 +868,59 @@ export type InsertDigestSchedulerRun = z.infer<typeof insertDigestSchedulerRunSc
 export type BenchmarkingConfig = typeof benchmarkingConfigs.$inferSelect;
 export type InsertBenchmarkingConfig = z.infer<typeof insertBenchmarkingConfigSchema>;
 
+// Phase 5.3: Security + Incident Ops tables
+
+export const securityIpBlocks = pgTable("security_ip_blocks", {
+  id: serial("id").primaryKey(),
+  ipAddress: varchar("ip_address", { length: 45 }).notNull(),
+  reason: text("reason"),
+  blockedBy: varchar("blocked_by"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSecurityIpBlockSchema = createInsertSchema(securityIpBlocks).omit({ id: true });
+
+export const incidents = pgTable("incidents", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 50 }).notNull(),
+  severity: varchar("severity", { length: 20 }).notNull().default("medium"),
+  status: varchar("status", { length: 20 }).notNull().default("open"),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  evidenceJson: text("evidence_json"),
+  detectedAt: timestamp("detected_at").defaultNow(),
+  acknowledgedBy: varchar("acknowledged_by"),
+  acknowledgedAt: timestamp("acknowledged_at"),
+  resolvedBy: varchar("resolved_by"),
+  resolvedAt: timestamp("resolved_at"),
+  notificationSent: varchar("notification_sent").default("false"),
+});
+
+export const insertIncidentSchema = createInsertSchema(incidents).omit({ id: true });
+
+export const incidentNotes = pgTable("incident_notes", {
+  id: serial("id").primaryKey(),
+  incidentId: integer("incident_id").notNull().references(() => incidents.id, { onDelete: "cascade" }),
+  authorUserId: varchar("author_user_id").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertIncidentNoteSchema = createInsertSchema(incidentNotes).omit({ id: true });
+
+export const incidentsRelations = relations(incidents, ({ many }) => ({
+  notes: many(incidentNotes),
+}));
+
+export const incidentNotesRelations = relations(incidentNotes, ({ one }) => ({
+  incident: one(incidents, {
+    fields: [incidentNotes.incidentId],
+    references: [incidents.id],
+  }),
+}));
+
 export type ScoreRun = typeof scoreRuns.$inferSelect;
 export type InsertScoreRun = z.infer<typeof insertScoreRunSchema>;
 export type ScoreRunDetail = typeof scoreRunDetails.$inferSelect;
@@ -901,3 +954,9 @@ export type DataQualityRule = typeof dataQualityRules.$inferSelect;
 export type InsertDataQualityRule = z.infer<typeof insertDataQualityRuleSchema>;
 export type DataQualityViolation = typeof dataQualityViolations.$inferSelect;
 export type InsertDataQualityViolation = z.infer<typeof insertDataQualityViolationSchema>;
+export type SecurityIpBlock = typeof securityIpBlocks.$inferSelect;
+export type InsertSecurityIpBlock = z.infer<typeof insertSecurityIpBlockSchema>;
+export type Incident = typeof incidents.$inferSelect;
+export type InsertIncident = z.infer<typeof insertIncidentSchema>;
+export type IncidentNote = typeof incidentNotes.$inferSelect;
+export type InsertIncidentNote = z.infer<typeof insertIncidentNoteSchema>;

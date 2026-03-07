@@ -16,6 +16,7 @@ import { fromZodError } from "zod-validation-error";
 import { seed } from "./seed";
 import { adminRouter } from "./admin-routes";
 import { phase5Router } from "./phase5-routes";
+import { securityRouter } from "./security-routes";
 import { generateForecast, detectAnomalies } from "./services/analytics";
 import { startScheduler } from "./services/scheduler";
 
@@ -990,6 +991,7 @@ export async function registerRoutes(
   });
 
   app.use("/api/admin", adminRouter);
+  app.use("/api/admin", securityRouter);
   app.use("/api", phase5Router);
 
   seed().catch(console.error);

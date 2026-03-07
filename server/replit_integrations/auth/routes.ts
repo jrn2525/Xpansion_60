@@ -75,6 +75,21 @@ function clearAttempts(ip: string, email: string): void {
   accountAttempts.delete(email);
 }
 
+export function clearAccountLockout(email: string): boolean {
+  const existed = accountAttempts.has(email);
+  accountAttempts.delete(email);
+  return existed;
+}
+
+export function getLoginStats() {
+  const now = Date.now();
+  let lockedAccounts = 0;
+  for (const [, val] of accountAttempts) {
+    if (val.lockedUntil > now) lockedAccounts++;
+  }
+  return { totalTrackedIPs: ipAttempts.size, totalTrackedAccounts: accountAttempts.size, lockedAccounts };
+}
+
 function validatePassword(password: string): string | null {
   if (password.length < 8) return "Password must be at least 8 characters";
   if (!/[A-Z]/.test(password)) return "Password must contain an uppercase letter";
@@ -88,6 +103,18 @@ function auditLog(event: string, details: Record<string, unknown>): void {
   delete safe.password;
   delete safe.passwordHash;
   console.log(`[AUDIT] ${event}`, JSON.stringify(safe));
+
+  storage.getTenants().then((tenants) => {
+    const tenantId = tenants[0]?.id || 1;
+    storage.createAuditLog({
+      tenantId,
+      actorUserId: (safe.userId as string) || (safe.email as string) || "unknown",
+      entityType: "auth",
+      entityId: (safe.email as string) || "unknown",
+      action: event.toLowerCase(),
+      afterJson: JSON.stringify(safe),
+    }).catch(() => {});
+  }).catch(() => {});
 }
 
 export async function seedSuperAdmin(): Promise<void> {
