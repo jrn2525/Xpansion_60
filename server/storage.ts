@@ -137,6 +137,9 @@ import {
   type InsertAutomationSetting,
   type AutomationDecisionLog,
   type InsertAutomationDecisionLog,
+  campaigns,
+  type Campaign,
+  type InsertCampaign,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, lt, inArray, isNull, sql } from "drizzle-orm";
@@ -356,6 +359,11 @@ export interface IStorage {
 
   getAutomationDecisionLogs(tenantId: number, limit?: number): Promise<AutomationDecisionLog[]>;
   createAutomationDecisionLog(data: InsertAutomationDecisionLog): Promise<AutomationDecisionLog>;
+
+  getCampaigns(tenantId: number, filters?: { status?: string; locationId?: number; type?: string }): Promise<Campaign[]>;
+  getCampaign(id: number): Promise<Campaign | undefined>;
+  createCampaign(data: InsertCampaign): Promise<Campaign>;
+  updateCampaign(id: number, data: Partial<InsertCampaign>): Promise<Campaign>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1363,6 +1371,29 @@ export class DatabaseStorage implements IStorage {
   async createAutomationDecisionLog(data: InsertAutomationDecisionLog): Promise<AutomationDecisionLog> {
     const [log] = await db.insert(automationDecisionLogs).values(data).returning();
     return log;
+  }
+
+  async getCampaigns(tenantId: number, filters?: { status?: string; locationId?: number; type?: string }): Promise<Campaign[]> {
+    const conditions = [eq(campaigns.tenantId, tenantId)];
+    if (filters?.status) conditions.push(eq(campaigns.status, filters.status));
+    if (filters?.locationId) conditions.push(eq(campaigns.locationId, filters.locationId));
+    if (filters?.type) conditions.push(eq(campaigns.type, filters.type));
+    return db.select().from(campaigns).where(and(...conditions)).orderBy(desc(campaigns.createdAt));
+  }
+
+  async getCampaign(id: number): Promise<Campaign | undefined> {
+    const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, id));
+    return campaign;
+  }
+
+  async createCampaign(data: InsertCampaign): Promise<Campaign> {
+    const [campaign] = await db.insert(campaigns).values(data).returning();
+    return campaign;
+  }
+
+  async updateCampaign(id: number, data: Partial<InsertCampaign>): Promise<Campaign> {
+    const [campaign] = await db.update(campaigns).set({ ...data, updatedAt: new Date() }).where(eq(campaigns.id, id)).returning();
+    return campaign;
   }
 }
 

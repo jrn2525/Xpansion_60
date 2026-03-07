@@ -1041,6 +1041,33 @@ export const insertInterventionSchema = createInsertSchema(interventionQueue).om
 export const insertAutomationSettingsSchema = createInsertSchema(automationSettings).omit({ id: true });
 export const insertAutomationDecisionLogSchema = createInsertSchema(automationDecisionLogs).omit({ id: true });
 
+export const campaigns = pgTable("campaigns", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id),
+  name: varchar("name", { length: 500 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  locationId: integer("location_id").references(() => locations.id),
+  metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  status: varchar("status", { length: 30 }).notNull().default("planned"),
+  description: text("description"),
+  budget: real("budget"),
+  createdByUserId: varchar("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCampaignSchema = createInsertSchema(campaigns).omit({ id: true });
+export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
+export type Campaign = typeof campaigns.$inferSelect;
+
+export const campaignsRelations = relations(campaigns, ({ one }) => ({
+  tenant: one(tenants, { fields: [campaigns.tenantId], references: [tenants.id] }),
+  location: one(locations, { fields: [campaigns.locationId], references: [locations.id] }),
+  metricDefinition: one(metricDefinitions, { fields: [campaigns.metricDefinitionId], references: [metricDefinitions.id] }),
+}));
+
 export const weeklyPlansRelations = relations(weeklyPlans, ({ many }) => ({
   items: many(weeklyPlanItems),
 }));

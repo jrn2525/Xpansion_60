@@ -27,3 +27,10 @@ The database schema is organized across several phases, supporting features from
 - **Charting**: Recharts
 - **Validation**: Zod (with `zod-validation-error`)
 - **Password Hashing**: bcryptjs
+
+## Phase 5.5: Growth Engine
+- **Campaigns table** (`campaigns`): id, tenantId, name, type (promo/local_outreach/staffing_initiative/upsell_push), locationId (nullable), metricDefinitionId (nullable), startDate, endDate, status (planned/active/completed/cancelled), description, budget, createdByUserId, createdAt, updatedAt
+- **Campaign routes**: GET/POST `/api/tenants/:tenantId/campaigns`, PUT `/api/tenants/:tenantId/campaigns/:id`, GET `/api/tenants/:tenantId/campaigns/:id/impact` (pre/post metric comparison with confidence levels)
+- **Campaigns page**: `/campaigns` — list with status/type filters, create/edit dialogs, expandable impact attribution cards
+- **Enhanced digest narrative**: Multi-paragraph coach-voice summary with wins celebration, risk callouts, blocked/overdue nudges, and recommended next steps (replaces terse one-liner)
+- Files: `shared/schema.ts`, `server/storage.ts`, `server/phase5-routes.ts`, `client/src/pages/campaigns.tsx`

@@ -29,6 +29,7 @@ import {
   AlertTriangle,
   Calendar,
   Radio,
+  Megaphone,
 } from "lucide-react";
 import {
   Sidebar,
@@ -74,6 +75,7 @@ const operationsItems = [
   { title: "Playbooks", url: "/playbooks", icon: BookOpen },
   { title: "Risk", url: "/risk", icon: AlertTriangle },
   { title: "Weekly Plans", url: "/weekly-plans", icon: Calendar },
+  { title: "Campaigns", url: "/campaigns", icon: Megaphone },
 ];
 
 const adminItems = [

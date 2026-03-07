@@ -9,7 +9,11 @@ import {
   insertPlaybookStepSchema,
   insertDigestScheduleSchema,
   insertBenchmarkingConfigSchema,
+  insertCampaignSchema,
+  metricValues,
 } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 
@@ -925,7 +929,33 @@ export async function generateDigest(tenantId: number, userId: string) {
     ...highImpactOpps.slice(0, 1).map(o => `Act on opportunity: ${o.title}`),
   ].slice(0, 5);
 
-  const summaryText = `Weekly Digest: ${wins.length} wins, ${risks.length} risks, ${overdue.length} overdue, ${blocked.length} blocked. ${recommendedMoves.length} recommended moves.`;
+  const summaryParts: string[] = [];
+  summaryParts.push(`# Weekly Coaching Summary\n`);
+  if (wins.length > 0) {
+    summaryParts.push(`Great work this week — your team closed out ${wins.length} action${wins.length !== 1 ? "s" : ""}. Wins like these build momentum, so make sure to recognize the people behind them.`);
+    summaryParts.push(`**Wins:** ${wins.join("; ")}\n`);
+  } else {
+    summaryParts.push(`No completed actions this week. Consider reviewing your open actions and identifying any quick wins your team can close out to build momentum.\n`);
+  }
+  if (risks.length > 0) {
+    summaryParts.push(`**Heads up — ${risks.length} item${risks.length !== 1 ? "s" : ""} need${risks.length === 1 ? "s" : ""} attention.** These are the areas where performance is slipping or alerts are firing. Addressing them early prevents compounding problems.`);
+    summaryParts.push(`${risks.map((r, i) => `${i + 1}. ${r}`).join("\n")}\n`);
+  }
+  if (blocked.length > 0) {
+    summaryParts.push(`**${blocked.length} action${blocked.length !== 1 ? "s are" : " is"} currently blocked.** Blocked work stalls progress across your team — check in with owners and clear the path forward.`);
+    summaryParts.push(`${blocked.join("; ")}\n`);
+  }
+  if (overdue.length > 0) {
+    summaryParts.push(`**${overdue.length} overdue action${overdue.length !== 1 ? "s" : ""}.** Every overdue item is a missed commitment. Reassign, rescope, or close these out this week.`);
+    summaryParts.push(`${overdue.join("; ")}\n`);
+  }
+  if (recommendedMoves.length > 0) {
+    summaryParts.push(`## Top Recommended Next Steps`);
+    summaryParts.push(recommendedMoves.map((m, i) => `${i + 1}. ${m}`).join("\n"));
+    summaryParts.push(``);
+  }
+  summaryParts.push(`Stay focused, stay accountable — small consistent actions compound into big results.`);
+  const summaryText = summaryParts.join("\n");
 
   return storage.createDigest({
     tenantId,
@@ -1037,6 +1067,183 @@ phase5Router.get("/admin/digests/:tenantId/scheduler-runs", isAuthenticated, asy
 
     const runs = await storage.getDigestSchedulerRuns(tenantId);
     res.json(ok(runs));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+// ── Campaigns ──
+
+phase5Router.get("/tenants/:tenantId/campaigns", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const filters: { status?: string; locationId?: number; type?: string } = {};
+    if (req.query.status) filters.status = req.query.status as string;
+    if (req.query.locationId) filters.locationId = parseInt(req.query.locationId as string);
+    if (req.query.type) filters.type = req.query.type as string;
+
+    const list = await storage.getCampaigns(tenantId, filters);
+    res.json(ok(list));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.post("/tenants/:tenantId/campaigns", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const schema = z.object({
+      name: z.string().min(1).max(500),
+      type: z.string().min(1),
+      locationId: z.number().nullable().optional(),
+      metricDefinitionId: z.number().nullable().optional(),
+      startDate: z.string().min(1),
+      endDate: z.string().nullable().optional(),
+      status: z.string().optional(),
+      description: z.string().nullable().optional(),
+      budget: z.number().nullable().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+
+    if (parsed.data.locationId) {
+      const loc = await storage.getLocation(parsed.data.locationId);
+      if (!loc || loc.tenantId !== tenantId) return res.status(400).json(err("VALIDATION_ERROR", "Location does not belong to this tenant"));
+    }
+    if (parsed.data.metricDefinitionId) {
+      const md = await storage.getMetricDefinition(parsed.data.metricDefinitionId);
+      if (!md || md.tenantId !== tenantId) return res.status(400).json(err("VALIDATION_ERROR", "Metric does not belong to this tenant"));
+    }
+
+    const campaign = await storage.createCampaign({
+      ...parsed.data,
+      startDate: new Date(parsed.data.startDate),
+      endDate: parsed.data.endDate ? new Date(parsed.data.endDate) : null,
+      tenantId,
+      createdByUserId: req.user.claims.sub,
+    } as any);
+
+    await audit(tenantId, req.user.claims.sub, "campaign", String(campaign.id), "create", undefined, campaign);
+    res.status(201).json(ok(campaign));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.put("/tenants/:tenantId/campaigns/:id", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+    const id = parseInt(req.params.id);
+
+    const existing = await storage.getCampaign(id);
+    if (!existing) return res.status(404).json(err("NOT_FOUND", "Campaign not found"));
+    if (existing.tenantId !== tenantId) return res.status(403).json(err("FORBIDDEN", "Campaign does not belong to this tenant"));
+
+    const schema = z.object({
+      name: z.string().min(1).max(500).optional(),
+      type: z.string().optional(),
+      locationId: z.number().nullable().optional(),
+      metricDefinitionId: z.number().nullable().optional(),
+      startDate: z.string().or(z.date()).optional(),
+      endDate: z.string().or(z.date()).nullable().optional(),
+      status: z.string().optional(),
+      description: z.string().nullable().optional(),
+      budget: z.number().nullable().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+
+    if (parsed.data.locationId) {
+      const loc = await storage.getLocation(parsed.data.locationId);
+      if (!loc || loc.tenantId !== tenantId) return res.status(400).json(err("VALIDATION_ERROR", "Location does not belong to this tenant"));
+    }
+    if (parsed.data.metricDefinitionId) {
+      const md = await storage.getMetricDefinition(parsed.data.metricDefinitionId);
+      if (!md || md.tenantId !== tenantId) return res.status(400).json(err("VALIDATION_ERROR", "Metric does not belong to this tenant"));
+    }
+
+    const updateData: any = { ...parsed.data };
+    if (updateData.startDate && typeof updateData.startDate === "string") updateData.startDate = new Date(updateData.startDate);
+    if (updateData.endDate && typeof updateData.endDate === "string") updateData.endDate = new Date(updateData.endDate);
+
+    const updated = await storage.updateCampaign(id, updateData);
+    await audit(tenantId, req.user.claims.sub, "campaign", String(id), "update", existing, updated);
+    res.json(ok(updated));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.get("/tenants/:tenantId/campaigns/:id/impact", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.params.tenantId);
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+    const id = parseInt(req.params.id);
+
+    const campaign = await storage.getCampaign(id);
+    if (!campaign) return res.status(404).json(err("NOT_FOUND", "Campaign not found"));
+    if (campaign.tenantId !== tenantId) return res.status(403).json(err("FORBIDDEN", "Campaign does not belong to this tenant"));
+
+    if (!campaign.metricDefinitionId) {
+      return res.json(ok({
+        campaignId: id,
+        campaignName: campaign.name,
+        preAvg: 0, postAvg: 0, absoluteChange: 0, percentChange: 0,
+        confidence: "low", preDataPoints: 0, postDataPoints: 0,
+        prePeriod: { start: "", end: "" }, postPeriod: { start: "", end: "" },
+        noMetric: true,
+      }));
+    }
+
+    const endDate = campaign.endDate || new Date();
+    const startDate = campaign.startDate;
+    const durationMs = endDate.getTime() - startDate.getTime();
+    const preStart = new Date(startDate.getTime() - durationMs);
+
+    const baseConditions = [
+      eq(metricValues.tenantId, tenantId),
+      eq(metricValues.metricDefinitionId, campaign.metricDefinitionId),
+    ];
+    if (campaign.locationId) baseConditions.push(eq(metricValues.locationId, campaign.locationId));
+
+    const preValues = await db.select().from(metricValues)
+      .where(and(...baseConditions, gte(metricValues.periodStart, preStart), lte(metricValues.periodStart, startDate)));
+    const postValues = await db.select().from(metricValues)
+      .where(and(...baseConditions, gte(metricValues.periodStart, startDate), lte(metricValues.periodStart, endDate)));
+
+    const preNumeric = preValues.map(v => parseFloat(v.value)).filter(v => !isNaN(v));
+    const postNumeric = postValues.map(v => parseFloat(v.value)).filter(v => !isNaN(v));
+
+    const preAvg = preNumeric.length > 0 ? preNumeric.reduce((a, b) => a + b, 0) / preNumeric.length : 0;
+    const postAvg = postNumeric.length > 0 ? postNumeric.reduce((a, b) => a + b, 0) / postNumeric.length : 0;
+    const absoluteChange = postAvg - preAvg;
+    const percentChange = preAvg !== 0 ? (absoluteChange / Math.abs(preAvg)) * 100 : 0;
+
+    const totalDataPoints = preNumeric.length + postNumeric.length;
+    const confidence = totalDataPoints >= 8 ? "high" : totalDataPoints >= 4 ? "medium" : "low";
+
+    res.json(ok({
+      campaignId: id,
+      campaignName: campaign.name,
+      preAvg: Math.round(preAvg * 100) / 100,
+      postAvg: Math.round(postAvg * 100) / 100,
+      absoluteChange: Math.round(absoluteChange * 100) / 100,
+      percentChange: Math.round(percentChange * 100) / 100,
+      confidence,
+      preDataPoints: preNumeric.length,
+      postDataPoints: postNumeric.length,
+      prePeriod: { start: preStart.toISOString(), end: startDate.toISOString() },
+      postPeriod: { start: startDate.toISOString(), end: endDate.toISOString() },
+    }));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
