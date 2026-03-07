@@ -11,6 +11,7 @@ import {
   timestamp,
   real,
   uniqueIndex,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -378,6 +379,8 @@ export const auditLogs = pgTable("audit_logs", {
   action: varchar("action", { length: 50 }).notNull(),
   beforeJson: text("before_json"),
   afterJson: text("after_json"),
+  eventHash: varchar("event_hash", { length: 128 }),
+  prevHash: varchar("prev_hash", { length: 128 }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1066,6 +1069,142 @@ export const campaignsRelations = relations(campaigns, ({ one }) => ({
   tenant: one(tenants, { fields: [campaigns.tenantId], references: [tenants.id] }),
   location: one(locations, { fields: [campaigns.locationId], references: [locations.id] }),
   metricDefinition: one(metricDefinitions, { fields: [campaigns.metricDefinitionId], references: [metricDefinitions.id] }),
+}));
+
+// ── Phase 5.6: Enterprise Reliability + Intelligence Loop ──
+
+export const jobQueue = pgTable("job_queue", {
+  id: serial("id").primaryKey(),
+  jobType: varchar("job_type", { length: 100 }).notNull(),
+  jobKey: varchar("job_key", { length: 255 }).notNull(),
+  tenantId: integer("tenant_id").references(() => tenants.id),
+  payload: jsonb("payload"),
+  status: varchar("status", { length: 30 }).notNull().default("pending"),
+  idempotencyKey: varchar("idempotency_key", { length: 255 }).unique(),
+  priority: integer("priority").notNull().default(0),
+  maxRetries: integer("max_retries").notNull().default(3),
+  retryCount: integer("retry_count").notNull().default(0),
+  nextRunAt: timestamp("next_run_at").defaultNow(),
+  lockedAt: timestamp("locked_at"),
+  lockedBy: varchar("locked_by", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const jobRuns = pgTable("job_runs", {
+  id: serial("id").primaryKey(),
+  jobQueueId: integer("job_queue_id").notNull().references(() => jobQueue.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 30 }).notNull(),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+  durationMs: integer("duration_ms"),
+  errorSnapshot: text("error_snapshot"),
+  workerKey: varchar("worker_key", { length: 255 }),
+});
+
+export const jobDeadLetters = pgTable("job_dead_letters", {
+  id: serial("id").primaryKey(),
+  jobQueueId: integer("job_queue_id").notNull().references(() => jobQueue.id),
+  tenantId: integer("tenant_id").references(() => tenants.id),
+  jobType: varchar("job_type", { length: 100 }).notNull(),
+  originalPayload: jsonb("original_payload"),
+  failureReason: text("failure_reason"),
+  failedAt: timestamp("failed_at").defaultNow(),
+});
+
+export const tenantConfidenceSnapshots = pgTable("tenant_confidence_snapshots", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id),
+  locationId: integer("location_id").references(() => locations.id),
+  metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id),
+  period: varchar("period", { length: 50 }),
+  freshnessScore: real("freshness_score").notNull(),
+  completenessScore: real("completeness_score").notNull(),
+  continuityScore: real("continuity_score").notNull(),
+  outlierRate: real("outlier_rate").notNull(),
+  sampleSufficiency: real("sample_sufficiency").notNull(),
+  overallConfidence: real("overall_confidence").notNull(),
+  snapshotAt: timestamp("snapshot_at").defaultNow(),
+});
+
+export const recommendationEvents = pgTable("recommendation_events", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id),
+  entityType: varchar("entity_type", { length: 50 }).notNull(),
+  entityId: integer("entity_id").notNull(),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  userId: varchar("user_id"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const recommendationEffectiveness = pgTable("recommendation_effectiveness", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id),
+  entityType: varchar("entity_type", { length: 50 }).notNull(),
+  entityId: integer("entity_id").notNull(),
+  metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id),
+  preValue: real("pre_value"),
+  postValue: real("post_value"),
+  upliftPercent: real("uplift_percent"),
+  confidenceScore: real("confidence_score"),
+  measurementWindowDays: integer("measurement_window_days").notNull().default(30),
+  measuredAt: timestamp("measured_at").defaultNow(),
+});
+
+export const securityAccessEvents = pgTable("security_access_events", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const breakGlassSessions = pgTable("break_glass_sessions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull(),
+  reason: text("reason").notNull(),
+  startedAt: timestamp("started_at").defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(),
+  endedAt: timestamp("ended_at"),
+  endedReason: text("ended_reason"),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const insertJobQueueSchema = createInsertSchema(jobQueue).omit({ id: true });
+export const insertJobRunSchema = createInsertSchema(jobRuns).omit({ id: true });
+export const insertJobDeadLetterSchema = createInsertSchema(jobDeadLetters).omit({ id: true });
+export const insertConfidenceSnapshotSchema = createInsertSchema(tenantConfidenceSnapshots).omit({ id: true });
+export const insertRecommendationEventSchema = createInsertSchema(recommendationEvents).omit({ id: true });
+export const insertRecommendationEffectivenessSchema = createInsertSchema(recommendationEffectiveness).omit({ id: true });
+export const insertSecurityAccessEventSchema = createInsertSchema(securityAccessEvents).omit({ id: true });
+export const insertBreakGlassSessionSchema = createInsertSchema(breakGlassSessions).omit({ id: true });
+
+export type JobQueueEntry = typeof jobQueue.$inferSelect;
+export type InsertJobQueueEntry = z.infer<typeof insertJobQueueSchema>;
+export type JobRun = typeof jobRuns.$inferSelect;
+export type InsertJobRun = z.infer<typeof insertJobRunSchema>;
+export type JobDeadLetter = typeof jobDeadLetters.$inferSelect;
+export type InsertJobDeadLetter = z.infer<typeof insertJobDeadLetterSchema>;
+export type TenantConfidenceSnapshot = typeof tenantConfidenceSnapshots.$inferSelect;
+export type InsertConfidenceSnapshot = z.infer<typeof insertConfidenceSnapshotSchema>;
+export type RecommendationEvent = typeof recommendationEvents.$inferSelect;
+export type InsertRecommendationEvent = z.infer<typeof insertRecommendationEventSchema>;
+export type RecommendationEffectivenessRecord = typeof recommendationEffectiveness.$inferSelect;
+export type InsertRecommendationEffectiveness = z.infer<typeof insertRecommendationEffectivenessSchema>;
+export type SecurityAccessEvent = typeof securityAccessEvents.$inferSelect;
+export type InsertSecurityAccessEvent = z.infer<typeof insertSecurityAccessEventSchema>;
+export type BreakGlassSession = typeof breakGlassSessions.$inferSelect;
+export type InsertBreakGlassSession = z.infer<typeof insertBreakGlassSessionSchema>;
+
+export const jobQueueRelations = relations(jobQueue, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [jobQueue.tenantId], references: [tenants.id] }),
+  runs: many(jobRuns),
+}));
+
+export const jobRunsRelations = relations(jobRuns, ({ one }) => ({
+  job: one(jobQueue, { fields: [jobRuns.jobQueueId], references: [jobQueue.id] }),
 }));
 
 export const weeklyPlansRelations = relations(weeklyPlans, ({ many }) => ({

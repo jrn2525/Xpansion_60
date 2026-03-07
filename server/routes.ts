@@ -18,8 +18,15 @@ import { adminRouter } from "./admin-routes";
 import { phase5Router } from "./phase5-routes";
 import { securityRouter } from "./security-routes";
 import { intelligenceRouter } from "./intelligence-routes";
+import { recommendationRouter } from "./recommendation-routes";
+import { confidenceRouter } from "./confidence-routes";
+import { securityV1Router } from "./security-v1-routes";
+import { jobRouter } from "./job-routes";
+import { inboxRouter } from "./inbox-routes";
 import { generateForecast, detectAnomalies } from "./services/analytics";
 import { startScheduler } from "./services/scheduler";
+import { startJobProcessor } from "./services/job-queue";
+import { tracingMiddleware } from "./middleware/tracing";
 
 function zodError(res: any, error: z.ZodError) {
   const validationError = fromZodError(error);
@@ -50,6 +57,8 @@ export async function registerRoutes(
 ): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+
+  app.use(tracingMiddleware);
 
   app.get("/api/admin/tenants", isAuthenticated, async (req: any, res) => {
     try {
@@ -993,11 +1002,17 @@ export async function registerRoutes(
 
   app.use("/api/admin", adminRouter);
   app.use("/api/admin", securityRouter);
+  app.use("/api/v1", securityV1Router);
+  app.use("/api/v1/admin", jobRouter);
   app.use("/api", intelligenceRouter);
   app.use("/api", phase5Router);
+  app.use("/api/v1", confidenceRouter);
+  app.use("/api/v1", recommendationRouter);
+  app.use("/api/v1", inboxRouter);
 
   seed().catch(console.error);
   startScheduler();
+  startJobProcessor();
 
   return httpServer;
 }

@@ -44,15 +44,8 @@ async function requireAdminAccess(req: any, res: any, tenantId: number) {
 }
 
 async function audit(tenantId: number, actorUserId: string, entityType: string, entityId: string, action: string, before?: any, after?: any) {
-  await storage.createAuditLog({
-    tenantId,
-    actorUserId,
-    entityType,
-    entityId: String(entityId),
-    action,
-    beforeJson: before ? JSON.stringify(before) : undefined,
-    afterJson: after ? JSON.stringify(after) : undefined,
-  });
+  const { auditWithHash } = await import("./security-v1-routes");
+  await auditWithHash(tenantId, actorUserId, entityType, entityId, action, before, after);
 }
 
 export function getWeekKey(date: Date = new Date()): string {
@@ -272,6 +265,49 @@ phase5Router.put("/tenants/:tenantId/actions/:actionId", isAuthenticated, async 
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Action not found"));
 
     const action = await storage.updateAction(actionId, req.body);
+
+    if (req.body.status === "done" && existing.status !== "done") {
+      try {
+        await storage.createRecommendationEvent({
+          tenantId,
+          entityType: "action",
+          entityId: actionId,
+          eventType: "completed",
+          userId: req.user.claims.sub,
+          metadata: { previousStatus: existing.status },
+        });
+
+        if (action && action.metricDefinitionId && action.locationId) {
+          const windowDays = 30;
+          const now = new Date();
+          const preStart = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
+
+          const preValues = await db.select().from(metricValues)
+            .where(and(
+              eq(metricValues.metricDefinitionId, action.metricDefinitionId),
+              eq(metricValues.locationId, action.locationId),
+              gte(metricValues.periodStart, preStart),
+              lte(metricValues.periodEnd, now),
+            ));
+
+          if (preValues.length > 0) {
+            const preAvg = preValues.reduce((sum: number, v: any) => sum + v.value, 0) / preValues.length;
+            await storage.createRecommendationEffectiveness({
+              tenantId,
+              entityType: "action",
+              entityId: actionId,
+              metricDefinitionId: action.metricDefinitionId,
+              preValue: preAvg,
+              postValue: null,
+              upliftPercent: null,
+              confidenceScore: 0.1,
+              measurementWindowDays: windowDays,
+            });
+          }
+        }
+      } catch (_) {}
+    }
+
     await audit(tenantId, req.user.claims.sub, "action", String(actionId), "update", existing, action);
     res.json(ok(action));
   } catch (error: any) {
@@ -356,6 +392,21 @@ phase5Router.get("/tenants/:tenantId/opportunities", isAuthenticated, async (req
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
     const data = await storage.getOpportunities(tenantId);
+
+    const userId = req.user?.claims?.sub;
+    for (const opp of data) {
+      try {
+        await storage.createRecommendationEvent({
+          tenantId,
+          entityType: "opportunity",
+          entityId: opp.id,
+          eventType: "viewed",
+          userId: userId || null,
+          metadata: null,
+        });
+      } catch (_) {}
+    }
+
     res.json(ok(data));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
@@ -387,6 +438,18 @@ phase5Router.post("/tenants/:tenantId/opportunities/:id/create-action", isAuthen
     });
 
     await storage.updateOpportunity(oppId, { status: "actioned", actionId: action.id });
+
+    try {
+      await storage.createRecommendationEvent({
+        tenantId,
+        entityType: "opportunity",
+        entityId: oppId,
+        eventType: "converted_to_action",
+        userId: req.user.claims.sub,
+        metadata: { actionId: action.id },
+      });
+    } catch (_) {}
+
     await audit(tenantId, req.user.claims.sub, "opportunity", String(oppId), "create_action", opp, action);
     res.status(201).json(ok(action));
   } catch (error: any) {

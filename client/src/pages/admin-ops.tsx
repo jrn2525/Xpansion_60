@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Server, Database, Clock, Cpu, Activity, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { Server, Database, Clock, Cpu, Activity, CheckCircle, XCircle, AlertTriangle, Layers, Gauge, RotateCcw, Timer } from "lucide-react";
 import { statusColors } from "@/lib/semantic-colors";
 
 const runStatusColors: Record<string, string> = {
@@ -55,6 +55,7 @@ export default function AdminOpsPage() {
 
   const schedulerSummary = health.scheduler?.summary || { total: 0, completed: 0, failed: 0 };
   const recentRuns = health.scheduler?.recentRuns || [];
+  const jobQueue = health.jobQueue || null;
 
   return (
     <div className="p-6 space-y-6">
@@ -127,6 +128,60 @@ export default function AdminOpsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {jobQueue && (
+        <>
+          <div className="flex items-center gap-3 flex-wrap">
+            <Layers className="h-5 w-5" />
+            <h2 className="text-lg font-semibold" data-testid="text-job-queue-title">Job Queue Metrics</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Queue Depth</CardTitle>
+                <Layers className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-queue-depth">{jobQueue.queueDepth}</div>
+                <p className="text-xs text-muted-foreground">{jobQueue.running} running</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+                <Gauge className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-success-rate">{jobQueue.successRate}%</div>
+                <p className="text-xs text-muted-foreground">{jobQueue.completed} completed, {jobQueue.failed} failed</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Retries</CardTitle>
+                <RotateCcw className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-total-retries">{jobQueue.totalRetries}</div>
+                <p className="text-xs text-muted-foreground">{jobQueue.deadLettered} dead-lettered</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">p95 Latency</CardTitle>
+                <Timer className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-p95-latency">{jobQueue.p95LatencyMs}ms</div>
+                <p className="text-xs text-muted-foreground">95th percentile job duration</p>
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
 
       {schedulerSummary.failed > 0 && (
         <Card className="border-status-error/30">

@@ -34,3 +34,40 @@ The database schema is organized across several phases, supporting features from
 - **Campaigns page**: `/campaigns` — list with status/type filters, create/edit dialogs, expandable impact attribution cards
 - **Enhanced digest narrative**: Multi-paragraph coach-voice summary with wins celebration, risk callouts, blocked/overdue nudges, and recommended next steps (replaces terse one-liner)
 - Files: `shared/schema.ts`, `server/storage.ts`, `server/phase5-routes.ts`, `client/src/pages/campaigns.tsx`
+
+## Phase 5.6: Enterprise Reliability + Intelligence Loop
+Six workstreams delivering defense-in-depth security, durable job orchestration, data confidence scoring, recommendation outcome learning, a Command Inbox, and API/ops robustness.
+
+### New Tables (9)
+- `job_queue` — durable job queue with idempotency keys, priority, retry/backoff, dead-letter support
+- `job_runs` — per-execution logs with duration, error snapshots, worker keys
+- `job_dead_letters` — failed jobs after max retries exhausted
+- `tenant_confidence_snapshots` — data confidence scores per metric/location (freshness, completeness, continuity, outlier rate, sample sufficiency)
+- `recommendation_events` — lifecycle event log (generated/viewed/accepted/rejected/converted_to_action/completed)
+- `recommendation_effectiveness` — measured uplift (pre/post metric deltas, confidence, measurement window)
+- `security_access_events` — security audit trail (MFA, permission denied, break-glass events)
+- `break_glass_sessions` — emergency superadmin access with reason, expiry, audit trail
+- `audit_logs` extended with `eventHash` (SHA-256) and `prevHash` columns for tamper-evident hash chain
+
+### Backend Services
+- **Job Queue Engine** (`server/services/job-queue.ts`): enqueue with idempotency dedup, claim via polling, exponential backoff (min(1000*2^retryCount, 300000ms)), dead-letter after maxRetries, per-tenant concurrency limit (5), stale lock release (5min), handler registry (digest_generation, risk_recompute, campaign_impact, scheduled_report, notification_retry)
+- **Confidence Engine** (`server/services/confidence-engine.ts`): freshnessScore, completenessScore, continuityScore, outlierRate, sampleSufficiency → weighted overallConfidence (0-1)
+- **Tracing Middleware** (`server/middleware/tracing.ts`): X-Request-Id generation, structured logging with tenantId/userId/traceId on write paths
+
+### API Routes (all /api/v1 prefix)
+- **Security**: POST/GET `/api/v1/superadmin/break-glass/start|end|active` — break-glass session management
+- **Jobs**: POST `/api/v1/admin/jobs/:type/enqueue`, GET `.../runs`, `.../dead-letters`, `.../stats`
+- **Confidence**: GET `/api/v1/tenants/:tenantId/confidence`, `.../snapshots`, `.../metric/:metricId/location/:locationId`
+- **Recommendations**: GET `/api/v1/tenants/:tenantId/recommendations/effectiveness`, `.../events`, POST `.../compute-effectiveness`
+- **Inbox**: GET `/api/v1/tenants/:tenantId/inbox` — aggregated prioritized view of risks, blocked/overdue actions, off-track goals, critical alerts, high-confidence opportunities
+
+### Frontend
+- **Command Inbox** (`/inbox`): urgency-sorted aggregation of top risks, blocked/overdue actions, off-track goals, critical alerts, opportunities; type filters, confidence badges, urgency bars, one-click "Convert to Action", "Why this?" explainability drawer with factors/weights/confidence
+- **Ops Health extended**: Job queue metrics section (queue depth, success rate, retries, p95 latency)
+
+### Architecture Notes
+- Audit hash chain: SHA-256 of (entityType|entityId|action|actorUserId|createdAt), chain via prevHash column
+- Break-glass sessions: require reason, default 1hr expiry, log security_access_event
+- Fine-grained permissions: `checkPermission(tenantId, userId, resource, action)` checks tenant_users role against permission map
+- Recommendation lifecycle hooks: opportunity fetch → "viewed", create-action → "converted_to_action", action done → "completed" + effectiveness baseline
+- Files: `shared/schema.ts`, `server/storage.ts`, `server/security-v1-routes.ts`, `server/services/job-queue.ts`, `server/job-routes.ts`, `server/services/confidence-engine.ts`, `server/confidence-routes.ts`, `server/recommendation-routes.ts`, `server/inbox-routes.ts`, `server/middleware/tracing.ts`, `client/src/pages/inbox.tsx`, `client/src/pages/admin-ops.tsx`

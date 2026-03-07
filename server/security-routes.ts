@@ -282,6 +282,40 @@ securityRouter.get("/ops/health", async (req: any, res) => {
     const failedRuns = recentRuns.filter((r) => r.status === "failed").length;
     const completedRuns = recentRuns.filter((r) => r.status === "completed").length;
 
+    let jobQueueMetrics = null;
+    try {
+      const stats = await storage.getJobQueueStats();
+      const runs = await storage.getJobRuns({ limit: 1000 });
+      const completedJobs = runs.filter(r => r.status === "completed");
+      const totalJobs = runs.length;
+      const successRate = totalJobs > 0 ? parseFloat((completedJobs.length / totalJobs * 100).toFixed(1)) : 0;
+      const totalRetries = runs.filter(r => r.status === "failed").length;
+      const durations = completedJobs.filter(r => r.durationMs).map(r => r.durationMs!).sort((a, b) => a - b);
+      const p95Index = Math.floor(durations.length * 0.95);
+      const p95LatencyMs = durations.length > 0 ? durations[Math.min(p95Index, durations.length - 1)] : 0;
+
+      const tenantErrors: Record<string, number> = {};
+      const failedJobRuns = runs.filter(r => r.status === "failed");
+      for (const run of failedJobRuns) {
+        const key = String((run as any).workerKey || "unknown");
+        tenantErrors[key] = (tenantErrors[key] || 0) + 1;
+      }
+
+      jobQueueMetrics = {
+        queueDepth: stats.pending,
+        running: stats.running,
+        completed: stats.completed,
+        failed: stats.failed,
+        deadLettered: stats.deadLettered,
+        successRate,
+        totalRetries,
+        p95LatencyMs,
+        tenantErrors,
+      };
+    } catch (e) {
+      console.error("[OPS] Error fetching job queue metrics:", e);
+    }
+
     res.json(ok({
       uptime: Math.floor(uptime),
       uptimeFormatted: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
@@ -295,6 +329,7 @@ securityRouter.get("/ops/health", async (req: any, res) => {
         recentRuns,
         summary: { total: recentRuns.length, completed: completedRuns, failed: failedRuns },
       },
+      jobQueue: jobQueueMetrics,
     }));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));

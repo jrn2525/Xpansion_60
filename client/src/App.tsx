@@ -39,6 +39,7 @@ import WeeklyPlansPage from "@/pages/weekly-plans";
 import AdminExecutiveReportsPage from "@/pages/admin-executive-reports";
 import SuperadminTowerPage from "@/pages/superadmin-tower";
 import CampaignsPage from "@/pages/campaigns";
+import InboxPage from "@/pages/inbox";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard | Xpansion Console",
@@ -66,6 +67,7 @@ const routeTitles: Record<string, string> = {
   "/risk": "Risk Dashboard | Xpansion Console",
   "/weekly-plans": "Weekly Plans | Xpansion Console",
   "/campaigns": "Campaigns | Xpansion Console",
+  "/inbox": "Command Inbox | Xpansion Console",
   "/admin/executive-reports": "Executive Reports | Xpansion Console",
   "/superadmin/tower": "Command Tower | Xpansion Console",
 };
@@ -107,6 +109,7 @@ function AuthenticatedRouter() {
       <Route path="/weekly-plans" component={WeeklyPlansPage} />
       <Route path="/admin/executive-reports" component={AdminExecutiveReportsPage} />
       <Route path="/campaigns" component={CampaignsPage} />
+      <Route path="/inbox" component={InboxPage} />
       <Route path="/superadmin/tower" component={SuperadminTowerPage} />
       <Route component={NotFound} />
     </Switch>

@@ -140,6 +140,31 @@ import {
   campaigns,
   type Campaign,
   type InsertCampaign,
+  jobQueue,
+  jobRuns,
+  jobDeadLetters,
+  tenantConfidenceSnapshots,
+  recommendationEvents,
+  recommendationEffectiveness,
+  securityAccessEvents,
+  breakGlassSessions,
+  auditLogs,
+  type JobQueueEntry,
+  type InsertJobQueueEntry,
+  type JobRun,
+  type InsertJobRun,
+  type JobDeadLetter,
+  type InsertJobDeadLetter,
+  type TenantConfidenceSnapshot,
+  type InsertConfidenceSnapshot,
+  type RecommendationEvent,
+  type InsertRecommendationEvent,
+  type RecommendationEffectivenessRecord,
+  type InsertRecommendationEffectiveness,
+  type SecurityAccessEvent,
+  type InsertSecurityAccessEvent,
+  type BreakGlassSession,
+  type InsertBreakGlassSession,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, lt, inArray, isNull, sql } from "drizzle-orm";
@@ -364,6 +389,36 @@ export interface IStorage {
   getCampaign(id: number): Promise<Campaign | undefined>;
   createCampaign(data: InsertCampaign): Promise<Campaign>;
   updateCampaign(id: number, data: Partial<InsertCampaign>): Promise<Campaign>;
+
+  enqueueJob(data: InsertJobQueueEntry): Promise<JobQueueEntry>;
+  claimJob(workerKey: string): Promise<JobQueueEntry | undefined>;
+  completeJob(id: number, durationMs: number): Promise<void>;
+  failJob(id: number, error: string, durationMs: number): Promise<void>;
+  createJobRun(data: InsertJobRun): Promise<JobRun>;
+  getJobRuns(filters?: { jobType?: string; status?: string; limit?: number }): Promise<JobRun[]>;
+  getDeadLetters(limit?: number): Promise<JobDeadLetter[]>;
+  createDeadLetter(data: InsertJobDeadLetter): Promise<JobDeadLetter>;
+  getJobQueueStats(): Promise<{ pending: number; running: number; completed: number; failed: number; deadLettered: number }>;
+  releaseStaleJobs(timeoutMinutes: number): Promise<number>;
+
+  createConfidenceSnapshot(data: InsertConfidenceSnapshot): Promise<TenantConfidenceSnapshot>;
+  getConfidenceSnapshots(tenantId: number, filters?: { locationId?: number; metricDefinitionId?: number }): Promise<TenantConfidenceSnapshot[]>;
+
+  createRecommendationEvent(data: InsertRecommendationEvent): Promise<RecommendationEvent>;
+  getRecommendationEvents(tenantId: number, filters?: { entityType?: string; entityId?: number }): Promise<RecommendationEvent[]>;
+  createRecommendationEffectiveness(data: InsertRecommendationEffectiveness): Promise<RecommendationEffectivenessRecord>;
+  getRecommendationEffectiveness(tenantId: number, filters?: { entityType?: string }): Promise<RecommendationEffectivenessRecord[]>;
+
+  createSecurityAccessEvent(data: InsertSecurityAccessEvent): Promise<SecurityAccessEvent>;
+  getSecurityAccessEvents(filters?: { userId?: string; eventType?: string; limit?: number }): Promise<SecurityAccessEvent[]>;
+
+  createBreakGlassSession(data: InsertBreakGlassSession): Promise<BreakGlassSession>;
+  endBreakGlassSession(id: number, endedReason: string): Promise<BreakGlassSession>;
+  getActiveBreakGlassSessions(): Promise<BreakGlassSession[]>;
+  getBreakGlassSession(id: number): Promise<BreakGlassSession | undefined>;
+
+  updateAuditLogHash(id: number, eventHash: string, prevHash: string | null): Promise<void>;
+  getLatestAuditLogHash(tenantId: number): Promise<string | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1394,6 +1449,167 @@ export class DatabaseStorage implements IStorage {
   async updateCampaign(id: number, data: Partial<InsertCampaign>): Promise<Campaign> {
     const [campaign] = await db.update(campaigns).set({ ...data, updatedAt: new Date() }).where(eq(campaigns.id, id)).returning();
     return campaign;
+  }
+
+  async enqueueJob(data: InsertJobQueueEntry): Promise<JobQueueEntry> {
+    const [job] = await db.insert(jobQueue).values(data).returning();
+    return job;
+  }
+
+  async claimJob(workerKey: string): Promise<JobQueueEntry | undefined> {
+    const now = new Date();
+    const [job] = await db.update(jobQueue)
+      .set({ status: "running", lockedAt: now, lockedBy: workerKey, updatedAt: now })
+      .where(and(
+        eq(jobQueue.status, "pending"),
+        lte(jobQueue.nextRunAt, now),
+      ))
+      .returning();
+    return job;
+  }
+
+  async completeJob(id: number, durationMs: number): Promise<void> {
+    await db.update(jobQueue).set({ status: "completed", updatedAt: new Date() }).where(eq(jobQueue.id, id));
+    await db.insert(jobRuns).values({ jobQueueId: id, status: "completed", completedAt: new Date(), durationMs });
+  }
+
+  async failJob(id: number, error: string, durationMs: number): Promise<void> {
+    const [job] = await db.select().from(jobQueue).where(eq(jobQueue.id, id));
+    if (!job) return;
+    const newRetryCount = job.retryCount + 1;
+    if (newRetryCount >= job.maxRetries) {
+      await db.update(jobQueue).set({ status: "dead_letter", retryCount: newRetryCount, updatedAt: new Date() }).where(eq(jobQueue.id, id));
+      await db.insert(jobDeadLetters).values({ jobQueueId: id, tenantId: job.tenantId, jobType: job.jobType, originalPayload: job.payload, failureReason: error });
+    } else {
+      const backoffMs = Math.min(1000 * Math.pow(2, newRetryCount), 300000);
+      const nextRunAt = new Date(Date.now() + backoffMs);
+      await db.update(jobQueue).set({ status: "pending", retryCount: newRetryCount, nextRunAt, lockedAt: null, lockedBy: null, updatedAt: new Date() }).where(eq(jobQueue.id, id));
+    }
+    await db.insert(jobRuns).values({ jobQueueId: id, status: "failed", completedAt: new Date(), durationMs, errorSnapshot: error });
+  }
+
+  async createJobRun(data: InsertJobRun): Promise<JobRun> {
+    const [run] = await db.insert(jobRuns).values(data).returning();
+    return run;
+  }
+
+  async getJobRuns(filters?: { jobType?: string; status?: string; limit?: number }): Promise<JobRun[]> {
+    let query = db.select().from(jobRuns).orderBy(desc(jobRuns.startedAt)).limit(filters?.limit || 100);
+    if (filters?.status) {
+      query = db.select().from(jobRuns).where(eq(jobRuns.status, filters.status)).orderBy(desc(jobRuns.startedAt)).limit(filters.limit || 100);
+    }
+    return query;
+  }
+
+  async getDeadLetters(limit?: number): Promise<JobDeadLetter[]> {
+    return db.select().from(jobDeadLetters).orderBy(desc(jobDeadLetters.failedAt)).limit(limit || 100);
+  }
+
+  async createDeadLetter(data: InsertJobDeadLetter): Promise<JobDeadLetter> {
+    const [dl] = await db.insert(jobDeadLetters).values(data).returning();
+    return dl;
+  }
+
+  async getJobQueueStats(): Promise<{ pending: number; running: number; completed: number; failed: number; deadLettered: number }> {
+    const rows = await db.select({ status: jobQueue.status, count: sql<number>`count(*)::int` }).from(jobQueue).groupBy(jobQueue.status);
+    const stats = { pending: 0, running: 0, completed: 0, failed: 0, deadLettered: 0 };
+    for (const row of rows) {
+      if (row.status === "pending") stats.pending = row.count;
+      else if (row.status === "running") stats.running = row.count;
+      else if (row.status === "completed") stats.completed = row.count;
+      else if (row.status === "failed") stats.failed = row.count;
+      else if (row.status === "dead_letter") stats.deadLettered = row.count;
+    }
+    return stats;
+  }
+
+  async releaseStaleJobs(timeoutMinutes: number): Promise<number> {
+    const cutoff = new Date(Date.now() - timeoutMinutes * 60000);
+    const released = await db.update(jobQueue)
+      .set({ status: "pending", lockedAt: null, lockedBy: null, updatedAt: new Date() })
+      .where(and(eq(jobQueue.status, "running"), lte(jobQueue.lockedAt, cutoff)))
+      .returning();
+    return released.length;
+  }
+
+  async createConfidenceSnapshot(data: InsertConfidenceSnapshot): Promise<TenantConfidenceSnapshot> {
+    const [snap] = await db.insert(tenantConfidenceSnapshots).values(data).returning();
+    return snap;
+  }
+
+  async getConfidenceSnapshots(tenantId: number, filters?: { locationId?: number; metricDefinitionId?: number }): Promise<TenantConfidenceSnapshot[]> {
+    const conditions = [eq(tenantConfidenceSnapshots.tenantId, tenantId)];
+    if (filters?.locationId) conditions.push(eq(tenantConfidenceSnapshots.locationId, filters.locationId));
+    if (filters?.metricDefinitionId) conditions.push(eq(tenantConfidenceSnapshots.metricDefinitionId, filters.metricDefinitionId));
+    return db.select().from(tenantConfidenceSnapshots).where(and(...conditions)).orderBy(desc(tenantConfidenceSnapshots.snapshotAt));
+  }
+
+  async createRecommendationEvent(data: InsertRecommendationEvent): Promise<RecommendationEvent> {
+    const [event] = await db.insert(recommendationEvents).values(data).returning();
+    return event;
+  }
+
+  async getRecommendationEvents(tenantId: number, filters?: { entityType?: string; entityId?: number }): Promise<RecommendationEvent[]> {
+    const conditions = [eq(recommendationEvents.tenantId, tenantId)];
+    if (filters?.entityType) conditions.push(eq(recommendationEvents.entityType, filters.entityType));
+    if (filters?.entityId) conditions.push(eq(recommendationEvents.entityId, filters.entityId));
+    return db.select().from(recommendationEvents).where(and(...conditions)).orderBy(desc(recommendationEvents.createdAt));
+  }
+
+  async createRecommendationEffectiveness(data: InsertRecommendationEffectiveness): Promise<RecommendationEffectivenessRecord> {
+    const [eff] = await db.insert(recommendationEffectiveness).values(data).returning();
+    return eff;
+  }
+
+  async getRecommendationEffectiveness(tenantId: number, filters?: { entityType?: string }): Promise<RecommendationEffectivenessRecord[]> {
+    const conditions = [eq(recommendationEffectiveness.tenantId, tenantId)];
+    if (filters?.entityType) conditions.push(eq(recommendationEffectiveness.entityType, filters.entityType));
+    return db.select().from(recommendationEffectiveness).where(and(...conditions)).orderBy(desc(recommendationEffectiveness.measuredAt));
+  }
+
+  async createSecurityAccessEvent(data: InsertSecurityAccessEvent): Promise<SecurityAccessEvent> {
+    const [event] = await db.insert(securityAccessEvents).values(data).returning();
+    return event;
+  }
+
+  async getSecurityAccessEvents(filters?: { userId?: string; eventType?: string; limit?: number }): Promise<SecurityAccessEvent[]> {
+    const conditions: any[] = [];
+    if (filters?.userId) conditions.push(eq(securityAccessEvents.userId, filters.userId));
+    if (filters?.eventType) conditions.push(eq(securityAccessEvents.eventType, filters.eventType));
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    return db.select().from(securityAccessEvents).where(where).orderBy(desc(securityAccessEvents.createdAt)).limit(filters?.limit || 100);
+  }
+
+  async createBreakGlassSession(data: InsertBreakGlassSession): Promise<BreakGlassSession> {
+    const [session] = await db.insert(breakGlassSessions).values(data).returning();
+    return session;
+  }
+
+  async endBreakGlassSession(id: number, endedReason: string): Promise<BreakGlassSession> {
+    const [session] = await db.update(breakGlassSessions)
+      .set({ isActive: false, endedAt: new Date(), endedReason })
+      .where(eq(breakGlassSessions.id, id)).returning();
+    return session;
+  }
+
+  async getActiveBreakGlassSessions(): Promise<BreakGlassSession[]> {
+    return db.select().from(breakGlassSessions).where(eq(breakGlassSessions.isActive, true)).orderBy(desc(breakGlassSessions.startedAt));
+  }
+
+  async getBreakGlassSession(id: number): Promise<BreakGlassSession | undefined> {
+    const [session] = await db.select().from(breakGlassSessions).where(eq(breakGlassSessions.id, id));
+    return session;
+  }
+
+  async updateAuditLogHash(id: number, eventHash: string, prevHash: string | null): Promise<void> {
+    await db.update(auditLogs).set({ eventHash, prevHash }).where(eq(auditLogs.id, id));
+  }
+
+  async getLatestAuditLogHash(tenantId: number): Promise<string | null> {
+    const [latest] = await db.select({ eventHash: auditLogs.eventHash }).from(auditLogs)
+      .where(and(eq(auditLogs.tenantId, tenantId), sql`${auditLogs.eventHash} IS NOT NULL`))
+      .orderBy(desc(auditLogs.id)).limit(1);
+    return latest?.eventHash || null;
   }
 }
 

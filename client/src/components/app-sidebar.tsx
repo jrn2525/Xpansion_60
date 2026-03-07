@@ -30,6 +30,7 @@ import {
   Calendar,
   Radio,
   Megaphone,
+  Inbox,
 } from "lucide-react";
 import {
   Sidebar,
@@ -69,6 +70,7 @@ const navItems = [
 ];
 
 const operationsItems = [
+  { title: "Inbox", url: "/inbox", icon: Inbox },
   { title: "Actions", url: "/actions", icon: ListChecks },
   { title: "Goals", url: "/goals", icon: Target },
   { title: "Benchmarking", url: "/benchmarking", icon: Trophy },
