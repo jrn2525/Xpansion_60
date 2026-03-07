@@ -49,6 +49,10 @@ function getWeekKey(): string {
   return `${now.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
 }
 
+const RECOMPUTE_COOLDOWN_MS = 60_000;
+const riskRecomputeCooldown = new Map<number, number>();
+const effectivenessRecomputeCooldown = new Map<number, number>();
+
 export const intelligenceRouter = Router();
 
 intelligenceRouter.get("/tenants/:tenantId/risk/overview", isAuthenticated, async (req: any, res) => {
@@ -129,6 +133,12 @@ intelligenceRouter.post("/tenants/:tenantId/risk/recompute", isAuthenticated, as
   try {
     const tenantId = parseInt(req.params.tenantId);
     const hasAccess = await requireTenantAccess(req, res, tenantId); if (!hasAccess) return;
+    const lastRun = riskRecomputeCooldown.get(tenantId);
+    if (lastRun && Date.now() - lastRun < RECOMPUTE_COOLDOWN_MS) {
+      const waitSec = Math.ceil((RECOMPUTE_COOLDOWN_MS - (Date.now() - lastRun)) / 1000);
+      return res.status(429).json(err("RATE_LIMITED", `Please wait ${waitSec}s before recomputing risk`));
+    }
+    riskRecomputeCooldown.set(tenantId, Date.now());
     const count = await computeTenantRisk(tenantId);
     await audit(tenantId, req.user.claims.sub, "risk", tenantId.toString(), "risk_recomputed", { after: { snapshotsCreated: count } });
     res.json(ok({ snapshotsCreated: count }));
@@ -274,9 +284,12 @@ intelligenceRouter.post("/tenants/:tenantId/weekly-plans/generate", isAuthentica
 
 intelligenceRouter.post("/tenants/:tenantId/weekly-plans/:planId/approve", isAuthenticated, async (req: any, res) => {
   try {
+    const tenantId = parseInt(req.params.tenantId);
+    const hasAccess = await requireTenantAccess(req, res, tenantId); if (!hasAccess) return;
     const planId = parseInt(req.params.planId);
     const plan = await storage.getWeeklyPlan(planId);
     if (!plan) return res.status(404).json(err("NOT_FOUND", "Plan not found"));
+    if (plan.tenantId !== tenantId) return res.status(403).json(err("FORBIDDEN", "Plan does not belong to this tenant"));
     if (plan.status !== "draft") return res.status(400).json(err("INVALID_STATE", "Plan is not in draft state"));
 
     const updated = await storage.updateWeeklyPlan(planId, {
@@ -301,9 +314,12 @@ intelligenceRouter.post("/tenants/:tenantId/weekly-plans/:planId/approve", isAut
 
 intelligenceRouter.post("/tenants/:tenantId/weekly-plans/:planId/reject", isAuthenticated, async (req: any, res) => {
   try {
+    const tenantId = parseInt(req.params.tenantId);
+    const hasAccess = await requireTenantAccess(req, res, tenantId); if (!hasAccess) return;
     const planId = parseInt(req.params.planId);
     const plan = await storage.getWeeklyPlan(planId);
     if (!plan) return res.status(404).json(err("NOT_FOUND", "Plan not found"));
+    if (plan.tenantId !== tenantId) return res.status(403).json(err("FORBIDDEN", "Plan does not belong to this tenant"));
     if (plan.status !== "draft") return res.status(400).json(err("INVALID_STATE", "Plan is not in draft state"));
 
     const updated = await storage.updateWeeklyPlan(planId, {
@@ -329,7 +345,12 @@ intelligenceRouter.post("/tenants/:tenantId/weekly-plans/:planId/reject", isAuth
 
 intelligenceRouter.get("/tenants/:tenantId/weekly-plans/:planId/items", isAuthenticated, async (req: any, res) => {
   try {
+    const tenantId = parseInt(req.params.tenantId);
+    const hasAccess = await requireTenantAccess(req, res, tenantId); if (!hasAccess) return;
     const planId = parseInt(req.params.planId);
+    const plan = await storage.getWeeklyPlan(planId);
+    if (!plan) return res.status(404).json(err("NOT_FOUND", "Plan not found"));
+    if (plan.tenantId !== tenantId) return res.status(403).json(err("FORBIDDEN", "Plan does not belong to this tenant"));
     const items = await storage.getWeeklyPlanItems(planId);
     res.json(ok(items));
   } catch (error: any) {
@@ -344,6 +365,7 @@ intelligenceRouter.post("/tenants/:tenantId/weekly-plans/:planId/push-actions", 
     const planId = parseInt(req.params.planId);
     const plan = await storage.getWeeklyPlan(planId);
     if (!plan) return res.status(404).json(err("NOT_FOUND", "Plan not found"));
+    if (plan.tenantId !== tenantId) return res.status(403).json(err("FORBIDDEN", "Plan does not belong to this tenant"));
     if (plan.status !== "approved") return res.status(400).json(err("INVALID_STATE", "Plan must be approved before pushing actions"));
 
     const items = await storage.getWeeklyPlanItems(planId);
@@ -462,6 +484,12 @@ intelligenceRouter.post("/tenants/:tenantId/playbooks/compute-effectiveness", is
   try {
     const tenantId = parseInt(req.params.tenantId);
     const hasAccess = await requireTenantAccess(req, res, tenantId); if (!hasAccess) return;
+    const lastRun = effectivenessRecomputeCooldown.get(tenantId);
+    if (lastRun && Date.now() - lastRun < RECOMPUTE_COOLDOWN_MS) {
+      const waitSec = Math.ceil((RECOMPUTE_COOLDOWN_MS - (Date.now() - lastRun)) / 1000);
+      return res.status(429).json(err("RATE_LIMITED", `Please wait ${waitSec}s before recomputing effectiveness`));
+    }
+    effectivenessRecomputeCooldown.set(tenantId, Date.now());
     const applications = await storage.getPlaybookApplications(tenantId);
     let computed = 0;
 
@@ -599,6 +627,15 @@ intelligenceRouter.post("/admin/executive-reports/:tenantId/run", isAuthenticate
       summaryMarkdown: summaryLines.join("\n"),
     });
 
+    await storage.createAutomationDecisionLog({
+      tenantId,
+      decisionType: "report_generated",
+      entityType: "executive_report",
+      entityId: report.id.toString(),
+      actorUserId: userId,
+      reason: `Executive report generated for week ${weekKey}`,
+      detailsJson: JSON.stringify({ weekKey, improved: improved.length, worsened: worsened.length, risks: risksData.length, moves: recommendedMoves.length }),
+    });
     await audit(tenantId, userId, "executive_report", report.id.toString(), "report_generated", { after: { weekKey } });
     res.json(ok(report));
   } catch (error: any) {
