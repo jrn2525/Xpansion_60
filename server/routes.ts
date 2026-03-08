@@ -29,25 +29,34 @@ import { generateForecast, detectAnomalies } from "./services/analytics";
 import { startScheduler } from "./services/scheduler";
 import { startJobProcessor } from "./services/job-queue";
 import { tracingMiddleware } from "./middleware/tracing";
+import { parseIntOrThrow, ValidationError } from "./utils";
+
+function ok(data: any) {
+  return { ok: true, data };
+}
+
+function err(code: string, message: string, details?: any) {
+  return { ok: false, error: { code, message, ...(details ? { details } : {}) } };
+}
 
 function zodError(res: any, error: z.ZodError) {
   const validationError = fromZodError(error);
-  return res.status(400).json({ message: validationError.toString(), errors: error.errors });
+  return res.status(400).json(err("VALIDATION_ERROR", validationError.toString(), error.errors));
 }
 
 async function requireTenantAccess(req: any, res: any, tenantId: number, requiredRoles?: string[]) {
   const userId = req.user?.claims?.sub;
   if (!userId) {
-    res.status(401).json({ message: "Unauthorized" });
+    res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
     return false;
   }
   const tu = await storage.getTenantUserByUserId(tenantId, userId);
   if (!tu) {
-    res.status(403).json({ message: "Forbidden: no access to this tenant" });
+    res.status(403).json(err("FORBIDDEN", "Forbidden: no access to this tenant"));
     return false;
   }
   if (requiredRoles && !requiredRoles.includes(tu.role)) {
-    res.status(403).json({ message: `Forbidden: requires role ${requiredRoles.join(" or ")}` });
+    res.status(403).json(err("FORBIDDEN", `Forbidden: requires role ${requiredRoles.join(" or ")}`));
     return false;
   }
   return tu;
@@ -68,18 +77,13 @@ export async function registerRoutes(
       const userTenants = await storage.getUserTenants(userId);
       const hasOwnerRole = userTenants.some((tu) => tu.role === "owner" || tu.role === "admin");
       if (!hasOwnerRole) {
-        return res.status(403).json({
-          ok: false,
-          error: { code: "FORBIDDEN", message: "Admin access required" },
-        });
+        return res.status(403).json(err("FORBIDDEN", "Admin access required"));
       }
       const tenants = await storage.getTenants();
-      res.json({ ok: true, data: tenants });
+      res.json(ok(tenants));
     } catch (error: any) {
-      res.status(500).json({
-        ok: false,
-        error: { code: "INTERNAL_ERROR", message: error.message },
-      });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
@@ -87,9 +91,10 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const userTenants = await storage.getUserTenants(userId);
-      res.json(userTenants.map((ut) => ut.tenant));
+      res.json(ok(userTenants.map((ut) => ut.tenant)));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
@@ -100,238 +105,253 @@ export async function registerRoutes(
       const tenant = await storage.createTenant(parsed.data);
       const userId = req.user.claims.sub;
       await storage.createTenantUser({ tenantId: tenant.id, userId, role: "owner" });
-      res.status(201).json(tenant);
+      res.status(201).json(ok(tenant));
     } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
       if (error.message?.includes("unique")) {
-        return res.status(409).json({ message: "Tenant slug already exists" });
+        return res.status(409).json(err("CONFLICT", "Tenant slug already exists"));
       }
-      res.status(500).json({ message: error.message });
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
       const tenant = await storage.getTenant(tenantId);
-      if (!tenant) return res.status(404).json({ message: "Tenant not found" });
-      res.json(tenant);
+      if (!tenant) return res.status(404).json(err("NOT_FOUND", "Tenant not found"));
+      res.json(ok(tenant));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.patch("/api/tenants/:tenantId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const parsed = insertTenantSchema.partial().safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed.error);
       const tenant = await storage.updateTenant(tenantId, parsed.data);
-      if (!tenant) return res.status(404).json({ message: "Tenant not found" });
-      res.json(tenant);
+      if (!tenant) return res.status(404).json(err("NOT_FOUND", "Tenant not found"));
+      res.json(ok(tenant));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.delete("/api/tenants/:tenantId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner"]);
       if (!hasAccess) return;
       const deleted = await storage.deleteTenant(tenantId);
-      if (!deleted) return res.status(404).json({ message: "Tenant not found" });
-      res.json({ success: true });
+      if (!deleted) return res.status(404).json(err("NOT_FOUND", "Tenant not found"));
+      res.json(ok({ success: true }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/users", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
       const users = await storage.getTenantUsers(tenantId);
-      res.json(users);
+      res.json(ok(users));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/locations", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
       const locs = await storage.getLocations(tenantId);
-      res.json(locs);
+      res.json(ok(locs));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.post("/api/tenants/:tenantId/locations", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const parsed = insertLocationSchema.safeParse({ ...req.body, tenantId });
       if (!parsed.success) return zodError(res, parsed.error);
       const location = await storage.createLocation(parsed.data);
-      res.status(201).json(location);
+      res.status(201).json(ok(location));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.patch("/api/tenants/:tenantId/locations/:locationId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const locationId = parseInt(req.params.locationId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const locationId = parseIntOrThrow(req.params.locationId, "locationId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const location = await storage.getLocation(locationId);
       if (!location || location.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Location not found" });
+        return res.status(404).json(err("NOT_FOUND", "Location not found"));
       }
       const parsed = insertLocationSchema.partial().safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed.error);
       const updated = await storage.updateLocation(locationId, parsed.data);
-      res.json(updated);
+      res.json(ok(updated));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.delete("/api/tenants/:tenantId/locations/:locationId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const locationId = parseInt(req.params.locationId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const locationId = parseIntOrThrow(req.params.locationId, "locationId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const location = await storage.getLocation(locationId);
       if (!location || location.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Location not found" });
+        return res.status(404).json(err("NOT_FOUND", "Location not found"));
       }
       await storage.deleteLocation(locationId);
-      res.json({ success: true });
+      res.json(ok({ success: true }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/metrics", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
       const metrics = await storage.getMetricDefinitions(tenantId);
-      res.json(metrics);
+      res.json(ok(metrics));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.post("/api/tenants/:tenantId/metrics", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const parsed = insertMetricDefinitionSchema.safeParse({ ...req.body, tenantId });
       if (!parsed.success) return zodError(res, parsed.error);
       const metric = await storage.createMetricDefinition(parsed.data);
-      res.status(201).json(metric);
+      res.status(201).json(ok(metric));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.patch("/api/tenants/:tenantId/metrics/:metricId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const metric = await storage.getMetricDefinition(metricId);
       if (!metric || metric.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Metric not found" });
+        return res.status(404).json(err("NOT_FOUND", "Metric not found"));
       }
       const parsed = insertMetricDefinitionSchema.partial().safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed.error);
       const updated = await storage.updateMetricDefinition(metricId, parsed.data);
-      res.json(updated);
+      res.json(ok(updated));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.patch("/api/tenants/:tenantId/metrics/:metricId/activate", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const metric = await storage.getMetricDefinition(metricId);
       if (!metric || metric.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Metric not found" });
+        return res.status(404).json(err("NOT_FOUND", "Metric not found"));
       }
       const schema = z.object({ isActive: z.boolean() });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed.error);
       const updated = await storage.updateMetricDefinition(metricId, { isActive: parsed.data.isActive });
-      res.json(updated);
+      res.json(ok(updated));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.delete("/api/tenants/:tenantId/metrics/:metricId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const metric = await storage.getMetricDefinition(metricId);
       if (!metric || metric.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Metric not found" });
+        return res.status(404).json(err("NOT_FOUND", "Metric not found"));
       }
       await storage.deleteMetricDefinition(metricId);
-      res.json({ success: true });
+      res.json(ok({ success: true }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/metrics/:metricId/thresholds", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
       const metric = await storage.getMetricDefinition(metricId);
       if (!metric || metric.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Metric not found" });
+        return res.status(404).json(err("NOT_FOUND", "Metric not found"));
       }
       const thresholds = await storage.getMetricThresholds(metricId);
-      res.json(thresholds);
+      res.json(ok(thresholds));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.post("/api/tenants/:tenantId/metrics/:metricId/thresholds", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const metric = await storage.getMetricDefinition(metricId);
       if (!metric || metric.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Metric not found" });
+        return res.status(404).json(err("NOT_FOUND", "Metric not found"));
       }
       const parsed = insertMetricThresholdSchema.safeParse({
         ...req.body,
@@ -339,27 +359,28 @@ export async function registerRoutes(
       });
       if (!parsed.success) return zodError(res, parsed.error);
       const threshold = await storage.createMetricThreshold(parsed.data);
-      res.status(201).json(threshold);
+      res.status(201).json(ok(threshold));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.put("/api/tenants/:tenantId/metrics/:metricId/thresholds", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const metric = await storage.getMetricDefinition(metricId);
       if (!metric || metric.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Metric not found" });
+        return res.status(404).json(err("NOT_FOUND", "Metric not found"));
       }
       const schema = z.array(
         z.object({
           band: z.string(),
-          minValue: z.number(),
-          maxValue: z.number(),
+          minValue: z.coerce.number(),
+          maxValue: z.coerce.number(),
           color: z.string().optional(),
         })
       );
@@ -374,61 +395,65 @@ export async function registerRoutes(
         });
         thresholds.push(threshold);
       }
-      res.json(thresholds);
+      res.json(ok(thresholds));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.delete("/api/tenants/:tenantId/metrics/:metricId/thresholds/:thresholdId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const metric = await storage.getMetricDefinition(metricId);
       if (!metric || metric.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Metric not found" });
+        return res.status(404).json(err("NOT_FOUND", "Metric not found"));
       }
-      await storage.deleteMetricThreshold(parseInt(req.params.thresholdId));
-      res.json({ success: true });
+      await storage.deleteMetricThreshold(parseIntOrThrow(req.params.thresholdId, "thresholdId"));
+      res.json(ok({ success: true }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/scorecards", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
       const scorecards = await storage.getScorecardTemplates(tenantId);
-      res.json(scorecards);
+      res.json(ok(scorecards));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/scorecards/:scorecardId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const scorecardId = parseInt(req.params.scorecardId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const scorecardId = parseIntOrThrow(req.params.scorecardId, "scorecardId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
       const scorecard = await storage.getScorecardTemplate(scorecardId);
       if (!scorecard || scorecard.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Scorecard not found" });
+        return res.status(404).json(err("NOT_FOUND", "Scorecard not found"));
       }
       const metrics = await storage.getScorecardMetrics(scorecardId);
-      res.json({ ...scorecard, metrics });
+      res.json(ok({ ...scorecard, metrics }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.post("/api/tenants/:tenantId/scorecards", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const { metrics, ...templateData } = req.body;
@@ -439,7 +464,7 @@ export async function registerRoutes(
         for (const m of metrics) {
           const metricDef = await storage.getMetricDefinition(m.metricDefinitionId);
           if (!metricDef || metricDef.tenantId !== tenantId) {
-            return res.status(400).json({ message: `Metric ${m.metricDefinitionId} not found in this tenant` });
+            return res.status(400).json(err("NOT_FOUND", `Metric ${m.metricDefinitionId} not found in this tenant`));
           }
           await storage.createScorecardMetric({
             scorecardTemplateId: template.id,
@@ -449,21 +474,22 @@ export async function registerRoutes(
         }
       }
       const allMetrics = await storage.getScorecardMetrics(template.id);
-      res.status(201).json({ ...template, metrics: allMetrics });
+      res.status(201).json(ok({ ...template, metrics: allMetrics }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.patch("/api/tenants/:tenantId/scorecards/:scorecardId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const scorecardId = parseInt(req.params.scorecardId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const scorecardId = parseIntOrThrow(req.params.scorecardId, "scorecardId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const scorecard = await storage.getScorecardTemplate(scorecardId);
       if (!scorecard || scorecard.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Scorecard not found" });
+        return res.status(404).json(err("NOT_FOUND", "Scorecard not found"));
       }
       const { metrics, ...templateData } = req.body;
       if (Object.keys(templateData).length > 0) {
@@ -475,7 +501,7 @@ export async function registerRoutes(
         for (const m of metrics) {
           const metricDef = await storage.getMetricDefinition(m.metricDefinitionId);
           if (!metricDef || metricDef.tenantId !== tenantId) {
-            return res.status(400).json({ message: `Metric ${m.metricDefinitionId} not found in this tenant` });
+            return res.status(400).json(err("NOT_FOUND", `Metric ${m.metricDefinitionId} not found in this tenant`));
           }
         }
         await storage.deleteScorecardMetricsByTemplate(scorecardId);
@@ -489,38 +515,40 @@ export async function registerRoutes(
       }
       const updated = await storage.getScorecardTemplate(scorecardId);
       const allMetrics = await storage.getScorecardMetrics(scorecardId);
-      res.json({ ...updated, metrics: allMetrics });
+      res.json(ok({ ...updated, metrics: allMetrics }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.delete("/api/tenants/:tenantId/scorecards/:scorecardId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const scorecardId = parseInt(req.params.scorecardId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const scorecardId = parseIntOrThrow(req.params.scorecardId, "scorecardId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!hasAccess) return;
       const scorecard = await storage.getScorecardTemplate(scorecardId);
       if (!scorecard || scorecard.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Scorecard not found" });
+        return res.status(404).json(err("NOT_FOUND", "Scorecard not found"));
       }
       await storage.deleteScorecardTemplate(scorecardId);
-      res.json({ success: true });
+      res.json(ok({ success: true }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.post("/api/tenants/:tenantId/scorecards/:scorecardId/run", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const scorecardId = parseInt(req.params.scorecardId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const scorecardId = parseIntOrThrow(req.params.scorecardId, "scorecardId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
 
       const runSchema = z.object({
-        locationId: z.number(),
+        locationId: z.coerce.number(),
         period: z.enum(["month", "quarter", "bi-year", "year"]),
         periodStart: z.string().transform((s) => new Date(s)),
         periodEnd: z.string().transform((s) => new Date(s)),
@@ -532,17 +560,17 @@ export async function registerRoutes(
 
       const location = await storage.getLocation(locationId);
       if (!location || location.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Location not found in this tenant" });
+        return res.status(404).json(err("NOT_FOUND", "Location not found in this tenant"));
       }
 
       const scorecard = await storage.getScorecardTemplate(scorecardId);
       if (!scorecard || scorecard.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Scorecard not found" });
+        return res.status(404).json(err("NOT_FOUND", "Scorecard not found"));
       }
 
       const scorecardMetricsList = await storage.getScorecardMetrics(scorecardId);
       if (scorecardMetricsList.length === 0) {
-        return res.status(400).json({ message: "Scorecard has no metrics defined" });
+        return res.status(400).json(err("VALIDATION_ERROR", "Scorecard has no metrics defined"));
       }
 
       const run = await storage.createScoreRun({
@@ -612,76 +640,80 @@ export async function registerRoutes(
       await storage.updateScoreRun(run.id, { totalScore, band: overallBand });
 
       const finalRun = { ...run, totalScore, band: overallBand, details };
-      res.status(201).json(finalRun);
+      res.status(201).json(ok(finalRun));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/scorecards/:scorecardId/runs", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const scorecardId = parseInt(req.params.scorecardId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const scorecardId = parseIntOrThrow(req.params.scorecardId, "scorecardId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
       const scorecard = await storage.getScorecardTemplate(scorecardId);
       if (!scorecard || scorecard.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Scorecard not found" });
+        return res.status(404).json(err("NOT_FOUND", "Scorecard not found"));
       }
       const runs = await storage.getScoreRuns(scorecardId);
-      res.json(runs);
+      res.json(ok(runs));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/scorecards/:scorecardId/runs/:runId", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const scorecardId = parseInt(req.params.scorecardId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const scorecardId = parseIntOrThrow(req.params.scorecardId, "scorecardId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
       const scorecard = await storage.getScorecardTemplate(scorecardId);
       if (!scorecard || scorecard.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Scorecard not found" });
+        return res.status(404).json(err("NOT_FOUND", "Scorecard not found"));
       }
-      const runId = parseInt(req.params.runId);
+      const runId = parseIntOrThrow(req.params.runId, "runId");
       const run = await storage.getScoreRun(runId);
       if (!run || run.scorecardTemplateId !== scorecardId) {
-        return res.status(404).json({ message: "Score run not found" });
+        return res.status(404).json(err("NOT_FOUND", "Score run not found"));
       }
       const details = await storage.getScoreRunDetails(runId);
-      res.json({ ...run, details });
+      res.json(ok({ ...run, details }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.post("/api/tenants/:tenantId/metric-values", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin", "manager"]);
       if (!hasAccess) return;
       const parsed = insertMetricValueSchema.safeParse(req.body);
       if (!parsed.success) return zodError(res, parsed.error);
       const metric = await storage.getMetricDefinition(parsed.data.metricDefinitionId);
       if (!metric || metric.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Metric not found in this tenant" });
+        return res.status(404).json(err("NOT_FOUND", "Metric not found in this tenant"));
       }
       const location = await storage.getLocation(parsed.data.locationId);
       if (!location || location.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Location not found in this tenant" });
+        return res.status(404).json(err("NOT_FOUND", "Location not found in this tenant"));
       }
       const value = await storage.createMetricValue(parsed.data);
-      res.status(201).json(value);
+      res.status(201).json(ok(value));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/trends", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
 
@@ -699,11 +731,11 @@ export async function registerRoutes(
 
       const metric = await storage.getMetricDefinition(metricId);
       if (!metric || metric.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Metric not found" });
+        return res.status(404).json(err("NOT_FOUND", "Metric not found"));
       }
       const location = await storage.getLocation(locationId);
       if (!location || location.tenantId !== tenantId) {
-        return res.status(404).json({ message: "Location not found" });
+        return res.status(404).json(err("NOT_FOUND", "Location not found"));
       }
 
       const now = new Date();
@@ -728,15 +760,16 @@ export async function registerRoutes(
       });
 
       const thresholds = await storage.getMetricThresholds(metricId);
-      res.json({ metric, location, period, thresholds, data: trendData });
+      res.json(ok({ metric, location, period, thresholds, data: trendData }));
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/portfolio/overview", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const access = await requireTenantAccess(req, res, tenantId);
       if (!access) return;
 
@@ -796,9 +829,7 @@ export async function registerRoutes(
       const portfolioScore = locationCount > 0 ? Math.round(totalScore / locationCount) : 0;
       const highCriticalAlerts = alertEvents.filter(e => ["high", "critical"].includes(e.severity)).length;
 
-      res.json({
-        ok: true,
-        data: {
+      res.json(ok({
           portfolioScore,
           locationCount,
           improvingCount,
@@ -806,16 +837,16 @@ export async function registerRoutes(
           openAlerts: alertEvents.length,
           highCriticalAlerts,
           locationScores,
-        },
-      });
+      }));
     } catch (error: any) {
-      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/portfolio/rankings", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const access = await requireTenantAccess(req, res, tenantId);
       if (!access) return;
 
@@ -858,15 +889,16 @@ export async function registerRoutes(
       const top = rankings.slice(0, 5);
       const bottom = [...rankings].sort((a, b) => a.delta - b.delta).slice(0, 5);
 
-      res.json({ ok: true, data: { rankings, top, bottom } });
+      res.json(ok({ rankings, top, bottom }));
     } catch (error: any) {
-      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/portfolio/risk", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const access = await requireTenantAccess(req, res, tenantId);
       if (!access) return;
 
@@ -913,92 +945,104 @@ export async function registerRoutes(
       }
 
       riskLocations.sort((a, b) => (b.riskCount + b.openAlerts) - (a.riskCount + a.openAlerts));
-      res.json({ ok: true, data: { riskLocations } });
+      res.json(ok({ riskLocations }));
     } catch (error: any) {
-      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/metrics/:metricId/forecast", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
-      const locationId = parseInt(req.query.locationId as string);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
+      const locationId = parseIntOrThrow(req.query.locationId as string, "locationId");
       const periods = parseInt(req.query.periods as string) || 3;
 
       const access = await requireTenantAccess(req, res, tenantId);
       if (!access) return;
 
-      if (!locationId) return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "locationId is required" } });
+      if (!locationId) return res.status(400).json(err("VALIDATION_ERROR", "locationId is required"));
 
       const existing = await storage.getMetricForecasts(metricId, locationId);
       if (existing.length > 0) {
-        return res.json({ ok: true, data: existing });
+        return res.json(ok(existing));
       }
 
       const forecasts = await generateForecast(metricId, locationId, periods);
-      res.json({ ok: true, data: forecasts });
+      res.json(ok(forecasts));
     } catch (error: any) {
-      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.post("/api/tenants/:tenantId/metrics/:metricId/forecast", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
-      const { locationId, periods } = req.body;
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
+
+      const forecastBodySchema = z.object({
+        locationId: z.coerce.number({ required_error: "locationId is required" }),
+        periods: z.coerce.number().int().min(1).max(24).optional(),
+      });
+      const parsed = forecastBodySchema.safeParse(req.body);
+      if (!parsed.success) return zodError(res, parsed.error);
 
       const access = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!access) return;
 
-      if (!locationId) return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "locationId is required" } });
-
-      const forecasts = await generateForecast(metricId, locationId, periods || 3);
-      res.json({ ok: true, data: forecasts });
+      const forecasts = await generateForecast(metricId, parsed.data.locationId, parsed.data.periods || 3);
+      res.json(ok(forecasts));
     } catch (error: any) {
-      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.get("/api/tenants/:tenantId/metrics/:metricId/anomalies", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
-      const locationId = parseInt(req.query.locationId as string);
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
+      const locationId = parseIntOrThrow(req.query.locationId as string, "locationId");
 
       const access = await requireTenantAccess(req, res, tenantId);
       if (!access) return;
 
-      if (!locationId) return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "locationId is required" } });
+      if (!locationId) return res.status(400).json(err("VALIDATION_ERROR", "locationId is required"));
 
       const existing = await storage.getMetricAnomalies(metricId, locationId);
       if (existing.length > 0) {
-        return res.json({ ok: true, data: existing });
+        return res.json(ok(existing));
       }
 
       const anomalies = await detectAnomalies(metricId, locationId);
-      res.json({ ok: true, data: anomalies });
+      res.json(ok(anomalies));
     } catch (error: any) {
-      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 
   app.post("/api/tenants/:tenantId/metrics/:metricId/anomalies/detect", isAuthenticated, async (req: any, res) => {
     try {
-      const tenantId = parseInt(req.params.tenantId);
-      const metricId = parseInt(req.params.metricId);
-      const { locationId } = req.body;
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const metricId = parseIntOrThrow(req.params.metricId, "metricId");
+
+      const anomalyBodySchema = z.object({
+        locationId: z.coerce.number({ required_error: "locationId is required" }),
+      });
+      const parsed = anomalyBodySchema.safeParse(req.body);
+      if (!parsed.success) return zodError(res, parsed.error);
 
       const access = await requireTenantAccess(req, res, tenantId, ["owner", "admin"]);
       if (!access) return;
 
-      if (!locationId) return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "locationId is required" } });
-
-      const anomalies = await detectAnomalies(metricId, locationId);
-      res.json({ ok: true, data: anomalies });
+      const anomalies = await detectAnomalies(metricId, parsed.data.locationId);
+      res.json(ok(anomalies));
     } catch (error: any) {
-      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
     }
   });
 

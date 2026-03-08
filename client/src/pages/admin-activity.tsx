@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useEntityLookup } from "@/hooks/use-entity-lookup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,7 @@ const PAGE_SIZE = 50;
 
 function TenantActivityTab() {
   const { activeTenantId } = useTenantStore();
+  const { resolveUser } = useEntityLookup();
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>("");
   const [selectedLog, setSelectedLog] = useState<any>(null);
 
@@ -153,7 +155,7 @@ function TenantActivityTab() {
                   </TableCell>
                   <TableCell className="font-mono text-sm">{log.entityId}</TableCell>
                   <TableCell className="flex items-center gap-1">
-                    <User className="h-3 w-3" />{log.actorUserId?.slice(0, 12)}...
+                    <User className="h-3 w-3" />{resolveUser(log.actorUserId)}
                   </TableCell>
                   <TableCell>
                     {(log.beforeJson || log.afterJson) && (
@@ -184,6 +186,7 @@ function TenantActivityTab() {
 }
 
 function SystemActivityTab() {
+  const { resolveUser, resolveTenant, users } = useEntityLookup();
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>("");
   const [actionFilter, setActionFilter] = useState<string>("");
   const [actorFilter, setActorFilter] = useState<string>("");
@@ -271,13 +274,18 @@ function SystemActivityTab() {
             </div>
 
             <div>
-              <Label className="mb-1 block text-xs text-muted-foreground">Actor User ID</Label>
-              <Input
-                value={actorFilter}
-                onChange={(e) => setActorFilter(e.target.value)}
-                placeholder="User ID..."
-                data-testid="filter-actor"
-              />
+              <Label className="mb-1 block text-xs text-muted-foreground">Actor</Label>
+              <Select value={actorFilter || "all"} onValueChange={(v) => setActorFilter(v === "all" ? "" : v)}>
+                <SelectTrigger data-testid="filter-actor">
+                  <SelectValue placeholder="All actors" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All actors</SelectItem>
+                  {users.map((u) => (
+                    <SelectItem key={u.userId} value={u.userId}>{u.username || u.userId} ({u.role})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
@@ -341,7 +349,7 @@ function SystemActivityTab() {
                       <TableCell data-testid={`text-actor-${log.id}`}>
                         <span className="flex items-center gap-1 text-sm">
                           <User className="h-3 w-3 text-muted-foreground" />
-                          <span className="font-mono">{log.actorUserId?.length > 16 ? log.actorUserId.slice(0, 16) + "..." : log.actorUserId}</span>
+                          <span>{resolveUser(log.actorUserId)}</span>
                         </span>
                       </TableCell>
                       <TableCell>
@@ -358,7 +366,7 @@ function SystemActivityTab() {
                         {log.entityId}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground" data-testid={`text-tenant-${log.id}`}>
-                        {log.tenantId || "—"}
+                        {resolveTenant(log.tenantId)}
                       </TableCell>
                       <TableCell>
                         {(log.beforeJson || log.afterJson) && (

@@ -9,41 +9,53 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import NotFound from "@/pages/not-found";
-import LandingPage from "@/pages/landing";
-import DashboardPage from "@/pages/dashboard";
-import TenantsPage from "@/pages/tenants";
-import LocationsPage from "@/pages/locations";
-import MetricsPage from "@/pages/metrics";
-import ScorecardsPage from "@/pages/scorecards";
-import TrendsPage from "@/pages/trends";
-import AdminImportsPage from "@/pages/admin-imports";
-import AdminAlertsPage from "@/pages/admin-alerts";
-import AdminReportsPage from "@/pages/admin-reports";
 import { ErrorBoundary } from "@/components/error-boundary";
-import AdminNotificationsPage from "@/pages/admin-notifications";
-import AdminDataQualityPage from "@/pages/admin-data-quality";
-import PortfolioPage from "@/pages/portfolio";
-import CommandCenterPage from "@/pages/command-center";
-import ActionsPage from "@/pages/actions";
-import GoalsPage from "@/pages/goals";
-import BenchmarkingPage from "@/pages/benchmarking";
-import PlaybooksPage from "@/pages/playbooks";
-import AdminDigestsPage from "@/pages/admin-digests";
-import AdminSecurityPage from "@/pages/admin-security";
-import AdminActivityPage from "@/pages/admin-activity";
-import AdminOpsPage from "@/pages/admin-ops";
-import RiskPage from "@/pages/risk";
-import WeeklyPlansPage from "@/pages/weekly-plans";
-import SuperadminTowerPage from "@/pages/superadmin-tower";
-import CampaignsPage from "@/pages/campaigns";
-import InboxPage from "@/pages/inbox";
-import OnboardingPage from "@/pages/onboarding";
-import DailyBriefPage from "@/pages/daily-brief";
+
+const NotFound = lazy(() => import("@/pages/not-found"));
+const LandingPage = lazy(() => import("@/pages/landing"));
+const DashboardPage = lazy(() => import("@/pages/dashboard"));
+const TenantsPage = lazy(() => import("@/pages/tenants"));
+const LocationsPage = lazy(() => import("@/pages/locations"));
+const MetricsPage = lazy(() => import("@/pages/metrics"));
+const ScorecardsPage = lazy(() => import("@/pages/scorecards"));
+const TrendsPage = lazy(() => import("@/pages/trends"));
+const AdminImportsPage = lazy(() => import("@/pages/admin-imports"));
+const AdminAlertsPage = lazy(() => import("@/pages/admin-alerts"));
+const AdminReportsPage = lazy(() => import("@/pages/admin-reports"));
+const AdminNotificationsPage = lazy(() => import("@/pages/admin-notifications"));
+const AdminDataQualityPage = lazy(() => import("@/pages/admin-data-quality"));
+const PortfolioPage = lazy(() => import("@/pages/portfolio"));
+const CommandCenterPage = lazy(() => import("@/pages/command-center"));
+const ActionsPage = lazy(() => import("@/pages/actions"));
+const GoalsPage = lazy(() => import("@/pages/goals"));
+const BenchmarkingPage = lazy(() => import("@/pages/benchmarking"));
+const PlaybooksPage = lazy(() => import("@/pages/playbooks"));
+const AdminDigestsPage = lazy(() => import("@/pages/admin-digests"));
+const AdminSecurityPage = lazy(() => import("@/pages/admin-security"));
+const AdminActivityPage = lazy(() => import("@/pages/admin-activity"));
+const AdminOpsPage = lazy(() => import("@/pages/admin-ops"));
+const RiskPage = lazy(() => import("@/pages/risk"));
+const WeeklyPlansPage = lazy(() => import("@/pages/weekly-plans"));
+const SuperadminTowerPage = lazy(() => import("@/pages/superadmin-tower"));
+const CampaignsPage = lazy(() => import("@/pages/campaigns"));
+const InboxPage = lazy(() => import("@/pages/inbox"));
+const OnboardingPage = lazy(() => import("@/pages/onboarding"));
+const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
+
+function LoadingSkeleton() {
+  return (
+    <div className="flex items-center justify-center h-full p-6" data-testid="loading-skeleton">
+      <div className="space-y-4 text-center">
+        <Logo className="h-10 w-auto mx-auto" />
+        <Skeleton className="h-4 w-32 mx-auto" />
+      </div>
+    </div>
+  );
+}
 
 const routeTitles: Record<string, string> = {
   "/": "Daily Brief | Xpansion Console",
@@ -138,7 +150,9 @@ function AuthenticatedLayout() {
           </header>
           <main className="flex-1 overflow-auto">
             <ErrorBoundary>
-              <AuthenticatedRouter />
+              <Suspense fallback={<LoadingSkeleton />}>
+                <AuthenticatedRouter />
+              </Suspense>
             </ErrorBoundary>
           </main>
         </div>
@@ -197,7 +211,7 @@ function AppContent() {
   }
 
   if (!user) {
-    return <ErrorBoundary><LandingPage /></ErrorBoundary>;
+    return <ErrorBoundary><Suspense fallback={<LoadingSkeleton />}><LandingPage /></Suspense></ErrorBoundary>;
   }
 
   return (

@@ -137,3 +137,19 @@ Five workstreams to improve onboarding, daily usage, alert quality, import relia
 - Reusable `Logo` component (`client/src/components/logo.tsx`) selects dark or light variant based on active theme
 - Used in sidebar header, landing page nav/footer, onboarding header, and loading splash
 - Assets: `XConsole_transparent.png` (white text, for dark mode), `XConsole_light_transparent.png` (black text, for light mode)
+
+### API Hardening
+- **Standardized response envelope**: All API routes use `ok(data)` and `err(code, message)` helpers. `routes.ts`, `phase5-routes.ts`, `admin-routes.ts`, `onboarding-routes.ts` all follow `{ok: true, data}` / `{ok: false, error: {code, message}}` format.
+- **parseInt NaN guards**: `server/utils.ts` exports `parseIntOrThrow(value, paramName)` — throws `ValidationError` (400) on NaN. Applied across all route files (~100 occurrences).
+- **Zod body validation**: All routes accepting `req.body` now validate with inline Zod schemas before processing. 19 routes across 4 files validated.
+
+### Route-based Code Splitting
+- All 30 page components in `App.tsx` use `React.lazy(() => import(...))` for on-demand loading
+- `<Suspense fallback={<LoadingSkeleton />}>` wraps the router inside `<ErrorBoundary>`
+- Pages load as separate chunks on first navigation, reducing initial bundle size
+
+### Entity Lookup Hook
+- `client/src/hooks/use-entity-lookup.ts` provides `resolveUser()`, `resolveTenant()`, `resolveLocation()`, `resolveMetric()` name resolvers
+- Used across 6 admin pages to show human-readable names instead of raw IDs: data-quality, activity, tower, ops, security, alerts
+- Also provides `users`, `tenants`, `locations`, `metrics` arrays for building dropdowns
+- All admin ID text inputs replaced with searchable `<Select>` dropdowns (tower assign, alerts owner, activity actor filter, security force-logout/unlock)

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useEntityLookup } from "@/hooks/use-entity-lookup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +66,7 @@ const incidentSeverityColors: Record<string, string> = {
 
 export default function AdminSecurityPage() {
   const { toast } = useToast();
+  const { resolveUser, users } = useEntityLookup();
   const [selectedIncidentId, setSelectedIncidentId] = useState<number | null>(null);
   const [showIncidentModal, setShowIncidentModal] = useState(false);
   const [noteContent, setNoteContent] = useState("");
@@ -329,7 +331,7 @@ export default function AdminSecurityPage() {
                               {log.action}
                             </Badge>
                           </TableCell>
-                          <TableCell className="text-sm font-mono">{log.actorUserId?.slice(0, 16) || "—"}</TableCell>
+                          <TableCell className="text-sm">{resolveUser(log.actorUserId)}</TableCell>
                           <TableCell className="text-sm">{log.entityId || "—"}</TableCell>
                           <TableCell className="text-sm max-w-xs truncate">{log.afterJson ? (() => { try { const d = JSON.parse(log.afterJson); return d.ip || d.email || "—"; } catch { return "—"; } })() : "—"}</TableCell>
                         </TableRow>
@@ -410,7 +412,7 @@ export default function AdminSecurityPage() {
                         <TableRow key={block.id} data-testid={`row-ip-block-${block.id}`}>
                           <TableCell className="font-mono text-sm" data-testid={`text-ip-${block.id}`}>{block.ipAddress}</TableCell>
                           <TableCell className="text-sm max-w-xs truncate">{block.reason || "—"}</TableCell>
-                          <TableCell className="text-sm font-mono">{block.blockedBy?.slice(0, 12) || "—"}</TableCell>
+                          <TableCell className="text-sm">{resolveUser(block.blockedBy)}</TableCell>
                           <TableCell className="whitespace-nowrap text-sm">{block.createdAt ? new Date(block.createdAt).toLocaleString() : "—"}</TableCell>
                           <TableCell className="whitespace-nowrap text-sm">
                             {block.expiresAt ? new Date(block.expiresAt).toLocaleString() : <Badge variant="outline">Permanent</Badge>}
@@ -535,13 +537,18 @@ export default function AdminSecurityPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <Label>User ID</Label>
-                  <Input
-                    value={forceLogoutUserId}
-                    onChange={(e) => setForceLogoutUserId(e.target.value)}
-                    placeholder="Enter user ID"
-                    data-testid="input-force-logout-user"
-                  />
+                  <Label>User</Label>
+                  <Select value={forceLogoutUserId || "none"} onValueChange={(v) => setForceLogoutUserId(v === "none" ? "" : v)}>
+                    <SelectTrigger data-testid="select-force-logout-user">
+                      <SelectValue placeholder="Select user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Select a user</SelectItem>
+                      {users.map((u) => (
+                        <SelectItem key={u.userId} value={u.userId}>{u.username || u.userId} ({u.role})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button
                   variant="destructive"
@@ -562,13 +569,18 @@ export default function AdminSecurityPage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
-                  <Label>User ID</Label>
-                  <Input
-                    value={unlockUserId}
-                    onChange={(e) => setUnlockUserId(e.target.value)}
-                    placeholder="Enter user ID"
-                    data-testid="input-unlock-user"
-                  />
+                  <Label>User</Label>
+                  <Select value={unlockUserId || "none"} onValueChange={(v) => setUnlockUserId(v === "none" ? "" : v)}>
+                    <SelectTrigger data-testid="select-unlock-user">
+                      <SelectValue placeholder="Select user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Select a user</SelectItem>
+                      {users.map((u) => (
+                        <SelectItem key={u.userId} value={u.userId}>{u.username || u.userId} ({u.role})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <Button
                   variant="outline"

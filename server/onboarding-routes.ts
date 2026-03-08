@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { storage } from "./storage";
 import { isAuthenticated } from "./replit_integrations/auth";
+import { z } from "zod";
+import { fromZodError } from "zod-validation-error";
+import { parseIntOrThrow, ValidationError } from "./utils";
 
 function ok(data: any) { return { ok: true, data }; }
 function err(code: string, message: string) { return { ok: false, error: { code, message } }; }
@@ -83,6 +86,7 @@ onboardingRouter.get("/onboarding/progress", isAuthenticated, async (req: any, r
       isComplete: progress?.isComplete || false,
     }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -92,8 +96,14 @@ onboardingRouter.put("/onboarding/progress", isAuthenticated, async (req: any, r
     const userId = req.user?.claims?.sub;
     if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
 
-    const { tenantId, currentStep, completedSteps } = req.body;
-    if (!tenantId) return res.status(400).json(err("BAD_REQUEST", "tenantId required"));
+    const progressSchema = z.object({
+      tenantId: z.coerce.number({ required_error: "tenantId required" }),
+      currentStep: z.coerce.number().int().min(0).optional(),
+      completedSteps: z.array(z.string()).optional(),
+    });
+    const parsed = progressSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { tenantId, currentStep, completedSteps } = parsed.data;
 
     const progress = await storage.upsertOnboardingProgress({
       tenantId,
@@ -107,6 +117,7 @@ onboardingRouter.put("/onboarding/progress", isAuthenticated, async (req: any, r
 
     res.json(ok(progress));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -116,8 +127,12 @@ onboardingRouter.post("/onboarding/complete", isAuthenticated, async (req: any, 
     const userId = req.user?.claims?.sub;
     if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
 
-    const { tenantId } = req.body;
-    if (!tenantId) return res.status(400).json(err("BAD_REQUEST", "tenantId required"));
+    const completeSchema = z.object({
+      tenantId: z.coerce.number({ required_error: "tenantId required" }),
+    });
+    const parsed = completeSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { tenantId } = parsed.data;
 
     const progress = await storage.upsertOnboardingProgress({
       tenantId,
@@ -131,6 +146,7 @@ onboardingRouter.post("/onboarding/complete", isAuthenticated, async (req: any, 
 
     res.json(ok(progress));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -140,8 +156,12 @@ onboardingRouter.post("/onboarding/starter-kpis", isAuthenticated, async (req: a
     const userId = req.user?.claims?.sub;
     if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
 
-    const { tenantId } = req.body;
-    if (!tenantId) return res.status(400).json(err("BAD_REQUEST", "tenantId required"));
+    const starterKpisSchema = z.object({
+      tenantId: z.coerce.number({ required_error: "tenantId required" }),
+    });
+    const parsed = starterKpisSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { tenantId } = parsed.data;
 
     const existingMetrics = await storage.getMetricDefinitions(tenantId);
     const createdMetrics = [];
@@ -177,6 +197,7 @@ onboardingRouter.post("/onboarding/starter-kpis", isAuthenticated, async (req: a
 
     res.json(ok({ metrics: createdMetrics }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -186,8 +207,12 @@ onboardingRouter.post("/onboarding/starter-scorecard", isAuthenticated, async (r
     const userId = req.user?.claims?.sub;
     if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
 
-    const { tenantId } = req.body;
-    if (!tenantId) return res.status(400).json(err("BAD_REQUEST", "tenantId required"));
+    const starterScorecardSchema = z.object({
+      tenantId: z.coerce.number({ required_error: "tenantId required" }),
+    });
+    const parsed = starterScorecardSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { tenantId } = parsed.data;
 
     const metrics = await storage.getMetricDefinitions(tenantId);
     if (metrics.length === 0) {
@@ -219,6 +244,7 @@ onboardingRouter.post("/onboarding/starter-scorecard", isAuthenticated, async (r
 
     res.json(ok({ scorecard }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -228,8 +254,12 @@ onboardingRouter.post("/onboarding/starter-alert", isAuthenticated, async (req: 
     const userId = req.user?.claims?.sub;
     if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
 
-    const { tenantId } = req.body;
-    if (!tenantId) return res.status(400).json(err("BAD_REQUEST", "tenantId required"));
+    const starterAlertSchema = z.object({
+      tenantId: z.coerce.number({ required_error: "tenantId required" }),
+    });
+    const parsed = starterAlertSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { tenantId } = parsed.data;
 
     const metrics = await storage.getMetricDefinitions(tenantId);
     const revenueMetric = metrics.find((m: any) => m.name === "Revenue");
@@ -273,6 +303,7 @@ onboardingRouter.post("/onboarding/starter-alert", isAuthenticated, async (req: 
 
     res.json(ok({ alertRule }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });

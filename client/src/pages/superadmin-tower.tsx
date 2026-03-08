@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useEntityLookup } from "@/hooks/use-entity-lookup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +97,7 @@ const riskLevelColors: Record<string, string> = {
 
 export default function SuperadminTowerPage() {
   const { toast } = useToast();
+  const { resolveUser, users } = useEntityLookup();
   const [sortBy, setSortBy] = useState("risk");
   const [riskFilter, setRiskFilter] = useState("all");
   const [interventionStatus, setInterventionStatus] = useState("all");
@@ -380,7 +382,7 @@ export default function SuperadminTowerPage() {
                         <Badge variant="secondary" data-testid={`badge-status-${item.id}`}>{item.status}</Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground" data-testid={`text-assigned-${item.id}`}>
-                        {item.assignedToUserId ? item.assignedToUserId.slice(0, 12) : "—"}
+                        {resolveUser(item.assignedToUserId)}
                       </TableCell>
                       <TableCell>
                         {item.status !== "resolved" && (
@@ -415,13 +417,18 @@ export default function SuperadminTowerPage() {
               <p className="text-sm text-muted-foreground" data-testid="text-assign-title">{assignDialog?.title}</p>
             </div>
             <div>
-              <p className="text-sm font-medium mb-1">Assign To User ID</p>
-              <Input
-                value={assignUserId}
-                onChange={(e) => setAssignUserId(e.target.value)}
-                placeholder="Enter user ID"
-                data-testid="input-assign-user-id"
-              />
+              <p className="text-sm font-medium mb-1">Assign To</p>
+              <Select value={assignUserId || "none"} onValueChange={(v) => setAssignUserId(v === "none" ? "" : v)}>
+                <SelectTrigger data-testid="select-assign-user">
+                  <SelectValue placeholder="Select a user" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {users.map((u) => (
+                    <SelectItem key={u.userId} value={u.userId}>{u.username || u.userId} ({u.role})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <Button
               onClick={() => assignDialog && assignMutation.mutate(assignDialog.id)}

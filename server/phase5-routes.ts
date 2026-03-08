@@ -16,6 +16,7 @@ import { db } from "./db";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
+import { parseIntOrThrow, ValidationError } from "./utils";
 
 function ok(data: any) {
   return { ok: true, data };
@@ -63,7 +64,7 @@ export const phase5Router = Router();
 
 phase5Router.get("/tenants/:tenantId/weekly-command-center", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -118,13 +119,14 @@ phase5Router.get("/tenants/:tenantId/weekly-command-center", isAuthenticated, as
       },
     }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/weekly-command-center/refresh", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -210,6 +212,7 @@ phase5Router.post("/tenants/:tenantId/weekly-command-center/refresh", isAuthenti
     await audit(tenantId, req.user.claims.sub, "command_center", String(tenantId), "refresh");
     res.json(ok({ opportunitiesGenerated: generated.length, goalsUpdated: goals.length }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -218,26 +221,27 @@ phase5Router.post("/tenants/:tenantId/weekly-command-center/refresh", isAuthenti
 
 phase5Router.get("/tenants/:tenantId/actions", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const filters: any = {};
     if (req.query.status) filters.status = req.query.status;
     if (req.query.owner) filters.ownerUserId = req.query.owner;
-    if (req.query.locationId) filters.locationId = parseInt(req.query.locationId);
+    if (req.query.locationId) filters.locationId = parseIntOrThrow(req.query.locationId as string, "locationId");
     if (req.query.overdue === "true") filters.overdue = true;
 
     const data = await storage.getActions(tenantId, filters);
     res.json(ok(data));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/actions", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -250,23 +254,39 @@ phase5Router.post("/tenants/:tenantId/actions", isAuthenticated, async (req: any
     await audit(tenantId, req.user.claims.sub, "action", String(action.id), "create", null, action);
     res.status(201).json(ok(action));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.put("/tenants/:tenantId/actions/:actionId", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const actionId = parseInt(req.params.actionId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const actionId = parseIntOrThrow(req.params.actionId, "actionId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const existing = await storage.getAction(actionId);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Action not found"));
 
-    const action = await storage.updateAction(actionId, req.body);
+    const updateActionSchema = z.object({
+      title: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      status: z.enum(["open", "in_progress", "blocked", "done"]).optional(),
+      priority: z.string().optional(),
+      ownerUserId: z.string().optional(),
+      locationId: z.coerce.number().nullable().optional(),
+      metricDefinitionId: z.coerce.number().nullable().optional(),
+      dueDate: z.union([z.string(), z.date()]).nullable().optional(),
+      sourceType: z.string().nullable().optional(),
+      sourceId: z.coerce.number().nullable().optional(),
+    }).passthrough();
+    const parsed = updateActionSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
 
-    if (req.body.status === "done" && existing.status !== "done") {
+    const action = await storage.updateAction(actionId, parsed.data);
+
+    if (parsed.data.status === "done" && existing.status !== "done") {
       try {
         await storage.createRecommendationEvent({
           tenantId,
@@ -311,14 +331,15 @@ phase5Router.put("/tenants/:tenantId/actions/:actionId", isAuthenticated, async 
     await audit(tenantId, req.user.claims.sub, "action", String(actionId), "update", existing, action);
     res.json(ok(action));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/actions/:actionId/checkins", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const actionId = parseInt(req.params.actionId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const actionId = parseIntOrThrow(req.params.actionId, "actionId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -336,37 +357,39 @@ phase5Router.post("/tenants/:tenantId/actions/:actionId/checkins", isAuthenticat
     await audit(tenantId, req.user.claims.sub, "action_checkin", String(checkin.id), "create", null, checkin);
     res.status(201).json(ok(checkin));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.get("/tenants/:tenantId/actions/:actionId/checkins", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const actionId = parseInt(req.params.actionId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const actionId = parseIntOrThrow(req.params.actionId, "actionId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const checkins = await storage.getActionCheckins(actionId);
     res.json(ok(checkins));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.put("/tenants/:tenantId/actions/bulk-status", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
-    const { actionIds, status } = req.body;
-    if (!Array.isArray(actionIds) || !actionIds.length || !status) {
-      return res.status(400).json(err("VALIDATION_ERROR", "actionIds (array) and status are required"));
-    }
-    if (!["open", "in_progress", "blocked", "done"].includes(status)) {
-      return res.status(400).json(err("VALIDATION_ERROR", "Invalid status"));
-    }
+    const bulkStatusSchema = z.object({
+      actionIds: z.array(z.coerce.number()).min(1, "actionIds must be a non-empty array"),
+      status: z.enum(["open", "in_progress", "blocked", "done"]),
+    });
+    const parsed = bulkStatusSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { actionIds, status } = parsed.data;
 
     const updated: any[] = [];
     for (const id of actionIds) {
@@ -380,6 +403,7 @@ phase5Router.put("/tenants/:tenantId/actions/bulk-status", isAuthenticated, asyn
     await audit(tenantId, req.user.claims.sub, "action", actionIds.join(","), "bulk_status_update", null, { status, count: updated.length });
     res.json(ok({ updated: updated.length }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -388,7 +412,7 @@ phase5Router.put("/tenants/:tenantId/actions/bulk-status", isAuthenticated, asyn
 
 phase5Router.get("/tenants/:tenantId/opportunities", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
     const data = await storage.getOpportunities(tenantId);
@@ -409,32 +433,42 @@ phase5Router.get("/tenants/:tenantId/opportunities", isAuthenticated, async (req
 
     res.json(ok(data));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/opportunities/:id/create-action", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const oppId = parseInt(req.params.id);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const oppId = parseIntOrThrow(req.params.id, "id");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const opp = await storage.getOpportunity(oppId);
     if (!opp || opp.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Opportunity not found"));
 
+    const createFromOppSchema = z.object({
+      title: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      ownerUserId: z.string().optional(),
+      dueDate: z.string().nullable().optional(),
+    });
+    const parsed = createFromOppSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+
     const action = await storage.createAction({
       tenantId,
       locationId: opp.locationId,
       metricDefinitionId: opp.metricDefinitionId,
-      title: req.body.title || opp.title,
-      description: req.body.description || opp.description,
+      title: parsed.data.title || opp.title,
+      description: parsed.data.description || opp.description,
       status: "open",
       priority: opp.impactScore === "high" ? "high" : "medium",
-      ownerUserId: req.body.ownerUserId || req.user.claims.sub,
+      ownerUserId: parsed.data.ownerUserId || req.user.claims.sub,
       sourceType: "opportunity",
       sourceId: opp.id,
-      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
     });
 
     await storage.updateOpportunity(oppId, { status: "actioned", actionId: action.id });
@@ -453,13 +487,14 @@ phase5Router.post("/tenants/:tenantId/opportunities/:id/create-action", isAuthen
     await audit(tenantId, req.user.claims.sub, "opportunity", String(oppId), "create_action", opp, action);
     res.status(201).json(ok(action));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/opportunities/recompute", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -520,14 +555,15 @@ phase5Router.post("/tenants/:tenantId/opportunities/recompute", isAuthenticated,
     await audit(tenantId, req.user.claims.sub, "opportunity", "all", "recompute");
     res.json(ok({ recomputed }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.get("/tenants/:tenantId/opportunities/:id/rationale", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const oppId = parseInt(req.params.id);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const oppId = parseIntOrThrow(req.params.id, "id");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -545,6 +581,7 @@ phase5Router.get("/tenants/:tenantId/opportunities/:id/rationale", isAuthenticat
       lastRecomputedAt: opp.lastRecomputedAt,
     }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -553,25 +590,26 @@ phase5Router.get("/tenants/:tenantId/opportunities/:id/rationale", isAuthenticat
 
 phase5Router.get("/tenants/:tenantId/goals", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const filters: any = {};
-    if (req.query.locationId) filters.locationId = parseInt(req.query.locationId);
-    if (req.query.metricDefinitionId) filters.metricDefinitionId = parseInt(req.query.metricDefinitionId);
+    if (req.query.locationId) filters.locationId = parseIntOrThrow(req.query.locationId as string, "locationId");
+    if (req.query.metricDefinitionId) filters.metricDefinitionId = parseIntOrThrow(req.query.metricDefinitionId as string, "metricDefinitionId");
     if (req.query.status) filters.status = req.query.status;
 
     const data = await storage.getGoals(tenantId, filters);
     res.json(ok(data));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/goals", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -585,31 +623,50 @@ phase5Router.post("/tenants/:tenantId/goals", isAuthenticated, async (req: any, 
     await audit(tenantId, req.user.claims.sub, "goal", String(goal.id), "create", null, goal);
     res.status(201).json(ok(goal));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.put("/tenants/:tenantId/goals/:goalId", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const goalId = parseInt(req.params.goalId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const goalId = parseIntOrThrow(req.params.goalId, "goalId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const existing = await storage.getGoal(goalId);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Goal not found"));
 
-    const goal = await storage.updateGoal(goalId, req.body);
+    const updateGoalSchema = z.object({
+      title: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      targetValue: z.coerce.number().optional(),
+      currentValue: z.coerce.number().nullable().optional(),
+      status: z.enum(["on_track", "at_risk", "off_track", "achieved"]).optional(),
+      metricDefinitionId: z.coerce.number().nullable().optional(),
+      locationId: z.coerce.number().nullable().optional(),
+      period: z.string().optional(),
+      startDate: z.union([z.string(), z.date()]).optional(),
+      endDate: z.union([z.string(), z.date()]).optional(),
+      consecutiveOffTrack: z.coerce.number().optional(),
+      ownerUserId: z.string().nullable().optional(),
+    }).passthrough();
+    const parsed = updateGoalSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+
+    const goal = await storage.updateGoal(goalId, parsed.data);
     await audit(tenantId, req.user.claims.sub, "goal", String(goalId), "update", existing, goal);
     res.json(ok(goal));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.get("/tenants/:tenantId/goals/variance", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -632,6 +689,7 @@ phase5Router.get("/tenants/:tenantId/goals/variance", isAuthenticated, async (re
 
     res.json(ok(variance));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -640,7 +698,7 @@ phase5Router.get("/tenants/:tenantId/goals/variance", isAuthenticated, async (re
 
 phase5Router.get("/tenants/:tenantId/benchmarking/config", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -653,21 +711,22 @@ phase5Router.get("/tenants/:tenantId/benchmarking/config", isAuthenticated, asyn
       scorecardContributionWeight: 15,
     }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.put("/tenants/:tenantId/benchmarking/config", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireAdminAccess(req, res, tenantId);
     if (!tu) return;
 
     const schema = z.object({
-      goalAttainmentWeight: z.number().min(0).max(100),
-      alertPenaltyWeight: z.number().min(0).max(100),
-      trendMomentumWeight: z.number().min(0).max(100),
-      scorecardContributionWeight: z.number().min(0).max(100),
+      goalAttainmentWeight: z.coerce.number().min(0).max(100),
+      alertPenaltyWeight: z.coerce.number().min(0).max(100),
+      trendMomentumWeight: z.coerce.number().min(0).max(100),
+      scorecardContributionWeight: z.coerce.number().min(0).max(100),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
@@ -680,13 +739,14 @@ phase5Router.put("/tenants/:tenantId/benchmarking/config", isAuthenticated, asyn
     await audit(tenantId, req.user.claims.sub, "benchmarking_config", String(tenantId), "update", before, config);
     res.json(ok(config));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.get("/tenants/:tenantId/benchmarking", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -742,6 +802,7 @@ phase5Router.get("/tenants/:tenantId/benchmarking", isAuthenticated, async (req:
 
     res.json(ok({ rankings, weights: config }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -750,7 +811,7 @@ phase5Router.get("/tenants/:tenantId/benchmarking", isAuthenticated, async (req:
 
 phase5Router.get("/tenants/:tenantId/playbooks", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -761,13 +822,14 @@ phase5Router.get("/tenants/:tenantId/playbooks", isAuthenticated, async (req: an
     }));
     res.json(ok(result));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/playbooks", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireAdminAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -776,14 +838,22 @@ phase5Router.post("/tenants/:tenantId/playbooks", isAuthenticated, async (req: a
 
     const pb = await storage.createPlaybook(parsed.data);
 
-    if (req.body.steps && Array.isArray(req.body.steps)) {
-      for (let i = 0; i < req.body.steps.length; i++) {
+    const stepsSchema = z.array(z.object({
+      title: z.string().min(1),
+      description: z.string().nullable().optional(),
+      metricDefinitionId: z.coerce.number().nullable().optional(),
+    })).optional();
+    const stepsParsed = stepsSchema.safeParse(req.body.steps);
+    if (req.body.steps && !stepsParsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(stepsParsed.error!).toString()));
+
+    if (stepsParsed.success && stepsParsed.data) {
+      for (let i = 0; i < stepsParsed.data.length; i++) {
         await storage.createPlaybookStep({
           playbookId: pb.id,
           stepOrder: i + 1,
-          title: req.body.steps[i].title,
-          description: req.body.steps[i].description,
-          metricDefinitionId: req.body.steps[i].metricDefinitionId || null,
+          title: stepsParsed.data[i].title,
+          description: stepsParsed.data[i].description || null,
+          metricDefinitionId: stepsParsed.data[i].metricDefinitionId || null,
         });
       }
     }
@@ -792,14 +862,15 @@ phase5Router.post("/tenants/:tenantId/playbooks", isAuthenticated, async (req: a
     await audit(tenantId, req.user.claims.sub, "playbook", String(pb.id), "create", null, pb);
     res.status(201).json(ok({ ...pb, steps }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.put("/tenants/:tenantId/playbooks/:playbookId", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const playbookId = parseInt(req.params.playbookId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const playbookId = parseIntOrThrow(req.params.playbookId, "playbookId");
     const tu = await requireAdminAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -807,24 +878,37 @@ phase5Router.put("/tenants/:tenantId/playbooks/:playbookId", isAuthenticated, as
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Playbook not found"));
     if (existing.isArchived) return res.status(400).json(err("ARCHIVED", "Cannot edit archived playbook"));
 
+    const updatePlaybookSchema = z.object({
+      name: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      category: z.string().nullable().optional(),
+      steps: z.array(z.object({
+        title: z.string().min(1),
+        description: z.string().nullable().optional(),
+        metricDefinitionId: z.coerce.number().nullable().optional(),
+      })).optional(),
+    });
+    const parsed = updatePlaybookSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+
     const updated = await storage.updatePlaybook(playbookId, {
-      name: req.body.name || existing.name,
-      description: req.body.description !== undefined ? req.body.description : existing.description,
-      category: req.body.category !== undefined ? req.body.category : existing.category,
+      name: parsed.data.name || existing.name,
+      description: parsed.data.description !== undefined ? parsed.data.description : existing.description,
+      category: parsed.data.category !== undefined ? parsed.data.category : existing.category,
       version: (existing.version || 1) + 1,
       updatedByUserId: req.user.claims.sub,
       updatedAt: new Date(),
     } as any);
 
-    if (req.body.steps && Array.isArray(req.body.steps)) {
+    if (parsed.data.steps && Array.isArray(parsed.data.steps)) {
       await storage.deletePlaybookSteps(playbookId);
-      for (let i = 0; i < req.body.steps.length; i++) {
+      for (let i = 0; i < parsed.data.steps.length; i++) {
         await storage.createPlaybookStep({
           playbookId,
           stepOrder: i + 1,
-          title: req.body.steps[i].title,
-          description: req.body.steps[i].description || null,
-          metricDefinitionId: req.body.steps[i].metricDefinitionId || null,
+          title: parsed.data.steps[i].title,
+          description: parsed.data.steps[i].description || null,
+          metricDefinitionId: parsed.data.steps[i].metricDefinitionId || null,
         });
       }
     }
@@ -833,14 +917,15 @@ phase5Router.put("/tenants/:tenantId/playbooks/:playbookId", isAuthenticated, as
     await audit(tenantId, req.user.claims.sub, "playbook", String(playbookId), "update", existing, updated);
     res.json(ok({ ...updated, steps }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.delete("/tenants/:tenantId/playbooks/:playbookId", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const playbookId = parseInt(req.params.playbookId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const playbookId = parseIntOrThrow(req.params.playbookId, "playbookId");
     const tu = await requireAdminAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -851,14 +936,15 @@ phase5Router.delete("/tenants/:tenantId/playbooks/:playbookId", isAuthenticated,
     await audit(tenantId, req.user.claims.sub, "playbook", String(playbookId), "archive", existing);
     res.json(ok({ archived: true }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/unarchive", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const playbookId = parseInt(req.params.playbookId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const playbookId = parseIntOrThrow(req.params.playbookId, "playbookId");
     const tu = await requireAdminAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -869,14 +955,15 @@ phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/unarchive", isAuthen
     await audit(tenantId, req.user.claims.sub, "playbook", String(playbookId), "unarchive", existing);
     res.json(ok({ unarchived: true }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.get("/tenants/:tenantId/playbooks/:playbookId/applications", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const playbookId = parseInt(req.params.playbookId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const playbookId = parseIntOrThrow(req.params.playbookId, "playbookId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -886,27 +973,36 @@ phase5Router.get("/tenants/:tenantId/playbooks/:playbookId/applications", isAuth
     const applications = await storage.getPlaybookApplicationsByPlaybook(playbookId);
     res.json(ok(applications));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/apply", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
-    const playbookId = parseInt(req.params.playbookId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const playbookId = parseIntOrThrow(req.params.playbookId, "playbookId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const pb = await storage.getPlaybook(playbookId);
     if (!pb || pb.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Playbook not found"));
 
-    const locationIds: number[] = req.body.locationIds || [];
-    if (locationIds.length === 0) return res.status(400).json(err("VALIDATION_ERROR", "locationIds required"));
+    const applyPlaybookSchema = z.object({
+      locationIds: z.array(z.coerce.number()).min(1, "locationIds must be a non-empty array"),
+      ownerUserId: z.string().optional(),
+      priority: z.string().optional(),
+      dueDate: z.string().nullable().optional(),
+    });
+    const parsed = applyPlaybookSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+
+    const locationIds = parsed.data.locationIds;
 
     const overrides = {
-      ownerUserId: req.body.ownerUserId || req.user.claims.sub,
-      priority: req.body.priority || "medium",
-      dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      ownerUserId: parsed.data.ownerUserId || req.user.claims.sub,
+      priority: parsed.data.priority || "medium",
+      dueDate: parsed.data.dueDate ? new Date(parsed.data.dueDate) : null,
     };
 
     const steps = await storage.getPlaybookSteps(playbookId);
@@ -943,6 +1039,7 @@ phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/apply", isAuthentica
     await audit(tenantId, req.user.claims.sub, "playbook", String(playbookId), "apply", null, { locationIds });
     res.status(201).json(ok({ applications: results, actionsCreated: steps.length * locationIds.length }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -951,13 +1048,14 @@ phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/apply", isAuthentica
 
 phase5Router.get("/tenants/:tenantId/users", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const users = await storage.getTenantUsersWithNames(tenantId);
     res.json(ok(users));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -1034,7 +1132,7 @@ export async function generateDigest(tenantId: number, userId: string) {
 
 phase5Router.post("/admin/digests/:tenantId/run", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireAdminAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -1060,6 +1158,7 @@ phase5Router.post("/admin/digests/:tenantId/run", isAuthenticated, async (req: a
       throw genError;
     }
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     if (error.message?.includes("already generated")) return;
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
@@ -1067,19 +1166,20 @@ phase5Router.post("/admin/digests/:tenantId/run", isAuthenticated, async (req: a
 
 phase5Router.get("/admin/digests/:tenantId/history", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
     const data = await storage.getDigests(tenantId);
     res.json(ok(data));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.get("/admin/digests/:tenantId/schedule", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
@@ -1093,18 +1193,19 @@ phase5Router.get("/admin/digests/:tenantId/schedule", isAuthenticated, async (re
       isEnabled: false,
     }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.put("/admin/digests/:tenantId/schedule", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireAdminAccess(req, res, tenantId);
     if (!tu) return;
 
     const schema = z.object({
-      dayOfWeek: z.number().min(0).max(6),
+      dayOfWeek: z.coerce.number().min(0).max(6),
       sendTime: z.string().regex(/^\d{2}:\d{2}$/),
       timezone: z.string().min(1),
       recipientsJson: z.string().optional(),
@@ -1118,19 +1219,21 @@ phase5Router.put("/admin/digests/:tenantId/schedule", isAuthenticated, async (re
     await audit(tenantId, req.user.claims.sub, "digest_schedule", String(tenantId), "update", before, schedule);
     res.json(ok(schedule));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.get("/admin/digests/:tenantId/scheduler-runs", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const runs = await storage.getDigestSchedulerRuns(tenantId);
     res.json(ok(runs));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -1139,38 +1242,39 @@ phase5Router.get("/admin/digests/:tenantId/scheduler-runs", isAuthenticated, asy
 
 phase5Router.get("/tenants/:tenantId/campaigns", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const filters: { status?: string; locationId?: number; type?: string } = {};
     if (req.query.status) filters.status = req.query.status as string;
-    if (req.query.locationId) filters.locationId = parseInt(req.query.locationId as string);
+    if (req.query.locationId) filters.locationId = parseIntOrThrow(req.query.locationId as string, "locationId");
     if (req.query.type) filters.type = req.query.type as string;
 
     const list = await storage.getCampaigns(tenantId, filters);
     res.json(ok(list));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.post("/tenants/:tenantId/campaigns", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
 
     const schema = z.object({
       name: z.string().min(1).max(500),
       type: z.string().min(1),
-      locationId: z.number().nullable().optional(),
-      metricDefinitionId: z.number().nullable().optional(),
+      locationId: z.coerce.number().nullable().optional(),
+      metricDefinitionId: z.coerce.number().nullable().optional(),
       startDate: z.string().min(1),
       endDate: z.string().nullable().optional(),
       status: z.string().optional(),
       description: z.string().nullable().optional(),
-      budget: z.number().nullable().optional(),
+      budget: z.coerce.number().nullable().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
@@ -1195,16 +1299,17 @@ phase5Router.post("/tenants/:tenantId/campaigns", isAuthenticated, async (req: a
     await audit(tenantId, req.user.claims.sub, "campaign", String(campaign.id), "create", undefined, campaign);
     res.status(201).json(ok(campaign));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.put("/tenants/:tenantId/campaigns/:id", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
-    const id = parseInt(req.params.id);
+    const id = parseIntOrThrow(req.params.id, "id");
 
     const existing = await storage.getCampaign(id);
     if (!existing) return res.status(404).json(err("NOT_FOUND", "Campaign not found"));
@@ -1213,13 +1318,13 @@ phase5Router.put("/tenants/:tenantId/campaigns/:id", isAuthenticated, async (req
     const schema = z.object({
       name: z.string().min(1).max(500).optional(),
       type: z.string().optional(),
-      locationId: z.number().nullable().optional(),
-      metricDefinitionId: z.number().nullable().optional(),
+      locationId: z.coerce.number().nullable().optional(),
+      metricDefinitionId: z.coerce.number().nullable().optional(),
       startDate: z.string().or(z.date()).optional(),
       endDate: z.string().or(z.date()).nullable().optional(),
       status: z.string().optional(),
       description: z.string().nullable().optional(),
-      budget: z.number().nullable().optional(),
+      budget: z.coerce.number().nullable().optional(),
     });
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
@@ -1241,16 +1346,17 @@ phase5Router.put("/tenants/:tenantId/campaigns/:id", isAuthenticated, async (req
     await audit(tenantId, req.user.claims.sub, "campaign", String(id), "update", existing, updated);
     res.json(ok(updated));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 phase5Router.get("/tenants/:tenantId/campaigns/:id/impact", isAuthenticated, async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const tu = await requireTenantAccess(req, res, tenantId);
     if (!tu) return;
-    const id = parseInt(req.params.id);
+    const id = parseIntOrThrow(req.params.id, "id");
 
     const campaign = await storage.getCampaign(id);
     if (!campaign) return res.status(404).json(err("NOT_FOUND", "Campaign not found"));
@@ -1308,6 +1414,7 @@ phase5Router.get("/tenants/:tenantId/campaigns/:id/impact", isAuthenticated, asy
       postPeriod: { start: startDate.toISOString(), end: endDate.toISOString() },
     }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });

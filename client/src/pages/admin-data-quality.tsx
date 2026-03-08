@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTenantStore } from "@/lib/tenant-store";
+import { useEntityLookup } from "@/hooks/use-entity-lookup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -84,6 +85,7 @@ const ruleTypes = ["period_continuity", "outlier_detection", "duplicate_detectio
 export default function AdminDataQualityPage() {
   const { activeTenantId } = useTenantStore();
   const { toast } = useToast();
+  const { resolveLocation, resolveMetric } = useEntityLookup();
   const [localRules, setLocalRules] = useState<Rule[] | null>(null);
 
   const queryKey = ["/api/admin/data-quality", `?tenantId=${activeTenantId}`];
@@ -329,10 +331,10 @@ export default function AdminDataQualityPage() {
                       {v.message}
                     </TableCell>
                     <TableCell data-testid={`text-violation-location-${v.id}`}>
-                      {v.locationId}
+                      {resolveLocation(v.locationId)}
                     </TableCell>
                     <TableCell data-testid={`text-violation-metric-${v.id}`}>
-                      {v.metricDefinitionId}
+                      {resolveMetric(v.metricDefinitionId)}
                     </TableCell>
                     <TableCell data-testid={`text-violation-date-${v.id}`}>
                       {new Date(v.createdAt).toLocaleString()}

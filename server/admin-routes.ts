@@ -11,6 +11,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
+import { parseIntOrThrow, ValidationError } from "./utils";
 import { notifyAlertEvent, notifyReportReady, sendEmail, sendSlackWebhook, sendNotification } from "./services/notifications";
 import { manualRunNow, getSchedulerStatus } from "./services/scheduler";
 
@@ -53,8 +54,8 @@ adminRouter.use(isAuthenticated);
 
 adminRouter.post("/imports", upload.single("file"), async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.body.tenantId);
-    const locationId = parseInt(req.body.locationId);
+    const tenantId = parseIntOrThrow(req.body.tenantId, "tenantId");
+    const locationId = parseIntOrThrow(req.body.locationId, "locationId");
     if (!tenantId || !locationId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId and locationId are required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
@@ -113,51 +114,55 @@ adminRouter.post("/imports", upload.single("file"), async (req: any, res) => {
       },
     }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.get("/imports", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
     const jobs = await storage.getImportJobs(tenantId);
     res.json(ok(jobs));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.get("/imports/:jobId", async (req: any, res) => {
   try {
-    const job = await storage.getImportJob(parseInt(req.params.jobId));
+    const job = await storage.getImportJob(parseIntOrThrow(req.params.jobId, "jobId"));
     if (!job) return res.status(404).json(err("NOT_FOUND", "Import job not found"));
     const access = await requireAdminAccess(req, res, job.tenantId);
     if (!access) return;
     res.json(ok(job));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.get("/imports/:jobId/errors", async (req: any, res) => {
   try {
-    const job = await storage.getImportJob(parseInt(req.params.jobId));
+    const job = await storage.getImportJob(parseIntOrThrow(req.params.jobId, "jobId"));
     if (!job) return res.status(404).json(err("NOT_FOUND", "Import job not found"));
     const access = await requireAdminAccess(req, res, job.tenantId);
     if (!access) return;
     const errors = await storage.getImportRowErrors(job.id);
     res.json(ok(errors));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.post("/imports/:jobId/reprocess", async (req: any, res) => {
   try {
-    const job = await storage.getImportJob(parseInt(req.params.jobId));
+    const job = await storage.getImportJob(parseIntOrThrow(req.params.jobId, "jobId"));
     if (!job) return res.status(404).json(err("NOT_FOUND", "Import job not found"));
     const access = await requireAdminAccess(req, res, job.tenantId);
     if (!access) return;
@@ -189,6 +194,7 @@ adminRouter.post("/imports/:jobId/reprocess", async (req: any, res) => {
     await audit(job.tenantId, req.user.claims.sub, "import_job", String(job.id), "reprocess", job, updated);
     res.json(ok(updated));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -276,13 +282,14 @@ async function processRow(rowData: Record<string, string>, mapping: Record<strin
 
 adminRouter.get("/alert-rules", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
     const rules = await storage.getAlertRules(tenantId);
     res.json(ok(rules));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -298,37 +305,56 @@ adminRouter.post("/alert-rules", async (req: any, res) => {
     await evaluateAlertRule(rule);
     res.status(201).json(ok(rule));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.put("/alert-rules/:ruleId", async (req: any, res) => {
   try {
-    const ruleId = parseInt(req.params.ruleId);
+    const ruleId = parseIntOrThrow(req.params.ruleId, "ruleId");
     const existing = await storage.getAlertRule(ruleId);
     if (!existing) return res.status(404).json(err("NOT_FOUND", "Alert rule not found"));
     const access = await requireAdminAccess(req, res, existing.tenantId);
     if (!access) return;
-    const { tenantId, ...updateData } = req.body;
+    const updateAlertRuleSchema = z.object({
+      tenantId: z.coerce.number().optional(),
+      name: z.string().min(1).optional(),
+      severity: z.string().optional(),
+      conditionJson: z.string().optional(),
+      actionJson: z.string().optional(),
+      isActive: z.boolean().optional(),
+      cooldownMinutes: z.coerce.number().optional(),
+      escalationMinutes: z.coerce.number().optional(),
+      dedupWindowMinutes: z.coerce.number().optional(),
+      impactLevel: z.string().nullable().optional(),
+      persistentThresholdDays: z.coerce.number().nullable().optional(),
+      recommendedActions: z.array(z.string()).nullable().optional(),
+      ownerUserId: z.string().nullable().optional(),
+    });
+    const parsed = updateAlertRuleSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { tenantId, ...updateData } = parsed.data;
     const updated = await storage.updateAlertRule(ruleId, updateData);
     await audit(existing.tenantId, req.user.claims.sub, "alert_rule", String(ruleId), "update", existing, updated);
     if (updated?.isActive) await evaluateAlertRule(updated);
     res.json(ok(updated));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.get("/alert-events", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
     const filters: any = {};
     if (req.query.status) filters.status = req.query.status;
     if (req.query.severity) filters.severity = req.query.severity;
-    if (req.query.locationId) filters.locationId = parseInt(req.query.locationId);
+    if (req.query.locationId) filters.locationId = parseIntOrThrow(req.query.locationId as string, "locationId");
     const events = await storage.getAlertEvents(tenantId, filters);
 
     const enrichedEvents = await Promise.all(events.map(async (event) => {
@@ -350,13 +376,14 @@ adminRouter.get("/alert-events", async (req: any, res) => {
 
     res.json(ok(enrichedEvents));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.post("/alert-events/:eventId/ack", async (req: any, res) => {
   try {
-    const eventId = parseInt(req.params.eventId);
+    const eventId = parseIntOrThrow(req.params.eventId, "eventId");
     const event = await storage.getAlertEvent(eventId);
     if (!event) return res.status(404).json(err("NOT_FOUND", "Alert event not found"));
     const access = await requireAdminAccess(req, res, event.tenantId);
@@ -369,13 +396,14 @@ adminRouter.post("/alert-events/:eventId/ack", async (req: any, res) => {
     });
     res.json(ok(updated));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.post("/alert-events/:eventId/resolve", async (req: any, res) => {
   try {
-    const eventId = parseInt(req.params.eventId);
+    const eventId = parseIntOrThrow(req.params.eventId, "eventId");
     const event = await storage.getAlertEvent(eventId);
     if (!event) return res.status(404).json(err("NOT_FOUND", "Alert event not found"));
     const access = await requireAdminAccess(req, res, event.tenantId);
@@ -388,6 +416,7 @@ adminRouter.post("/alert-events/:eventId/resolve", async (req: any, res) => {
     });
     res.json(ok(updated));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -663,13 +692,14 @@ async function evaluateAlertRule(rule: any) {
 
 adminRouter.get("/reports", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
     const reportsList = await storage.getReports(tenantId);
     res.json(ok(reportsList));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -684,29 +714,41 @@ adminRouter.post("/reports", async (req: any, res) => {
     await audit(parsed.data.tenantId, req.user.claims.sub, "report", String(report.id), "create", null, report);
     res.status(201).json(ok(report));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.put("/reports/:reportId", async (req: any, res) => {
   try {
-    const reportId = parseInt(req.params.reportId);
+    const reportId = parseIntOrThrow(req.params.reportId, "reportId");
     const existing = await storage.getReport(reportId);
     if (!existing) return res.status(404).json(err("NOT_FOUND", "Report not found"));
     const access = await requireAdminAccess(req, res, existing.tenantId);
     if (!access) return;
-    const { tenantId, ...updateData } = req.body;
+    const updateReportSchema = z.object({
+      tenantId: z.coerce.number().optional(),
+      name: z.string().min(1).optional(),
+      reportType: z.string().optional(),
+      configJson: z.string().optional(),
+      schedule: z.string().nullable().optional(),
+      isActive: z.boolean().optional(),
+    });
+    const parsed = updateReportSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { tenantId, ...updateData } = parsed.data;
     const updated = await storage.updateReport(reportId, updateData);
     await audit(existing.tenantId, req.user.claims.sub, "report", String(reportId), "update", existing, updated);
     res.json(ok(updated));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.post("/reports/:reportId/run", async (req: any, res) => {
   try {
-    const reportId = parseInt(req.params.reportId);
+    const reportId = parseIntOrThrow(req.params.reportId, "reportId");
     const report = await storage.getReport(reportId);
     if (!report) return res.status(404).json(err("NOT_FOUND", "Report not found"));
     const access = await requireAdminAccess(req, res, report.tenantId);
@@ -737,13 +779,14 @@ adminRouter.post("/reports/:reportId/run", async (req: any, res) => {
       res.status(500).json(err("REPORT_FAILED", e.message));
     }
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.get("/report-runs", async (req: any, res) => {
   try {
-    const reportId = parseInt(req.query.reportId as string);
+    const reportId = parseIntOrThrow(req.query.reportId as string, "reportId");
     if (!reportId) return res.status(400).json(err("VALIDATION_ERROR", "reportId is required"));
     const report = await storage.getReport(reportId);
     if (!report) return res.status(404).json(err("NOT_FOUND", "Report not found"));
@@ -752,6 +795,7 @@ adminRouter.get("/report-runs", async (req: any, res) => {
     const runs = await storage.getReportRuns(reportId);
     res.json(ok(runs));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -800,7 +844,7 @@ async function generateReportSummary(report: any, config: any) {
 
 adminRouter.get("/audit", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
@@ -812,42 +856,60 @@ adminRouter.get("/audit", async (req: any, res) => {
     const logs = await storage.getAuditLogs(tenantId, filters);
     res.json(ok(logs));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.get("/notification-settings", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
     const settings = await storage.getNotificationSettings(tenantId);
     res.json(ok(settings || null));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.put("/notification-settings/:tenantId", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
-    const { tenantId: _, ...data } = req.body;
+    const notificationSettingsSchema = z.object({
+      tenantId: z.coerce.number().optional(),
+      emailEnabled: z.boolean().optional(),
+      slackEnabled: z.boolean().optional(),
+      slackWebhookUrl: z.string().nullable().optional(),
+      recipientsJson: z.string().optional(),
+      digestEnabled: z.boolean().optional(),
+      digestFrequency: z.string().nullable().optional(),
+    });
+    const parsed = notificationSettingsSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { tenantId: _, ...data } = parsed.data;
     const before = await storage.getNotificationSettings(tenantId);
     const settings = await storage.upsertNotificationSettings(tenantId, data);
     await audit(tenantId, req.user.claims.sub, "notification_settings", String(settings.id), before ? "update" : "create", before, settings);
     res.json(ok(settings));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.post("/notification-test", async (req: any, res) => {
   try {
-    const { tenantId } = req.body;
-    if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
+    const notificationTestSchema = z.object({
+      tenantId: z.number({ required_error: "tenantId is required" }),
+    });
+    const parsed = notificationTestSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { tenantId } = parsed.data;
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
     const settings = await storage.getNotificationSettings(tenantId);
@@ -875,19 +937,21 @@ adminRouter.post("/notification-test", async (req: any, res) => {
     }
     res.json(ok({ results }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.get("/notification-deliveries", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
     const deliveries = await storage.getNotificationDeliveries(tenantId);
     res.json(ok(deliveries));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -906,6 +970,7 @@ adminRouter.post("/scheduler/run-now", async (req: any, res) => {
     const result = await manualRunNow();
     res.json(ok(result));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -921,17 +986,18 @@ adminRouter.get("/scheduler/status", async (req: any, res) => {
       if (tu && ["owner", "admin"].includes(tu.role)) { hasAdminAccess = true; break; }
     }
     if (!hasAdminAccess) return res.status(403).json(err("FORBIDDEN", "Admin access required"));
-    const tenantId = req.query.tenantId ? parseInt(req.query.tenantId as string) : undefined;
+    const tenantId = req.query.tenantId ? parseIntOrThrow(req.query.tenantId as string, "tenantId") : undefined;
     const status = await getSchedulerStatus(tenantId);
     res.json(ok(status));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.get("/data-quality", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
@@ -955,13 +1021,14 @@ adminRouter.get("/data-quality", async (req: any, res) => {
 
     res.json(ok({ rules, violations: violations.slice(0, 100), qualityScores }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.post("/imports/validate", upload.single("file"), async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.body.tenantId);
+    const tenantId = parseIntOrThrow(req.body.tenantId, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
@@ -1035,19 +1102,21 @@ adminRouter.post("/imports/validate", upload.single("file"), async (req: any, re
       errors: rowErrors,
     }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.get("/import-templates", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
     const templates = await storage.getMappingTemplates(tenantId);
     res.json(ok(templates));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
@@ -1062,17 +1131,18 @@ adminRouter.post("/import-templates", async (req: any, res) => {
     await audit(parsed.data.tenantId, req.user.claims.sub, "import_mapping_template", String(template.id), "create", null, template);
     res.status(201).json(ok(template));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.delete("/import-templates/:id", async (req: any, res) => {
   try {
-    const id = parseInt(req.params.id);
+    const id = parseIntOrThrow(req.params.id, "id");
     const userId = req.user?.claims?.sub;
     if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
 
-    const tenantId = parseInt(req.query.tenantId as string);
+    const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
@@ -1081,17 +1151,28 @@ adminRouter.delete("/import-templates/:id", async (req: any, res) => {
     await audit(tenantId, userId, "import_mapping_template", String(id), "delete", null, null);
     res.json(ok({ deleted: true }));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });
 
 adminRouter.put("/data-quality/rules/:tenantId", async (req: any, res) => {
   try {
-    const tenantId = parseInt(req.params.tenantId);
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
-    const { rules } = req.body;
-    if (!Array.isArray(rules)) return res.status(400).json(err("VALIDATION_ERROR", "rules must be an array"));
+    const dataQualityBulkSchema = z.object({
+      rules: z.array(z.object({
+        id: z.coerce.number().optional(),
+        ruleName: z.string().min(1),
+        ruleType: z.string().min(1),
+        config: z.string().optional(),
+        isActive: z.boolean().optional(),
+      })),
+    });
+    const parsed = dataQualityBulkSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { rules } = parsed.data;
 
     const results: any[] = [];
     for (const rule of rules) {
@@ -1117,6 +1198,7 @@ adminRouter.put("/data-quality/rules/:tenantId", async (req: any, res) => {
     await audit(tenantId, req.user.claims.sub, "data_quality_rules", String(tenantId), "update", null, results);
     res.json(ok(results));
   } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });

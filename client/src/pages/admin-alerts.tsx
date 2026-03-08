@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useEntityLookup } from "@/hooks/use-entity-lookup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,7 @@ const impactColors: Record<string, string> = {
 export default function AdminAlertsPage() {
   const { activeTenantId } = useTenantStore();
   const { toast } = useToast();
+  const { resolveUser, users } = useEntityLookup();
   const [showRuleDialog, setShowRuleDialog] = useState(false);
   const [editingRule, setEditingRule] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -93,11 +95,6 @@ export default function AdminAlertsPage() {
 
   const { data: metricsData } = useQuery<any[]>({
     queryKey: ["/api/tenants", activeTenantId, "metrics"],
-    enabled: !!activeTenantId,
-  });
-
-  const { data: tenantUsersData } = useQuery<any>({
-    queryKey: ["/api/tenants", activeTenantId, "users"],
     enabled: !!activeTenantId,
   });
 
@@ -258,8 +255,6 @@ export default function AdminAlertsPage() {
   const rules = rulesResponse?.data || rulesResponse || [];
   const events = eventsResponse?.data || eventsResponse || [];
   const metrics = metricsData || [];
-  const tenantUsers = tenantUsersData?.data || tenantUsersData || [];
-
   if (!activeTenantId) {
     return <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">Select a tenant to manage alerts</div>;
   }
@@ -360,7 +355,7 @@ export default function AdminAlertsPage() {
                         )}
                         {event.ownerUserId && (
                           <Badge variant="outline" data-testid={`badge-event-owner-${event.id}`}>
-                            <User className="h-3 w-3 mr-1" /> {event.ownerUserId}
+                            <User className="h-3 w-3 mr-1" /> {resolveUser(event.ownerUserId)}
                           </Badge>
                         )}
                         <span className="ml-auto text-xs text-muted-foreground">{new Date(event.createdAt).toLocaleString()}</span>
@@ -464,7 +459,7 @@ export default function AdminAlertsPage() {
                       <TableCell>{condDesc}</TableCell>
                       <TableCell>
                         {rule.ownerUserId ? (
-                          <span className="text-sm" data-testid={`text-rule-owner-${rule.id}`}>{rule.ownerUserId}</span>
+                          <span className="text-sm" data-testid={`text-rule-owner-${rule.id}`}>{resolveUser(rule.ownerUserId)}</span>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
@@ -601,8 +596,8 @@ export default function AdminAlertsPage() {
                   <SelectTrigger data-testid="select-rule-owner"><SelectValue placeholder="Assign owner" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Unassigned</SelectItem>
-                    {Array.isArray(tenantUsers) && tenantUsers.map((tu: any) => (
-                      <SelectItem key={tu.userId} value={tu.userId}>{tu.userId} ({tu.role})</SelectItem>
+                    {users.map((u) => (
+                      <SelectItem key={u.userId} value={u.userId}>{u.username || u.userId} ({u.role})</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

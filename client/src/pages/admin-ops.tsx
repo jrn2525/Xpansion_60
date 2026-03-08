@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEntityLookup } from "@/hooks/use-entity-lookup";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +21,7 @@ const runStatusColors: Record<string, string> = {
 };
 
 export default function AdminOpsPage() {
+  const { resolveTenant } = useEntityLookup();
   const { data: healthResponse, isLoading } = useQuery<any>({
     queryKey: ["/api/admin/ops/health"],
   });
@@ -236,7 +238,7 @@ export default function AdminOpsPage() {
                         {run.durationMs != null ? `${run.durationMs}ms` : "—"}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground" data-testid={`text-run-tenant-${run.id}`}>
-                        {run.tenantId || "—"}
+                        {resolveTenant(run.tenantId)}
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-sm" data-testid={`text-started-${run.id}`}>
                         {run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}
