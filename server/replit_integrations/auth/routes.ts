@@ -1,11 +1,12 @@
 import type { Express, RequestHandler } from "express";
 import { authStorage } from "./storage";
-import { isAuthenticated } from "./replitAuth";
+import { isAuthenticated, isSuperAdminGuard } from "./replitAuth";
 import { storage } from "../../storage";
 import bcrypt from "bcryptjs";
 import { db } from "../../db";
 import { users } from "@shared/models/auth";
 import { eq } from "drizzle-orm";
+import { randomUUID } from "crypto";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS_PER_IP = 20;
@@ -207,12 +208,6 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ ok: false, error: { code: "UNAUTHORIZED", message: "Invalid email or password" } });
       }
 
-      if (user.isSuperAdmin !== "true") {
-        recordFailedAttempt(clientIp, email);
-        auditLog("LOGIN_FAILED", { email, ip: clientIp, reason: "not_superadmin", userAgent: req.headers["user-agent"] });
-        return res.status(403).json({ ok: false, error: { code: "FORBIDDEN", message: "Admin access only" } });
-      }
-
       const sessionUser = {
         authType: "local",
         claims: {
@@ -235,7 +230,7 @@ export function registerAuthRoutes(app: Express): void {
           }
           clearAttempts(clientIp, email);
           auditLog("LOGIN_SUCCESS", { userId: user.id, email, ip: clientIp, userAgent: req.headers["user-agent"] });
-          res.json({ ok: true, data: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, isSuperAdmin: true } });
+          res.json({ ok: true, data: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, isSuperAdmin: user.isSuperAdmin === "true" } });
         });
       });
     } catch (error: any) {
@@ -314,6 +309,81 @@ export function registerAuthRoutes(app: Express): void {
         ok: false,
         error: { code: "INTERNAL_ERROR", message: "Failed to fetch user" },
       });
+    }
+  });
+
+  app.get("/api/admin/users", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
+    try {
+      const allUsers = await db.select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        isSuperAdmin: users.isSuperAdmin,
+        createdAt: users.createdAt,
+      }).from(users).orderBy(users.createdAt);
+      res.json({ ok: true, data: allUsers });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+    }
+  });
+
+  app.post("/api/admin/users", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
+    try {
+      const { email, firstName, lastName, password, tenantId, role } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Email and password are required" } });
+      }
+      if (password.length < 8) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Password must be at least 8 characters" } });
+      }
+
+      const [existing] = await db.select().from(users).where(eq(users.email, email));
+      if (existing) {
+        return res.status(409).json({ ok: false, error: { code: "CONFLICT", message: "A user with this email already exists" } });
+      }
+
+      const validRoles = ["viewer", "manager", "admin", "owner"];
+      if (role && !validRoles.includes(role)) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid role. Must be one of: " + validRoles.join(", ") } });
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid email format" } });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      const userId = `user-${randomUUID()}`;
+      const [newUser] = await db.insert(users).values({
+        id: userId,
+        email,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        passwordHash,
+        isSuperAdmin: "false",
+      }).returning();
+
+      if (tenantId) {
+        const tid = parseInt(tenantId);
+        if (!isNaN(tid)) {
+          await storage.createTenantUser({ tenantId: tid, userId, role: role || "viewer" });
+        }
+      }
+
+      auditLog("USER_CREATED", {
+        createdBy: req.user.claims.sub,
+        newUserId: userId,
+        email,
+        tenantId: tenantId || null,
+        role: role || null,
+      });
+
+      const { passwordHash: _, ...safeUser } = newUser as any;
+      res.status(201).json({ ok: true, data: safeUser });
+    } catch (error: any) {
+      console.error("[AUTH] Create user error:", error);
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
     }
   });
 }
