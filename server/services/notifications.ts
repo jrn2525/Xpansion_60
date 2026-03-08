@@ -113,7 +113,49 @@ export async function sendNotification(
   }
 }
 
+async function createInAppNotificationsForTenant(
+  tenantId: number,
+  type: string,
+  title: string,
+  message: string,
+  link: string | null,
+  relatedEntityType?: string,
+  relatedEntityId?: number
+): Promise<void> {
+  try {
+    const tenantUsers = await storage.getTenantUsers(tenantId);
+    for (const tu of tenantUsers) {
+      await storage.createUserNotification({
+        userId: tu.userId,
+        tenantId,
+        type,
+        title,
+        message,
+        link,
+        isRead: false,
+        relatedEntityType: relatedEntityType || null,
+        relatedEntityId: relatedEntityId || null,
+      });
+    }
+  } catch (e: any) {
+    console.error("[IN-APP NOTIFICATION] Failed to create in-app notifications:", e.message);
+  }
+}
+
 export async function notifyAlertEvent(tenantId: number, eventMessage: string, severity: string, eventId: number, eventType: "triggered" | "ack" | "resolved" = "triggered"): Promise<void> {
+  if (eventType === "triggered") {
+    const typeLabel = severity === "critical" ? "critical_alert" : "alert";
+    await createInAppNotificationsForTenant(
+      tenantId,
+      typeLabel,
+      `${severity.toUpperCase()} Alert`,
+      eventMessage.slice(0, 200),
+      "/admin/alerts",
+      "alert_event",
+      eventId
+    );
+  }
+
   const settings = await storage.getNotificationSettings(tenantId);
   if (!settings) return;
 
@@ -147,6 +189,16 @@ export async function notifyAlertEvent(tenantId: number, eventMessage: string, s
 }
 
 export async function notifyReportReady(tenantId: number, reportName: string, runId: number): Promise<void> {
+  await createInAppNotificationsForTenant(
+    tenantId,
+    "digest_ready",
+    "Report Ready",
+    `The report "${reportName}" has finished running.`,
+    "/admin/reports",
+    "report_run",
+    runId
+  );
+
   const settings = await storage.getNotificationSettings(tenantId);
   if (!settings) return;
 

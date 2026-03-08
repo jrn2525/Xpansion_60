@@ -52,6 +52,8 @@ import type {
   ScorecardMetric,
 } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
+import { exportToCSV } from "@/lib/export-utils";
+import { Download } from "lucide-react";
 
 import { bandBadgeStyles } from "@/lib/semantic-colors";
 
@@ -195,13 +197,36 @@ function ScoreRunDialog({
                 </div>
               ))}
             </div>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() => setResult(null)}
-            >
-              Run Another
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setResult(null)}
+              >
+                Run Another
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (result?.details) {
+                    exportToCSV(
+                      result.details,
+                      [
+                        { key: "metricDefinitionId", header: "Metric ID" },
+                        { key: "rawValue", header: "Raw Value", format: (v: any) => v != null ? String(v) : "N/A" },
+                        { key: "weightedScore", header: "Weighted Score", format: (v: any) => v != null ? v.toFixed(1) : "N/A" },
+                        { key: "band", header: "Band" },
+                      ],
+                      `scorecard-run-${scorecard.name.replace(/\s+/g, "-").toLowerCase()}-${new Date().toISOString().split("T")[0]}`
+                    );
+                  }
+                }}
+                data-testid="button-export-csv"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-4">

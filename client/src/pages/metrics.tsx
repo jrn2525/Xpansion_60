@@ -51,6 +51,8 @@ import {
   ChevronRight,
   Save,
 } from "lucide-react";
+import { Download } from "lucide-react";
+import { exportToCSV } from "@/lib/export-utils";
 import type { MetricDefinition, MetricThreshold } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
 
@@ -418,7 +420,34 @@ export default function MetricsPage() {
             Define KPIs with thresholds and activation controls
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (metricsList && metricsList.length > 0) {
+                exportToCSV(
+                  metricsList,
+                  [
+                    { key: "id", header: "ID" },
+                    { key: "name", header: "Name" },
+                    { key: "description", header: "Description" },
+                    { key: "dataType", header: "Data Type" },
+                    { key: "unit", header: "Unit" },
+                    { key: "direction", header: "Direction" },
+                    { key: "isActive", header: "Active", format: (v: any) => v ? "Yes" : "No" },
+                  ],
+                  `metrics-export-${new Date().toISOString().split("T")[0]}`
+                );
+              }
+            }}
+            disabled={!metricsList || metricsList.length === 0}
+            data-testid="button-export-csv"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={openCreate} data-testid="button-create-metric">
               <Plus className="h-4 w-4 mr-2" />
@@ -541,6 +570,7 @@ export default function MetricsPage() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {isLoading ? (

@@ -1303,3 +1303,49 @@ export type AutomationSetting = typeof automationSettings.$inferSelect;
 export type InsertAutomationSetting = z.infer<typeof insertAutomationSettingsSchema>;
 export type AutomationDecisionLog = typeof automationDecisionLogs.$inferSelect;
 export type InsertAutomationDecisionLog = z.infer<typeof insertAutomationDecisionLogSchema>;
+
+export const userPreferences = pgTable("user_preferences", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  pinnedPages: text("pinned_pages").array().notNull().default(sql`'{}'::text[]`),
+  keyboardShortcutsEnabled: boolean("keyboard_shortcuts_enabled").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserPreferencesSchema = createInsertSchema(userPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type UserPreference = typeof userPreferences.$inferSelect;
+export type InsertUserPreference = z.infer<typeof insertUserPreferencesSchema>;
+
+export const userNotifications = pgTable("user_notifications", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message"),
+  link: varchar("link", { length: 500 }),
+  isRead: boolean("is_read").notNull().default(false),
+  relatedEntityType: varchar("related_entity_type", { length: 50 }),
+  relatedEntityId: integer("related_entity_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserNotificationSchema = createInsertSchema(userNotifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type UserNotification = typeof userNotifications.$inferSelect;
+export type InsertUserNotification = z.infer<typeof insertUserNotificationSchema>;

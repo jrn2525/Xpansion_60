@@ -171,6 +171,12 @@ import {
   type InsertOnboardingProgress,
   type ImportMappingTemplate,
   type InsertImportMappingTemplate,
+  userPreferences,
+  userNotifications,
+  type UserPreference,
+  type InsertUserPreference,
+  type UserNotification,
+  type InsertUserNotification,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, lt, inArray, isNull, sql } from "drizzle-orm";
@@ -432,6 +438,15 @@ export interface IStorage {
   createMappingTemplate(data: InsertImportMappingTemplate): Promise<ImportMappingTemplate>;
   getMappingTemplates(tenantId: number): Promise<ImportMappingTemplate[]>;
   deleteMappingTemplate(id: number, tenantId?: number): Promise<void>;
+
+  getUserPreferences(userId: string): Promise<UserPreference>;
+  updateUserPreferences(userId: string, data: Partial<InsertUserPreference>): Promise<UserPreference>;
+
+  getUserNotifications(userId: string, tenantId: number, limit?: number): Promise<UserNotification[]>;
+  getUnreadNotificationCount(userId: string, tenantId: number): Promise<number>;
+  createUserNotification(data: InsertUserNotification): Promise<UserNotification>;
+  markNotificationRead(id: number, userId: string): Promise<void>;
+  markAllNotificationsRead(userId: string, tenantId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1668,6 +1683,61 @@ export class DatabaseStorage implements IStorage {
     const conditions = [eq(importMappingTemplates.id, id)];
     if (tenantId) conditions.push(eq(importMappingTemplates.tenantId, tenantId));
     await db.delete(importMappingTemplates).where(and(...conditions));
+  }
+
+  async getUserPreferences(userId: string): Promise<UserPreference> {
+    const [existing] = await db.select().from(userPreferences).where(eq(userPreferences.userId, userId));
+    if (existing) return existing;
+    const [created] = await db.insert(userPreferences).values({ userId }).returning();
+    return created;
+  }
+
+  async updateUserPreferences(userId: string, data: Partial<InsertUserPreference>): Promise<UserPreference> {
+    const existing = await this.getUserPreferences(userId);
+    const [updated] = await db.update(userPreferences)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(userPreferences.id, existing.id))
+      .returning();
+    return updated;
+  }
+
+  async getUserNotifications(userId: string, tenantId: number, limit = 50): Promise<UserNotification[]> {
+    return db.select().from(userNotifications)
+      .where(and(eq(userNotifications.userId, userId), eq(userNotifications.tenantId, tenantId)))
+      .orderBy(desc(userNotifications.createdAt))
+      .limit(limit);
+  }
+
+  async getUnreadNotificationCount(userId: string, tenantId: number): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)::int` })
+      .from(userNotifications)
+      .where(and(
+        eq(userNotifications.userId, userId),
+        eq(userNotifications.tenantId, tenantId),
+        eq(userNotifications.isRead, false)
+      ));
+    return result?.count ?? 0;
+  }
+
+  async createUserNotification(data: InsertUserNotification): Promise<UserNotification> {
+    const [created] = await db.insert(userNotifications).values(data).returning();
+    return created;
+  }
+
+  async markNotificationRead(id: number, userId: string): Promise<void> {
+    await db.update(userNotifications)
+      .set({ isRead: true })
+      .where(and(eq(userNotifications.id, id), eq(userNotifications.userId, userId)));
+  }
+
+  async markAllNotificationsRead(userId: string, tenantId: number): Promise<void> {
+    await db.update(userNotifications)
+      .set({ isRead: true })
+      .where(and(
+        eq(userNotifications.userId, userId),
+        eq(userNotifications.tenantId, tenantId),
+        eq(userNotifications.isRead, false)
+      ));
   }
 }
 

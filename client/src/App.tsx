@@ -14,6 +14,10 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { CommandPalette, CommandPaletteButton } from "@/components/command-palette";
+import { NotificationBell } from "@/components/notification-bell";
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { ShortcutsDialog } from "@/components/shortcuts-dialog";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const LandingPage = lazy(() => import("@/pages/landing"));
@@ -140,14 +144,24 @@ function AuthenticatedLayout() {
     "--sidebar-width-icon": "3rem",
   };
 
+  const { showShortcuts, setShowShortcuts } = useKeyboardShortcuts();
+
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
         <AppSidebar />
         <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center gap-1 p-2 border-b shrink-0">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          <header className="flex items-center justify-between gap-1 p-2 border-b shrink-0">
+            <div className="flex items-center gap-1">
+              <SidebarTrigger data-testid="button-sidebar-toggle" />
+              <CommandPaletteButton />
+            </div>
+            <div className="flex items-center gap-1">
+              <NotificationBell />
+            </div>
           </header>
+          <CommandPalette />
+          <ShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
           <main className="flex-1 overflow-auto">
             <ErrorBoundary>
               <Suspense fallback={<LoadingSkeleton />}>

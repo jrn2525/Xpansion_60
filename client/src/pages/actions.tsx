@@ -44,6 +44,8 @@ import {
   MessageSquare,
   User,
 } from "lucide-react";
+import { Download } from "lucide-react";
+import { exportToCSV } from "@/lib/export-utils";
 import type { Action, Location } from "@shared/schema";
 
 const STATUS_OPTIONS = ["open", "in_progress", "blocked", "done"] as const;
@@ -267,6 +269,30 @@ export default function ActionsPage() {
               <Columns3 className="h-4 w-4" />
             </Button>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              exportToCSV(
+                allActions,
+                [
+                  { key: "id", header: "ID" },
+                  { key: "title", header: "Title" },
+                  { key: "description", header: "Description" },
+                  { key: "status", header: "Status" },
+                  { key: "priority", header: "Priority" },
+                  { key: "dueDate", header: "Due Date", format: (v: any) => v ? new Date(v).toLocaleDateString() : "" },
+                  { key: "ownerUserId", header: "Assignee" },
+                ],
+                `actions-export-${new Date().toISOString().split("T")[0]}`
+              );
+            }}
+            disabled={allActions.length === 0}
+            data-testid="button-export-csv"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export CSV
+          </Button>
           <Button onClick={() => setShowCreateDialog(true)} data-testid="button-create-action">
             <Plus className="h-4 w-4 mr-2" />
             New Action

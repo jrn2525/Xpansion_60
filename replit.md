@@ -157,3 +157,54 @@ Five workstreams to improve onboarding, daily usage, alert quality, import relia
 ### Bug Fixes
 - **`getTenantUsersWithNames()` crash**: The `users` table has no `username` column — the query was referencing a non-existent column. Fixed to select `firstName`, `lastName`, `email` and derive a display name (e.g. "Admin User").
 - **Bulk action status route shadowed**: `PUT /tenants/:tenantId/actions/bulk-status` was registered after `PUT /tenants/:tenantId/actions/:actionId` in `phase5-routes.ts`, causing Express to match "bulk-status" as the `:actionId` parameter. Moved `bulk-status` route before the parameterized route to fix.
+- **API envelope unwrapping**: Default `queryFn` in `queryClient.ts` now auto-unwraps `{ok: true, data: ...}` envelopes, returning `data` directly to components. This fixes silent data access failures across all `useQuery` calls after the API hardening standardized response formats.
+
+## Phase 7: Client Experience Enhancements
+
+### New Tables
+- `user_preferences` — per-user settings (pinned pages, keyboard shortcuts enabled)
+- `user_notifications` — in-app notification feed per user/tenant with type, title, message, link, read state
+
+### 1. Global Command Palette (Cmd+K)
+- Opens with `Cmd+K` (Mac) / `Ctrl+K` (Windows)
+- Search across: all 28 pages, tenants (switch directly), locations, quick actions
+- Search button with `⌘K` hint in the header bar
+- File: `client/src/components/command-palette.tsx`
+
+### 2. In-App Notification Bell
+- Bell icon in header with unread count badge (red dot, caps at 99+)
+- Popover dropdown with recent notifications (type icon, title, message, time ago)
+- Click navigates to link and marks as read; "Mark all read" button
+- Polls every 30 seconds; auto-creates notifications when alerts fire or reports complete
+- Files: `client/src/components/notification-bell.tsx`, `server/services/notifications.ts`
+
+### 3. PDF/CSV Export
+- `exportToCSV(data, columns, filename)` — generates CSV with proper escaping
+- `exportToPDF(elementId, filename)` — captures DOM element as multi-page PDF using html2canvas + jsPDF
+- Export buttons on: Daily Brief (PDF), Scorecards (CSV), Actions (CSV), Reports (PDF), Metrics (CSV)
+- File: `client/src/lib/export-utils.ts`, 5 page files
+
+### 4. Favorites / Pinned Pages
+- "Favorites" group at top of sidebar showing pinned pages with their original icons
+- Star icon on hover for every sidebar item to pin/unpin
+- Persists to `user_preferences.pinnedPages` via API with optimistic updates
+- Files: `client/src/hooks/use-preferences.ts`, `client/src/components/app-sidebar.tsx`
+
+### 5. Keyboard Shortcuts
+- Two-key sequences: `g→d` Dashboard, `g→b` Brief, `g→a` Actions, `g→i` Inbox, `g→s` Scorecards, `n→a` New Action
+- `?` toggles shortcuts help dialog with enable/disable toggle
+- Respects `keyboardShortcutsEnabled` from user preferences
+- Files: `client/src/hooks/use-keyboard-shortcuts.ts`, `client/src/components/shortcuts-dialog.tsx`
+
+### 6. Progressive Web App (PWA)
+- Web app manifest with brand name, colors, and SVG icons (192x192, 512x512)
+- Service worker: cache-first for static assets, network-first for API, offline fallback page
+- Apple mobile web app meta tags for iOS install
+- Files: `client/public/manifest.json`, `client/public/sw.js`, `client/public/offline.html`, `client/index.html`, `client/src/main.tsx`
+
+### API Routes Added
+- `GET /api/user/preferences` — get current user's preferences (auto-creates default row)
+- `PUT /api/user/preferences` — update pinned pages and shortcuts setting
+- `GET /api/notifications?tenantId=X` — list notifications with unread count
+- `POST /api/notifications/:id/read` — mark single notification as read
+- `POST /api/notifications/read-all` — mark all notifications as read for tenant

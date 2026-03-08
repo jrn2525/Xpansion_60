@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTenantStore } from "@/lib/tenant-store";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -28,6 +29,8 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { Link } from "wouter";
+import { exportToPDF } from "@/lib/export-utils";
+import { Download, Loader2 } from "lucide-react";
 
 interface DailyBriefData {
   score: {
@@ -120,6 +123,19 @@ function formatTimestamp(dateStr: string | null): string {
 export default function DailyBriefPage() {
   const { activeTenantId } = useTenantStore();
   const { toast } = useToast();
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExportPDF() {
+    setExporting(true);
+    try {
+      await exportToPDF("daily-brief-content", `daily-brief-${new Date().toISOString().split("T")[0]}`);
+      toast({ title: "PDF exported successfully" });
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err.message, variant: "destructive" });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const { data: briefResponse, isLoading } = useQuery<{ ok: boolean; data: DailyBriefData }>({
     queryKey: ["/api/v1/tenants", activeTenantId, "daily-brief"],
@@ -193,6 +209,19 @@ export default function DailyBriefPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto" data-testid="page-daily-brief">
+      <div className="flex items-center justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportPDF}
+          disabled={exporting}
+          data-testid="button-export-pdf"
+        >
+          {exporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+          Export PDF
+        </Button>
+      </div>
+      <div id="daily-brief-content">
       <HeroScore score={brief?.score ?? null} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -211,6 +240,7 @@ export default function DailyBriefPage() {
 
       <div className="text-xs text-muted-foreground text-center pt-2" data-testid="text-last-updated">
         Last updated: {formatTimestamp(brief?.lastUpdated ?? null)}
+      </div>
       </div>
     </div>
   );

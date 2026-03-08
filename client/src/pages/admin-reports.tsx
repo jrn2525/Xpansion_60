@@ -46,6 +46,8 @@ import {
 } from "lucide-react";
 import { useTenantStore } from "@/lib/tenant-store";
 import { severityColors } from "@/lib/semantic-colors";
+import { exportToPDF } from "@/lib/export-utils";
+import { Download } from "lucide-react";
 
 interface ExecutiveReport {
   id: number;
@@ -70,7 +72,7 @@ function parseJson<T>(json: string | null): T[] {
   try { return JSON.parse(json); } catch { return []; }
 }
 
-function ReportViewer({ report }: { report: ExecutiveReport }) {
+function ReportViewer({ report }: { report: ExecutiveReport; showExportButton?: boolean }) {
   const improved = parseJson<ImprovedItem>(report.improvedJson);
   const worsened = parseJson<WorsenedItem>(report.worsenedJson);
   const risks = parseJson<RiskItem>(report.risksJson);
@@ -238,6 +240,19 @@ function ExecutiveSummariesTab() {
   const { activeTenantId } = useTenantStore();
   const { toast } = useToast();
   const [selectedReport, setSelectedReport] = useState<ExecutiveReport | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+
+  async function handleExportReportPDF() {
+    setExportingPdf(true);
+    try {
+      await exportToPDF("executive-report-content", `executive-report-${selectedReport?.weekKey || "unknown"}`);
+      toast({ title: "PDF exported successfully" });
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err.message, variant: "destructive" });
+    } finally {
+      setExportingPdf(false);
+    }
+  }
 
   const { data: historyResponse, isLoading } = useQuery<{ ok: boolean; data: ExecutiveReport[] }>({
     queryKey: ["/api/admin/executive-reports", activeTenantId, "history"],
@@ -349,7 +364,21 @@ function ExecutiveSummariesTab() {
               Executive Report — {selectedReport?.weekKey}
             </DialogTitle>
           </DialogHeader>
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportReportPDF}
+              disabled={exportingPdf}
+              data-testid="button-export-report-pdf"
+            >
+              {exportingPdf ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+              Export PDF
+            </Button>
+          </div>
+          <div id="executive-report-content">
           {selectedReport && <ReportViewer report={selectedReport} />}
+          </div>
         </DialogContent>
       </Dialog>
     </>

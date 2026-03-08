@@ -1046,6 +1046,77 @@ export async function registerRoutes(
     }
   });
 
+  // ── User Preferences ──
+
+  app.get("/api/user/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const prefs = await storage.getUserPreferences(userId);
+      res.json(ok(prefs));
+    } catch (error: any) {
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
+    }
+  });
+
+  app.put("/api/user/preferences", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const prefsSchema = z.object({
+        pinnedPages: z.array(z.string()).optional(),
+        keyboardShortcutsEnabled: z.boolean().optional(),
+      });
+      const parsed = prefsSchema.safeParse(req.body);
+      if (!parsed.success) return zodError(res, parsed.error);
+      const prefs = await storage.updateUserPreferences(userId, parsed.data);
+      res.json(ok(prefs));
+    } catch (error: any) {
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
+    }
+  });
+
+  // ── User Notifications ──
+
+  app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const tenantId = parseIntOrThrow(req.query.tenantId as string, "tenantId");
+      const hasAccess = await requireTenantAccess(req, res, tenantId);
+      if (!hasAccess) return;
+      const notifications = await storage.getUserNotifications(userId, tenantId);
+      const unreadCount = await storage.getUnreadNotificationCount(userId, tenantId);
+      res.json(ok({ notifications, unreadCount }));
+    } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
+    }
+  });
+
+  app.post("/api/notifications/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const id = parseIntOrThrow(req.params.id, "id");
+      await storage.markNotificationRead(id, userId);
+      res.json(ok({ success: true }));
+    } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
+    }
+  });
+
+  app.post("/api/notifications/read-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const tenantId = parseIntOrThrow(String(req.body.tenantId), "tenantId");
+      const hasAccess = await requireTenantAccess(req, res, tenantId);
+      if (!hasAccess) return;
+      await storage.markAllNotificationsRead(userId, tenantId);
+      res.json(ok({ success: true }));
+    } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
+    }
+  });
+
   app.use("/api/admin", adminRouter);
   app.use("/api/admin", securityRouter);
   app.use("/api/v1", securityV1Router);
