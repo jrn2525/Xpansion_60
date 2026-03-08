@@ -101,6 +101,48 @@ export default function OnboardingPage() {
     enabled: !!effectiveTenantId,
   });
 
+  const { data: metricsData } = useQuery<MetricDefinition[]>({
+    queryKey: ["/api/tenants", effectiveTenantId, "metrics"],
+    enabled: !!effectiveTenantId,
+  });
+
+  const { data: alertRulesData } = useQuery<any[]>({
+    queryKey: ["/api/admin/alert-rules"],
+    queryFn: async () => {
+      if (!effectiveTenantId) return [];
+      const res = await apiRequest("GET", `/api/admin/alert-rules?tenantId=${effectiveTenantId}`);
+      const json = await res.json();
+      return json.data || json || [];
+    },
+    enabled: !!effectiveTenantId,
+  });
+
+  const { data: scoreRunsData } = useQuery<any[]>({
+    queryKey: ["/api/tenants", effectiveTenantId, "score-runs"],
+    enabled: !!effectiveTenantId,
+  });
+
+  useEffect(() => {
+    if (!effectiveTenantId || completedSteps.length > 0) return;
+    const autoCompleted: string[] = [];
+    if (effectiveTenantId) autoCompleted.push("tenant");
+    if (locations && locations.length > 0) autoCompleted.push("location");
+    if (metricsData && metricsData.length >= 3) autoCompleted.push("kpis");
+    if (scorecards && scorecards.length > 0) autoCompleted.push("scorecard");
+    if (scoreRunsData && Array.isArray(scoreRunsData) && scoreRunsData.length > 0) autoCompleted.push("score_run");
+    if (alertRulesData && Array.isArray(alertRulesData) && alertRulesData.length > 0) autoCompleted.push("alert");
+
+    if (autoCompleted.length > 0) {
+      setCompletedSteps(autoCompleted);
+      const firstIncomplete = STEPS.findIndex(s => !autoCompleted.includes(s.key));
+      if (firstIncomplete >= 0) {
+        setCurrentStep(firstIncomplete);
+      } else {
+        setIsComplete(true);
+      }
+    }
+  }, [effectiveTenantId, locations, metricsData, scorecards, scoreRunsData, alertRulesData]);
+
   const markStepComplete = (stepKey: string) => {
     const newCompleted = Array.from(new Set([...completedSteps, stepKey]));
     setCompletedSteps(newCompleted);

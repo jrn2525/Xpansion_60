@@ -7,6 +7,10 @@ import {
   scorecardTemplates,
   scorecardMetrics,
   metricValues,
+  alertRules,
+  alertEvents,
+  actions,
+  opportunities,
 } from "@shared/schema";
 import { sql } from "drizzle-orm";
 
@@ -220,5 +224,68 @@ export async function seed() {
     await db.insert(metricValues).values(batch);
   }
 
-  console.log("Seed complete.");
+  const [alertRule1] = await db.insert(alertRules).values([
+    {
+      tenantId: demoTenant.id,
+      name: "Revenue Below Target",
+      severity: "high",
+      conditionJson: JSON.stringify({ type: "threshold_breach", metricId: revMetric.id, operator: "less_than", value: 40000 }),
+      actionJson: JSON.stringify({ notify: true, channels: ["email"] }),
+      isActive: true,
+      cooldownMinutes: 1440,
+      escalationMinutes: 4320,
+      dedupWindowMinutes: 1440,
+      impactLevel: "high",
+      persistentThresholdDays: 7,
+      recommendedActions: ["Review marketing spend", "Check staffing levels", "Analyze product mix"],
+    },
+    {
+      tenantId: demoTenant.id,
+      name: "CSAT Drop Alert",
+      severity: "medium",
+      conditionJson: JSON.stringify({ type: "threshold_breach", metricId: csatMetric.id, operator: "less_than", value: 3.5 }),
+      actionJson: JSON.stringify({ notify: true, channels: ["email"] }),
+      isActive: true,
+      cooldownMinutes: 720,
+      dedupWindowMinutes: 720,
+      impactLevel: "medium",
+      recommendedActions: ["Review recent customer complaints", "Check staff training completion"],
+    },
+  ]).returning();
+
+  await db.insert(alertEvents).values([
+    {
+      alertRuleId: alertRule1.id,
+      tenantId: demoTenant.id,
+      locationId: loc2.id,
+      metricDefinitionId: revMetric.id,
+      status: "open",
+      severity: "high",
+      message: "Revenue at Westside Mall dropped below $40,000",
+      detailJson: JSON.stringify({ triggeredValue: 35200, threshold: 40000, impactLevel: "high" }),
+    },
+    {
+      alertRuleId: alertRule1.id,
+      tenantId: demoTenant.id,
+      locationId: loc3.id,
+      metricDefinitionId: revMetric.id,
+      status: "open",
+      severity: "high",
+      message: "Revenue at Airport Terminal B dropped below $40,000",
+      detailJson: JSON.stringify({ triggeredValue: 38500, threshold: 40000, impactLevel: "high" }),
+    },
+  ]);
+
+  await db.insert(actions).values([
+    { tenantId: demoTenant.id, locationId: loc1.id, title: "Review Q1 marketing plan", status: "pending", priority: "high", description: "Evaluate marketing spend effectiveness for Downtown" },
+    { tenantId: demoTenant.id, locationId: loc2.id, title: "Staffing assessment for Westside", status: "in_progress", priority: "medium", description: "Check if understaffing is causing revenue decline" },
+    { tenantId: demoTenant.id, locationId: loc3.id, title: "Speed of service audit", status: "pending", priority: "high", description: "Airport location service times need improvement" },
+  ]);
+
+  await db.insert(opportunities).values([
+    { tenantId: demoTenant.id, title: "Lunch combo upsell opportunity", description: "Data shows 40% of lunch orders are single items — combo pricing could increase AOV by 15%", impactScore: 85, confidenceScore: 0.78, status: "open", sourceType: "trend_analysis" },
+    { tenantId: demoTenant.id, title: "Weekend staffing optimization", description: "Weekend traffic is 30% higher than weekday but staffing is flat — adjusting could improve CSAT", impactScore: 70, confidenceScore: 0.65, status: "open", sourceType: "anomaly" },
+  ]);
+
+  console.log("Seed complete: tenant, locations, metrics, scorecards, alerts, actions, opportunities.");
 }

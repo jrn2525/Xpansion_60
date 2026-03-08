@@ -1,0 +1,111 @@
+You are a principal full-stack engineer and product UX lead working inside Replit on an existing app:
+
+Xpansion Console — Franchise Command Center
+
+Your job is to produce and implement a high-impact Phase 1 upgrade that improves activation, daily operator value, alert signal quality, data trust, and security posture.
+
+================================================================
+CONTEXT + CONSTRAINTS
+================================================================
+- Start by detecting the actual stack from the repository (do not assume blindly).
+- Likely stack (confirm): React + Vite + TypeScript, React Router, TanStack Query, Node/Express API, PostgreSQL + ORM.
+- Preserve existing architecture, patterns, and coding style.
+- Do not introduce a new framework.
+- Keep changes incremental and reviewable.
+- Minimize breaking API changes; if required, document migration path.
+- Keep UX clean, decisive, practical, and mobile-friendly.
+
+================================================================
+PRIMARY BUSINESS OUTCOMES
+================================================================
+1) New user gets first value in under 5 minutes.
+2) Daily dashboard gives clear decisions in under 30 seconds.
+3) Alert noise drops while critical visibility stays high.
+4) Import flow increases confidence/trust in data.
+5) Security headers and auth handling are consistently hardened.
+
+================================================================
+PHASE 1 SCOPE (IMPLEMENT IN THIS ORDER)
+================================================================
+
+A) ONBOARDING WIZARD (guided setup flow)
+Create a step-by-step onboarding experience:
+1. Create/select tenant
+2. Add first location
+3. Create 3 starter KPIs (template-based)
+4. Create first weighted scorecard
+5. Run scorecard for selected location
+6. Enable first alert rule
+
+Requirements:
+- Stepper UI with percent complete
+- Save and resume later
+- Per-step validation
+- Completion state with CTA: “Go to Owner Daily Brief”
+- Auto-skip completed steps when data already exists
+- Persist onboarding progress in DB
+- Track analytics events for each step completion
+
+Deliverables:
+- New route(s): /onboarding/*
+- Backend endpoints/services for each step
+- DB schema support for onboarding status/progress
+- Tests for onboarding progression logic
+
+B) OWNER DAILY BRIEF (action-first dashboard)
+Create an owner/operator landing view showing:
+- Overall score today
+- Trend vs prior period
+- Top 3 risks
+- Top 3 opportunities
+- “Do this next” actions (with direct navigation)
+- Last updated timestamp
+
+Requirements:
+- Mobile-first responsive layout
+- Tenant-aware and role-aware
+- Strong empty states with clear CTAs
+- Quick jump to source modules (alerts, scorecards, trends, etc.)
+
+Route:
+- /dashboard/daily-brief (or existing dashboard entry via feature flag)
+
+C) ALERT QUALITY IMPROVEMENTS
+Improve alerting with noise reduction and actionability:
+- Cooldown defaults
+- Dedup logic
+- Escalation logic
+- Persistent issue trigger: fire when same metric breaches for N consecutive runs or X days
+- Alert impact score: low/medium/high (revenue-weighted if available; fallback to rule-based)
+- Per-alert action checklist
+- Assign owner + optional due date
+- Alert status lifecycle: open, in-progress, resolved
+
+Deliverables:
+- Backend rule/evaluation updates
+- UI updates for alert detail/list actions
+- Tests for persistent trigger and dedup/cooldown behavior
+
+D) IMPORT CONFIDENCE LAYER
+Before import:
+- CSV validation preview
+- Row-level error reasons
+- Column mapping confirmation
+- Save mapping templates per tenant
+
+After import:
+- Quality summary card: % valid, % warnings, % failed
+- Data quality score badge
+- Link to issue details
+
+Deliverables:
+- Parser/validator improvements
+- UI preview and results pages/components
+- Tests for import validation/parser behavior
+
+E) SECURITY + AUTH HARDENING
+Implement or verify:
+- Content-Security-Policy
+- X-Frame-Options or CSP frame-ancestors
+- X-Content-Type-Options
+- Re

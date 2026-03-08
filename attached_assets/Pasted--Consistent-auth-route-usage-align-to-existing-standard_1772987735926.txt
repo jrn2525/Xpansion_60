@@ -1,0 +1,74 @@
+- Consistent auth route usage (align to existing standard, preferably /api/auth/* if already present)
+- Consistent frontend handling for 401/403 with graceful session-expired UX
+
+Deliverables:
+- Middleware/config updates
+- Frontend session-expired handling and redirects
+- Verification notes for headers in responses
+
+================================================================
+PROCESS YOU MUST FOLLOW
+================================================================
+1) Output IMPLEMENTATION PLAN first (no coding yet), including:
+- Detected stack and key folders/files
+- DB migration plan
+- API contract changes (if any)
+- Feature flag strategy (if used)
+- Risks, assumptions, and rollback notes
+
+2) Then implement in batches:
+- Batch 1: onboarding skeleton + DB state
+- Batch 2: onboarding full flow
+- Batch 3: owner daily brief
+- Batch 4: alert quality upgrades
+- Batch 5: import confidence layer
+- Batch 6: security/auth hardening + polish
+
+3) For each batch, provide:
+- Files changed
+- Why each change was made
+- Migration/seed commands (if needed)
+- Manual QA checklist
+
+4) Add tests for:
+- Onboarding progression logic
+- Persistent alert trigger logic
+- CSV import validation/parser
+- Smoke tests for new routes/pages
+
+5) Add seed/demo data:
+- 1 tenant
+- 3 locations
+- 5 metrics
+- 1 scorecard
+- sample alert events
+- sample import history
+
+================================================================
+ACCEPTANCE CRITERIA
+================================================================
+- New user can reach first scorecard run via onboarding in <5 minutes
+- Daily Brief delivers clear next actions in <30 seconds
+- Alert volume reduced through dedup/cooldown without losing critical visibility
+- Import flow clearly communicates quality before and after import
+- Security headers present in responses
+- No regression in existing tenant/location/scorecard workflows
+
+================================================================
+OUTPUT FORMAT (STRICT)
+================================================================
+1) IMPLEMENTATION PLAN
+2) BATCH 1 CHANGES
+3) BATCH 2 CHANGES
+4) BATCH 3 CHANGES
+5) BATCH 4 CHANGES
+6) BATCH 5 CHANGES
+7) BATCH 6 CHANGES
+8) FINAL SUMMARY:
+- Completed items
+- Remaining items
+- Known limitations
+- QA checklist
+- Prioritized next sprint recommendations
+
+Start now with IMPLEMENTATION PLAN only. Do not code until the plan is shown.
