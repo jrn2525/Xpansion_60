@@ -5,8 +5,8 @@ import { computeTenantRisk, computeLocationMetricRisk } from "./services/risk-en
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { db } from "./db";
-import { metricValues, playbookApplications, playbooks, locations, metricDefinitions, goals, alertEvents, opportunities, actions } from "@shared/schema";
-import { eq, and, desc, gte, lte, asc } from "drizzle-orm";
+import { metricValues, playbookApplications, playbooks, locations, metricDefinitions, goals, alertEvents, opportunities, actions, auditLogs, tenantUsers } from "@shared/schema";
+import { eq, and, desc, gte, lte, asc, count, sql } from "drizzle-orm";
 
 const ok = (data: any) => ({ ok: true, data });
 const err = (code: string, message: string) => ({ ok: false, error: { code, message } });
@@ -712,6 +712,70 @@ intelligenceRouter.get("/superadmin/tower/overview", isAuthenticated, isSuperAdm
       totalOpenActions,
       tenants: tenantSummaries.sort((a, b) => b.avgRisk - a.avgRisk),
     }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+intelligenceRouter.get("/superadmin/tower/health", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
+  try {
+    const allTenants = await storage.getTenants();
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const healthData = [];
+    for (const tenant of allTenants) {
+      const recentLogs = await db.select()
+        .from(auditLogs)
+        .where(and(
+          eq(auditLogs.tenantId, tenant.id),
+          gte(auditLogs.createdAt, sevenDaysAgo)
+        ))
+        .orderBy(desc(auditLogs.createdAt));
+
+      const uniqueUsers = new Set(recentLogs.map(l => l.actorUserId));
+      const lastActivity = recentLogs.length > 0 ? recentLogs[0].createdAt : null;
+      const actionsThisWeek = recentLogs.filter(l => l.action === "create" && l.entityType === "action").length;
+
+      const latestMetricValue = await db.select({ createdAt: metricValues.createdAt })
+        .from(metricValues)
+        .innerJoin(metricDefinitions, eq(metricValues.metricDefinitionId, metricDefinitions.id))
+        .where(eq(metricDefinitions.tenantId, tenant.id))
+        .orderBy(desc(metricValues.createdAt))
+        .limit(1);
+
+      const lastDataDate = latestMetricValue.length > 0 ? latestMetricValue[0].createdAt : null;
+
+      const totalUsers = await db.select({ cnt: count() })
+        .from(tenantUsers)
+        .where(eq(tenantUsers.tenantId, tenant.id));
+
+      let status: "healthy" | "quiet" | "inactive" = "inactive";
+      if (lastActivity) {
+        const daysSinceActivity = (now.getTime() - new Date(lastActivity).getTime()) / (1000 * 60 * 60 * 24);
+        if (daysSinceActivity <= 3) status = "healthy";
+        else if (daysSinceActivity <= 7) status = "quiet";
+      }
+
+      healthData.push({
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+        slug: tenant.slug,
+        totalUsers: totalUsers[0]?.cnt || 0,
+        activeUsersLast7d: uniqueUsers.size,
+        actionsCreatedThisWeek: actionsThisWeek,
+        lastActivityDate: lastActivity,
+        lastDataDate,
+        status,
+      });
+    }
+
+    healthData.sort((a, b) => {
+      const order = { inactive: 0, quiet: 1, healthy: 2 };
+      return order[a.status] - order[b.status];
+    });
+
+    res.json(ok(healthData));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }

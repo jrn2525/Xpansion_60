@@ -23,6 +23,8 @@ export const tenants = pgTable("tenants", {
   slug: varchar("slug", { length: 255 }).notNull().unique(),
   type: varchar("type", { length: 50 }).notNull().default("single_location"),
   isActive: boolean("is_active").notNull().default(true),
+  logoUrl: varchar("logo_url", { length: 1024 }),
+  accentColor: varchar("accent_color", { length: 7 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

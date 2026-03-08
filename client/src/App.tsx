@@ -49,6 +49,7 @@ const CampaignsPage = lazy(() => import("@/pages/campaigns"));
 const InboxPage = lazy(() => import("@/pages/inbox"));
 const OnboardingPage = lazy(() => import("@/pages/onboarding"));
 const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
+const TenantBrandingPage = lazy(() => import("@/pages/tenant-branding"));
 
 function LoadingSkeleton() {
   return (
@@ -131,6 +132,7 @@ function AuthenticatedRouter() {
       <Route path="/campaigns" component={CampaignsPage} />
       <Route path="/brief" component={DailyBriefPage} />
       <Route path="/inbox" component={InboxPage} />
+      <Route path="/admin/branding" component={TenantBrandingPage} />
       <Route path="/superadmin/tower" component={SuperadminTowerPage} />
       <Route path="/onboarding" component={OnboardingPage} />
       <Route component={NotFound} />

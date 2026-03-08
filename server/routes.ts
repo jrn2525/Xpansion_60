@@ -91,7 +91,7 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const userTenants = await storage.getUserTenants(userId);
-      res.json(ok(userTenants.map((ut) => ut.tenant)));
+      res.json(ok(userTenants.map((ut) => ({ ...ut.tenant, role: ut.role }))));
     } catch (error: any) {
       if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
       res.status(500).json(err("INTERNAL_ERROR", error.message));

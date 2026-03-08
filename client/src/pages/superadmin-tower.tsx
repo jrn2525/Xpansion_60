@@ -3,6 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useEntityLookup } from "@/hooks/use-entity-lookup";
+import { useTenantStore } from "@/lib/tenant-store";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +39,10 @@ import {
   Users,
   Loader2,
   ArrowUpDown,
+  Heart,
+  ExternalLink,
+  Clock,
+  Activity,
 } from "lucide-react";
 import { severityColors } from "@/lib/semantic-colors";
 
@@ -88,6 +94,24 @@ interface InterventionItem {
   createdAt: string | null;
 }
 
+interface ClientHealth {
+  tenantId: number;
+  tenantName: string;
+  slug: string;
+  totalUsers: number;
+  activeUsersLast7d: number;
+  actionsCreatedThisWeek: number;
+  lastActivityDate: string | null;
+  lastDataDate: string | null;
+  status: "healthy" | "quiet" | "inactive";
+}
+
+const healthStatusConfig: Record<string, { color: string; label: string }> = {
+  healthy: { color: "bg-status-success/15 text-status-success-foreground", label: "Active" },
+  quiet: { color: "bg-status-warning/15 text-status-warning-foreground", label: "Going Quiet" },
+  inactive: { color: "bg-status-error/20 text-status-error-foreground", label: "Inactive" },
+};
+
 const riskLevelColors: Record<string, string> = {
   low: "bg-status-success/15 text-status-success-foreground",
   medium: "bg-status-warning/15 text-status-warning-foreground",
@@ -95,9 +119,25 @@ const riskLevelColors: Record<string, string> = {
   critical: "bg-status-error/30 text-status-error-foreground",
 };
 
+function timeAgo(dateStr: string | null): string {
+  if (!dateStr) return "Never";
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = now.getTime() - d.getTime();
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  if (hours < 1) return "Just now";
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
 export default function SuperadminTowerPage() {
   const { toast } = useToast();
   const { resolveUser, users } = useEntityLookup();
+  const { setActiveTenantId } = useTenantStore();
+  const [, navigate] = useLocation();
   const [sortBy, setSortBy] = useState("risk");
   const [riskFilter, setRiskFilter] = useState("all");
   const [interventionStatus, setInterventionStatus] = useState("all");
@@ -108,6 +148,15 @@ export default function SuperadminTowerPage() {
   const { data: overviewResponse, isLoading: overviewLoading } = useQuery<{ ok: boolean; data: TowerOverview }>({
     queryKey: ["/api/superadmin/tower/overview"],
   });
+
+  const { data: healthData, isLoading: healthLoading } = useQuery<ClientHealth[]>({
+    queryKey: ["/api/superadmin/tower/health"],
+  });
+
+  function quickSwitch(tenantId: number) {
+    setActiveTenantId(tenantId);
+    navigate("/dashboard");
+  }
 
   const tenantParams = new URLSearchParams();
   tenantParams.set("sort", sortBy);
@@ -226,6 +275,71 @@ export default function SuperadminTowerPage() {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Heart className="h-4 w-4" />
+            Client Health
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {healthLoading ? (
+            <div className="space-y-2">
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-16" />)}
+            </div>
+          ) : !healthData || healthData.length === 0 ? (
+            <p className="text-muted-foreground text-center py-4" data-testid="text-no-health">No client data available.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {healthData.map((client) => {
+                const cfg = healthStatusConfig[client.status] || healthStatusConfig.inactive;
+                return (
+                  <div
+                    key={client.tenantId}
+                    className="border rounded-lg p-4 flex flex-col gap-2"
+                    data-testid={`health-card-${client.tenantId}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-semibold text-sm" data-testid={`health-name-${client.tenantId}`}>{client.tenantName}</p>
+                        <Badge className={`text-xs ${cfg.color}`} data-testid={`health-status-${client.tenantId}`}>{cfg.label}</Badge>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => quickSwitch(client.tenantId)}
+                        data-testid={`button-switch-${client.tenantId}`}
+                        title="Switch to this tenant"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        <span>{client.activeUsersLast7d}/{client.totalUsers} active</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Activity className="h-3 w-3" />
+                        <span>{client.actionsCreatedThisWeek} actions/wk</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        <span>Last seen: {timeAgo(client.lastActivityDate)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        <span>Data: {timeAgo(client.lastDataDate)}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="pb-2">

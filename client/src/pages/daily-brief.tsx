@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTenantStore } from "@/lib/tenant-store";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -81,10 +82,11 @@ function riskLevel(score: number): string {
   return "low";
 }
 
-function TrendIcon({ direction }: { direction: "up" | "down" | "flat" | null }) {
-  if (direction === "up") return <TrendingUp className="h-5 w-5" />;
-  if (direction === "down") return <TrendingDown className="h-5 w-5" />;
-  return <Minus className="h-5 w-5" />;
+function TrendIcon({ direction, isMobile }: { direction: "up" | "down" | "flat" | null; isMobile?: boolean }) {
+  const size = isMobile ? "h-6 w-6" : "h-5 w-5";
+  if (direction === "up") return <TrendingUp className={size} />;
+  if (direction === "down") return <TrendingDown className={size} />;
+  return <Minus className={size} />;
 }
 
 function priorityBadgeStyle(priority: string | null): string {
@@ -124,6 +126,7 @@ export default function DailyBriefPage() {
   const { activeTenantId } = useTenantStore();
   const { toast } = useToast();
   const [exporting, setExporting] = useState(false);
+  const isMobile = useIsMobile();
 
   async function handleExportPDF() {
     setExporting(true);
@@ -196,9 +199,9 @@ export default function DailyBriefPage() {
 
   if (isLoading) {
     return (
-      <div className="p-6 space-y-6" data-testid="brief-loading">
+      <div className={`${isMobile ? "p-3" : "p-6"} space-y-6`} data-testid="brief-loading">
         <Skeleton className="h-40 w-full" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={`grid grid-cols-1 ${isMobile ? "" : "md:grid-cols-2 lg:grid-cols-3"} gap-4`}>
           <Skeleton className="h-48" />
           <Skeleton className="h-48" />
           <Skeleton className="h-48" />
@@ -208,13 +211,14 @@ export default function DailyBriefPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto" data-testid="page-daily-brief">
+    <div className={`${isMobile ? "p-3 space-y-4" : "p-6 space-y-6"} max-w-5xl mx-auto`} data-testid="page-daily-brief">
       <div className="flex items-center justify-end">
         <Button
           variant="outline"
-          size="sm"
+          size={isMobile ? "default" : "sm"}
           onClick={handleExportPDF}
           disabled={exporting}
+          className={isMobile ? "w-full min-h-[44px]" : ""}
           data-testid="button-export-pdf"
         >
           {exporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
@@ -222,23 +226,45 @@ export default function DailyBriefPage() {
         </Button>
       </div>
       <div id="daily-brief-content">
-      <HeroScore score={brief?.score ?? null} />
+      <HeroScore score={brief?.score ?? null} isMobile={isMobile} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <RisksSection risks={brief?.topRisks ?? []} />
-        <OpportunitiesSection
-          opportunities={brief?.topOpportunities ?? []}
-          onConvert={(opp) => convertToActionMutation.mutate(opp)}
-          isConverting={convertToActionMutation.isPending}
-        />
-        <ActionsSection
-          actions={brief?.topActions ?? []}
-          onMarkDone={(id) => markDoneMutation.mutate(id)}
-          isMarkingDone={markDoneMutation.isPending}
-        />
-      </div>
+      {isMobile ? (
+        <div className="space-y-4 mt-4">
+          <SwipeableCardRow>
+            <RisksSection risks={brief?.topRisks ?? []} isMobile={isMobile} />
+            <OpportunitiesSection
+              opportunities={brief?.topOpportunities ?? []}
+              onConvert={(opp) => convertToActionMutation.mutate(opp)}
+              isConverting={convertToActionMutation.isPending}
+              isMobile={isMobile}
+            />
+            <ActionsSection
+              actions={brief?.topActions ?? []}
+              onMarkDone={(id) => markDoneMutation.mutate(id)}
+              isMarkingDone={markDoneMutation.isPending}
+              isMobile={isMobile}
+            />
+          </SwipeableCardRow>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <RisksSection risks={brief?.topRisks ?? []} isMobile={false} />
+          <OpportunitiesSection
+            opportunities={brief?.topOpportunities ?? []}
+            onConvert={(opp) => convertToActionMutation.mutate(opp)}
+            isConverting={convertToActionMutation.isPending}
+            isMobile={false}
+          />
+          <ActionsSection
+            actions={brief?.topActions ?? []}
+            onMarkDone={(id) => markDoneMutation.mutate(id)}
+            isMarkingDone={markDoneMutation.isPending}
+            isMobile={false}
+          />
+        </div>
+      )}
 
-      <div className="text-xs text-muted-foreground text-center pt-2" data-testid="text-last-updated">
+      <div className={`text-xs text-muted-foreground text-center pt-2 ${isMobile ? "pb-4" : ""}`} data-testid="text-last-updated">
         Last updated: {formatTimestamp(brief?.lastUpdated ?? null)}
       </div>
       </div>
@@ -246,17 +272,33 @@ export default function DailyBriefPage() {
   );
 }
 
-function HeroScore({ score }: { score: DailyBriefData["score"] }) {
+function SwipeableCardRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2 -mx-3 px-3"
+      style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}
+      data-testid="swipeable-card-row"
+    >
+      {Array.isArray(children) ? children.map((child, i) => (
+        <div key={i} className="min-w-[85vw] snap-center flex-shrink-0">
+          {child}
+        </div>
+      )) : children}
+    </div>
+  );
+}
+
+function HeroScore({ score, isMobile }: { score: DailyBriefData["score"]; isMobile: boolean }) {
   if (!score || score.totalScore == null) {
     return (
       <Card data-testid="card-hero-score-empty">
-        <CardContent className="p-8 text-center space-y-3">
-          <Zap className="h-10 w-10 mx-auto text-muted-foreground" />
-          <h2 className="text-lg font-semibold" data-testid="text-no-score-title">No Score Yet</h2>
+        <CardContent className={`${isMobile ? "p-5" : "p-8"} text-center space-y-3`}>
+          <Zap className={`${isMobile ? "h-12 w-12" : "h-10 w-10"} mx-auto text-muted-foreground`} />
+          <h2 className={`${isMobile ? "text-xl" : "text-lg"} font-semibold`} data-testid="text-no-score-title">No Score Yet</h2>
           <p className="text-sm text-muted-foreground" data-testid="text-no-score-msg">
             Run a scorecard to see your overall performance score.
           </p>
-          <Button asChild variant="default" data-testid="link-go-scorecards">
+          <Button asChild variant="default" className={isMobile ? "w-full min-h-[44px]" : ""} data-testid="link-go-scorecards">
             <Link href="/scorecards">
               Go to Scorecards
               <ArrowRight className="ml-2 h-4 w-4" />
@@ -273,11 +315,11 @@ function HeroScore({ score }: { score: DailyBriefData["score"] }) {
 
   return (
     <Card data-testid="card-hero-score">
-      <CardContent className="p-6">
-        <div className="flex flex-col sm:flex-row items-center gap-6">
+      <CardContent className={isMobile ? "p-5" : "p-6"}>
+        <div className={`flex ${isMobile ? "flex-col items-center text-center" : "flex-col sm:flex-row items-center"} gap-4`}>
           <div className="flex flex-col items-center gap-2">
             <span
-              className={`text-5xl font-bold tabular-nums ${scoreColor(displayScore)}`}
+              className={`${isMobile ? "text-6xl" : "text-5xl"} font-bold tabular-nums ${scoreColor(displayScore)}`}
               data-testid="text-overall-score"
             >
               {displayScore}
@@ -288,28 +330,28 @@ function HeroScore({ score }: { score: DailyBriefData["score"] }) {
           </div>
 
           {score.trendDirection && score.scoreDelta != null && (
-            <div className="flex items-center gap-2" data-testid="trend-indicator">
+            <div className={`flex items-center gap-2 ${isMobile ? "justify-center" : ""}`} data-testid="trend-indicator">
               <span className={deltaTrendColor(score.scoreDelta)}>
-                <TrendIcon direction={score.trendDirection} />
+                <TrendIcon direction={score.trendDirection} isMobile={isMobile} />
               </span>
               <div className="flex flex-col">
                 <span
-                  className={`text-sm font-medium ${deltaTrendColor(score.scoreDelta)}`}
+                  className={`${isMobile ? "text-base" : "text-sm"} font-medium ${deltaTrendColor(score.scoreDelta)}`}
                   data-testid="text-score-delta"
                 >
                   {score.scoreDelta > 0 ? "+" : ""}
                   {score.scoreDelta.toFixed(1)} pts
                 </span>
-                <span className="text-xs text-muted-foreground" data-testid="text-prior-score">
+                <span className={`${isMobile ? "text-sm" : "text-xs"} text-muted-foreground`} data-testid="text-prior-score">
                   vs prior: {score.priorScore != null ? Math.round(score.priorScore) : "N/A"}
                 </span>
               </div>
             </div>
           )}
 
-          <div className="flex-1" />
+          {!isMobile && <div className="flex-1" />}
 
-          <div className="text-sm text-muted-foreground hidden sm:block">
+          <div className={`text-sm text-muted-foreground ${isMobile ? "" : "hidden sm:block"}`}>
             Overall Performance Score
           </div>
         </div>
@@ -318,15 +360,15 @@ function HeroScore({ score }: { score: DailyBriefData["score"] }) {
   );
 }
 
-function RisksSection({ risks }: { risks: DailyBriefData["topRisks"] }) {
+function RisksSection({ risks, isMobile }: { risks: DailyBriefData["topRisks"]; isMobile: boolean }) {
   return (
     <Card data-testid="card-top-risks">
       <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-status-error" />
+        <CardTitle className={`${isMobile ? "text-base" : "text-sm"} font-semibold flex items-center gap-2`}>
+          <AlertTriangle className={`${isMobile ? "h-5 w-5" : "h-4 w-4"} text-status-error`} />
           Top Risks
         </CardTitle>
-        <Button variant="ghost" size="sm" asChild data-testid="link-view-all-risks">
+        <Button variant="ghost" size={isMobile ? "default" : "sm"} asChild className={isMobile ? "min-h-[44px]" : ""} data-testid="link-view-all-risks">
           <Link href="/risk">View All</Link>
         </Button>
       </CardHeader>
@@ -343,17 +385,17 @@ function RisksSection({ risks }: { risks: DailyBriefData["topRisks"] }) {
             return (
               <div
                 key={risk.id}
-                className="flex items-start justify-between gap-2 py-2 border-b last:border-b-0"
+                className={`flex items-start justify-between gap-2 ${isMobile ? "py-3 min-h-[44px]" : "py-2"} border-b last:border-b-0`}
                 data-testid={`risk-item-${risk.id}`}
               >
                 <div className="flex flex-col gap-1 min-w-0">
                   {risk.locationName && (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1" data-testid={`risk-location-${risk.id}`}>
-                      <MapPin className="h-3 w-3" />
+                    <span className={`${isMobile ? "text-sm" : "text-xs"} text-muted-foreground flex items-center gap-1`} data-testid={`risk-location-${risk.id}`}>
+                      <MapPin className={`${isMobile ? "h-4 w-4" : "h-3 w-3"}`} />
                       {risk.locationName}
                     </span>
                   )}
-                  <span className="text-sm font-medium" data-testid={`risk-score-${risk.id}`}>
+                  <span className={`${isMobile ? "text-base" : "text-sm"} font-medium`} data-testid={`risk-score-${risk.id}`}>
                     Risk Score: {Math.round(risk.riskScore)}
                   </span>
                 </div>
@@ -373,19 +415,21 @@ function OpportunitiesSection({
   opportunities,
   onConvert,
   isConverting,
+  isMobile,
 }: {
   opportunities: DailyBriefData["topOpportunities"];
   onConvert: (opp: { title: string; description: string | null; locationId: number | null }) => void;
   isConverting: boolean;
+  isMobile: boolean;
 }) {
   return (
     <Card data-testid="card-top-opportunities">
       <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <Lightbulb className="h-4 w-4 text-status-warning-foreground" />
+        <CardTitle className={`${isMobile ? "text-base" : "text-sm"} font-semibold flex items-center gap-2`}>
+          <Lightbulb className={`${isMobile ? "h-5 w-5" : "h-4 w-4"} text-status-warning-foreground`} />
           Top Opportunities
         </CardTitle>
-        <Button variant="ghost" size="sm" asChild data-testid="link-view-all-opportunities">
+        <Button variant="ghost" size={isMobile ? "default" : "sm"} asChild className={isMobile ? "min-h-[44px]" : ""} data-testid="link-view-all-opportunities">
           <Link href="/actions">View All</Link>
         </Button>
       </CardHeader>
@@ -399,11 +443,11 @@ function OpportunitiesSection({
           opportunities.map((opp) => (
             <div
               key={opp.id}
-              className="flex flex-col gap-2 py-2 border-b last:border-b-0"
+              className={`flex flex-col gap-2 ${isMobile ? "py-3" : "py-2"} border-b last:border-b-0`}
               data-testid={`opportunity-item-${opp.id}`}
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="text-sm font-medium" data-testid={`opportunity-title-${opp.id}`}>
+                <span className={`${isMobile ? "text-base" : "text-sm"} font-medium`} data-testid={`opportunity-title-${opp.id}`}>
                   {opp.title}
                 </span>
                 <Badge
@@ -413,7 +457,7 @@ function OpportunitiesSection({
                   {opp.impactScore}
                 </Badge>
               </div>
-              {opp.locationName && (
+              {!isMobile && opp.locationName && (
                 <span className="text-xs text-muted-foreground flex items-center gap-1" data-testid={`opportunity-location-${opp.id}`}>
                   <MapPin className="h-3 w-3" />
                   {opp.locationName}
@@ -421,11 +465,12 @@ function OpportunitiesSection({
               )}
               <Button
                 variant="outline"
-                size="sm"
+                size={isMobile ? "default" : "sm"}
                 onClick={() =>
                   onConvert({ title: opp.title, description: opp.description, locationId: opp.locationId })
                 }
                 disabled={isConverting}
+                className={isMobile ? "w-full min-h-[44px]" : ""}
                 data-testid={`button-convert-action-${opp.id}`}
               >
                 <ArrowRight className="mr-1 h-3 w-3" />
@@ -443,19 +488,21 @@ function ActionsSection({
   actions,
   onMarkDone,
   isMarkingDone,
+  isMobile,
 }: {
   actions: DailyBriefData["topActions"];
   onMarkDone: (id: number) => void;
   isMarkingDone: boolean;
+  isMobile: boolean;
 }) {
   return (
     <Card data-testid="card-do-this-next">
       <CardHeader className="flex flex-row items-center justify-between gap-1 space-y-0 pb-2">
-        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-          <ListChecks className="h-4 w-4 text-primary" />
+        <CardTitle className={`${isMobile ? "text-base" : "text-sm"} font-semibold flex items-center gap-2`}>
+          <ListChecks className={`${isMobile ? "h-5 w-5" : "h-4 w-4"} text-primary`} />
           Do This Next
         </CardTitle>
-        <Button variant="ghost" size="sm" asChild data-testid="link-view-all-actions">
+        <Button variant="ghost" size={isMobile ? "default" : "sm"} asChild className={isMobile ? "min-h-[44px]" : ""} data-testid="link-view-all-actions">
           <Link href="/actions">View All</Link>
         </Button>
       </CardHeader>
@@ -469,11 +516,11 @@ function ActionsSection({
           actions.map((action) => (
             <div
               key={action.id}
-              className="flex flex-col gap-2 py-2 border-b last:border-b-0"
+              className={`flex flex-col gap-2 ${isMobile ? "py-3" : "py-2"} border-b last:border-b-0`}
               data-testid={`action-item-${action.id}`}
             >
               <div className="flex items-start justify-between gap-2">
-                <span className="text-sm font-medium" data-testid={`action-title-${action.id}`}>
+                <span className={`${isMobile ? "text-base" : "text-sm"} font-medium`} data-testid={`action-title-${action.id}`}>
                   {action.title}
                 </span>
                 <Badge
@@ -483,31 +530,40 @@ function ActionsSection({
                   {action.priority || "medium"}
                 </Badge>
               </div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <Badge
-                  variant="outline"
-                  data-testid={`badge-action-status-${action.id}`}
-                >
-                  {action.status === "in_progress" ? "In Progress" : "Open"}
-                </Badge>
-                {action.dueDate && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1" data-testid={`action-due-${action.id}`}>
-                    <CalendarClock className="h-3 w-3" />
-                    Due {formatDate(action.dueDate)}
-                  </span>
-                )}
-                {action.locationName && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1" data-testid={`action-location-${action.id}`}>
-                    <MapPin className="h-3 w-3" />
-                    {action.locationName}
-                  </span>
-                )}
-              </div>
+              {!isMobile && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Badge
+                    variant="outline"
+                    data-testid={`badge-action-status-${action.id}`}
+                  >
+                    {action.status === "in_progress" ? "In Progress" : "Open"}
+                  </Badge>
+                  {action.dueDate && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1" data-testid={`action-due-${action.id}`}>
+                      <CalendarClock className="h-3 w-3" />
+                      Due {formatDate(action.dueDate)}
+                    </span>
+                  )}
+                  {action.locationName && (
+                    <span className="text-xs text-muted-foreground flex items-center gap-1" data-testid={`action-location-${action.id}`}>
+                      <MapPin className="h-3 w-3" />
+                      {action.locationName}
+                    </span>
+                  )}
+                </div>
+              )}
+              {isMobile && action.dueDate && (
+                <span className="text-sm text-muted-foreground flex items-center gap-1" data-testid={`action-due-${action.id}`}>
+                  <CalendarClock className="h-4 w-4" />
+                  Due {formatDate(action.dueDate)}
+                </span>
+              )}
               <Button
                 variant="outline"
-                size="sm"
+                size={isMobile ? "default" : "sm"}
                 onClick={() => onMarkDone(action.id)}
                 disabled={isMarkingDone}
+                className={isMobile ? "w-full min-h-[44px]" : ""}
                 data-testid={`button-mark-done-${action.id}`}
               >
                 <CheckCircle2 className="mr-1 h-3 w-3" />

@@ -60,48 +60,58 @@ import { useQuery } from "@tanstack/react-query";
 import type { Tenant } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
 import { usePreferences } from "@/hooks/use-preferences";
+import { useTenantBranding } from "@/hooks/use-tenant-branding";
 import type { LucideIcon } from "lucide-react";
+
+type TenantRole = "viewer" | "manager" | "admin" | "owner";
+
+const allRoles: TenantRole[] = ["viewer", "manager", "admin", "owner"];
+const adminOwnerRoles: TenantRole[] = ["admin", "owner"];
 
 interface NavItem {
   title: string;
   url: string;
   icon: LucideIcon;
+  visibleTo: TenantRole[];
+  superadminOnly?: boolean;
 }
 
+type TenantWithRole = Tenant & { role?: string };
+
 const navItems: NavItem[] = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Command Center", url: "/command-center", icon: Crosshair },
-  { title: "Portfolio", url: "/portfolio", icon: Briefcase },
-  { title: "Tenants", url: "/tenants", icon: Building2 },
-  { title: "Locations", url: "/locations", icon: MapPin },
-  { title: "Metrics", url: "/metrics", icon: BarChart3 },
-  { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck },
-  { title: "Trends", url: "/trends", icon: TrendingUp },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, visibleTo: allRoles },
+  { title: "Command Center", url: "/command-center", icon: Crosshair, visibleTo: adminOwnerRoles },
+  { title: "Portfolio", url: "/portfolio", icon: Briefcase, visibleTo: adminOwnerRoles },
+  { title: "Tenants", url: "/tenants", icon: Building2, visibleTo: adminOwnerRoles },
+  { title: "Locations", url: "/locations", icon: MapPin, visibleTo: allRoles },
+  { title: "Metrics", url: "/metrics", icon: BarChart3, visibleTo: allRoles },
+  { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck, visibleTo: allRoles },
+  { title: "Trends", url: "/trends", icon: TrendingUp, visibleTo: allRoles },
 ];
 
 const operationsItems: NavItem[] = [
-  { title: "Daily Brief", url: "/brief", icon: Newspaper },
-  { title: "Inbox", url: "/inbox", icon: Inbox },
-  { title: "Actions", url: "/actions", icon: ListChecks },
-  { title: "Goals", url: "/goals", icon: Target },
-  { title: "Benchmarking", url: "/benchmarking", icon: Trophy },
-  { title: "Playbooks", url: "/playbooks", icon: BookOpen },
-  { title: "Risk", url: "/risk", icon: AlertTriangle },
-  { title: "Weekly Plans", url: "/weekly-plans", icon: Calendar },
-  { title: "Campaigns", url: "/campaigns", icon: Megaphone },
+  { title: "Daily Brief", url: "/brief", icon: Newspaper, visibleTo: allRoles },
+  { title: "Inbox", url: "/inbox", icon: Inbox, visibleTo: allRoles },
+  { title: "Actions", url: "/actions", icon: ListChecks, visibleTo: allRoles },
+  { title: "Goals", url: "/goals", icon: Target, visibleTo: allRoles },
+  { title: "Benchmarking", url: "/benchmarking", icon: Trophy, visibleTo: allRoles },
+  { title: "Playbooks", url: "/playbooks", icon: BookOpen, visibleTo: allRoles },
+  { title: "Risk", url: "/risk", icon: AlertTriangle, visibleTo: allRoles },
+  { title: "Weekly Plans", url: "/weekly-plans", icon: Calendar, visibleTo: allRoles },
+  { title: "Campaigns", url: "/campaigns", icon: Megaphone, visibleTo: allRoles },
 ];
 
 const adminItems: NavItem[] = [
-  { title: "Imports", url: "/admin/imports", icon: Upload },
-  { title: "Alerts", url: "/admin/alerts", icon: Bell },
-  { title: "Reports", url: "/admin/reports", icon: FileBarChart },
-  { title: "Digests", url: "/admin/digests", icon: FileText },
-  { title: "Notifications", url: "/admin/notifications", icon: Mail },
-  { title: "Data Quality", url: "/admin/data-quality", icon: ShieldCheck },
-  { title: "Security", url: "/admin/security", icon: Shield },
-  { title: "Activity", url: "/admin/activity", icon: Activity },
-  { title: "Ops Health", url: "/admin/ops", icon: Server },
-  { title: "Command Tower", url: "/superadmin/tower", icon: Radio },
+  { title: "Imports", url: "/admin/imports", icon: Upload, visibleTo: adminOwnerRoles },
+  { title: "Alerts", url: "/admin/alerts", icon: Bell, visibleTo: adminOwnerRoles },
+  { title: "Reports", url: "/admin/reports", icon: FileBarChart, visibleTo: adminOwnerRoles },
+  { title: "Digests", url: "/admin/digests", icon: FileText, visibleTo: adminOwnerRoles },
+  { title: "Notifications", url: "/admin/notifications", icon: Mail, visibleTo: adminOwnerRoles },
+  { title: "Data Quality", url: "/admin/data-quality", icon: ShieldCheck, visibleTo: adminOwnerRoles },
+  { title: "Security", url: "/admin/security", icon: Shield, visibleTo: adminOwnerRoles },
+  { title: "Activity", url: "/admin/activity", icon: Activity, visibleTo: adminOwnerRoles },
+  { title: "Ops Health", url: "/admin/ops", icon: Server, visibleTo: adminOwnerRoles },
+  { title: "Command Tower", url: "/superadmin/tower", icon: Radio, visibleTo: [], superadminOnly: true },
 ];
 
 const allItems: NavItem[] = [...navItems, ...operationsItems, ...adminItems];
@@ -109,13 +119,22 @@ const allItems: NavItem[] = [...navItems, ...operationsItems, ...adminItems];
 export { navItems, operationsItems, adminItems, allItems };
 export type { NavItem };
 
+function filterItemsByRole(items: NavItem[], role: TenantRole | null, isSuperAdmin: boolean): NavItem[] {
+  return items.filter((item) => {
+    if (item.superadminOnly) return isSuperAdmin;
+    if (isSuperAdmin) return true;
+    if (!role) return false;
+    return item.visibleTo.includes(role);
+  });
+}
+
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { pinnedPages, isPinned, togglePin, isLoading: prefsLoading } = usePreferences();
 
-  const { data: tenantsList, isLoading: tenantsLoading } = useQuery<Tenant[]>({
+  const { data: tenantsList, isLoading: tenantsLoading } = useQuery<TenantWithRole[]>({
     queryKey: ["/api/tenants"],
   });
 
@@ -127,19 +146,37 @@ export function AppSidebar() {
     setActiveTenantId(tenantsList[0].id);
   }
 
+  const isSuperAdmin = user?.isSuperAdmin === "true";
+  const activeRole = (activeTenant?.role as TenantRole) || null;
+  const { logoUrl } = useTenantBranding();
+
+  const filteredNavItems = filterItemsByRole(navItems, activeRole, isSuperAdmin);
+  const filteredOperationsItems = filterItemsByRole(operationsItems, activeRole, isSuperAdmin);
+  const filteredAdminItems = filterItemsByRole(adminItems, activeRole, isSuperAdmin);
+
   const initials = user
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"
     : "U";
 
   const favoriteItems = pinnedPages
     .map((url) => allItems.find((item) => item.url === url))
-    .filter((item): item is NavItem => !!item);
+    .filter((item): item is NavItem => {
+      if (!item) return false;
+      if (item.superadminOnly) return isSuperAdmin;
+      if (isSuperAdmin) return true;
+      if (!activeRole) return false;
+      return item.visibleTo.includes(activeRole);
+    });
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2" data-testid="text-app-title">
-          <Logo className="h-8 w-auto" />
+          {logoUrl ? (
+            <img src={logoUrl} alt={activeTenant?.name || "Logo"} className="h-8 w-auto max-w-[160px] object-contain" data-testid="tenant-logo" />
+          ) : (
+            <Logo className="h-8 w-auto" />
+          )}
         </div>
 
         {tenantsLoading ? (
@@ -211,123 +248,129 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {navItems.map((item) => {
-                const isActive = location.startsWith(item.url);
-                const pinned = isPinned(item.url);
-                return (
-                  <SidebarMenuItem key={item.title} className="group/pin relative">
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive}
-                    >
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        togglePin(item.url);
-                      }}
-                      className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md ${
-                        pinned
-                          ? "text-primary opacity-80"
-                          : "text-sidebar-foreground/30 opacity-0 group-hover/pin:opacity-100 transition-opacity"
-                      }`}
-                      data-testid={`button-pin-${item.title.toLowerCase()}`}
-                      title={pinned ? "Unpin page" : "Pin page"}
-                    >
-                      <Star className={`h-3.5 w-3.5 ${pinned ? "fill-current" : ""}`} />
-                    </button>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Operations</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {operationsItems.map((item) => {
-                const isActive = location.startsWith(item.url);
-                const pinned = isPinned(item.url);
-                return (
-                  <SidebarMenuItem key={item.title} className="group/pin relative">
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive}
-                    >
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        togglePin(item.url);
-                      }}
-                      className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md ${
-                        pinned
-                          ? "text-primary opacity-80"
-                          : "text-sidebar-foreground/30 opacity-0 group-hover/pin:opacity-100 transition-opacity"
-                      }`}
-                      data-testid={`button-pin-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
-                      title={pinned ? "Unpin page" : "Pin page"}
-                    >
-                      <Star className={`h-3.5 w-3.5 ${pinned ? "fill-current" : ""}`} />
-                    </button>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-        <SidebarGroup>
-          <SidebarGroupLabel>Admin</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {adminItems.map((item) => {
-                const isActive = location.startsWith(item.url);
-                const pinned = isPinned(item.url);
-                return (
-                  <SidebarMenuItem key={item.title} className="group/pin relative">
-                    <SidebarMenuButton
-                      asChild
-                      isActive={isActive}
-                    >
-                      <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        togglePin(item.url);
-                      }}
-                      className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md ${
-                        pinned
-                          ? "text-primary opacity-80"
-                          : "text-sidebar-foreground/30 opacity-0 group-hover/pin:opacity-100 transition-opacity"
-                      }`}
-                      data-testid={`button-pin-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
-                      title={pinned ? "Unpin page" : "Pin page"}
-                    >
-                      <Star className={`h-3.5 w-3.5 ${pinned ? "fill-current" : ""}`} />
-                    </button>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {filteredNavItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredNavItems.map((item) => {
+                  const isActive = location.startsWith(item.url);
+                  const pinned = isPinned(item.url);
+                  return (
+                    <SidebarMenuItem key={item.title} className="group/pin relative">
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                      >
+                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePin(item.url);
+                        }}
+                        className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md ${
+                          pinned
+                            ? "text-primary opacity-80"
+                            : "text-sidebar-foreground/30 opacity-0 group-hover/pin:opacity-100 transition-opacity"
+                        }`}
+                        data-testid={`button-pin-${item.title.toLowerCase()}`}
+                        title={pinned ? "Unpin page" : "Pin page"}
+                      >
+                        <Star className={`h-3.5 w-3.5 ${pinned ? "fill-current" : ""}`} />
+                      </button>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+        {filteredOperationsItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Operations</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredOperationsItems.map((item) => {
+                  const isActive = location.startsWith(item.url);
+                  const pinned = isPinned(item.url);
+                  return (
+                    <SidebarMenuItem key={item.title} className="group/pin relative">
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                      >
+                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePin(item.url);
+                        }}
+                        className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md ${
+                          pinned
+                            ? "text-primary opacity-80"
+                            : "text-sidebar-foreground/30 opacity-0 group-hover/pin:opacity-100 transition-opacity"
+                        }`}
+                        data-testid={`button-pin-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                        title={pinned ? "Unpin page" : "Pin page"}
+                      >
+                        <Star className={`h-3.5 w-3.5 ${pinned ? "fill-current" : ""}`} />
+                      </button>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+        {filteredAdminItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Admin</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredAdminItems.map((item) => {
+                  const isActive = location.startsWith(item.url);
+                  const pinned = isPinned(item.url);
+                  return (
+                    <SidebarMenuItem key={item.title} className="group/pin relative">
+                      <SidebarMenuButton
+                        asChild
+                        isActive={isActive}
+                      >
+                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                          <item.icon className="h-4 w-4" />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePin(item.url);
+                        }}
+                        className={`absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded-md ${
+                          pinned
+                            ? "text-primary opacity-80"
+                            : "text-sidebar-foreground/30 opacity-0 group-hover/pin:opacity-100 transition-opacity"
+                        }`}
+                        data-testid={`button-pin-${item.title.toLowerCase().replace(/\s+/g, "-")}`}
+                        title={pinned ? "Unpin page" : "Pin page"}
+                      >
+                        <Star className={`h-3.5 w-3.5 ${pinned ? "fill-current" : ""}`} />
+                      </button>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-3">
