@@ -1,4 +1,5 @@
 import { useState } from "react";
+import logoPath from "@assets/XConsole_transparent.png";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -89,13 +90,8 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background text-foreground">
       <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md bg-background/90 border-b">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-1 px-6 py-3">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
-              X
-            </div>
-            <span className="font-semibold text-lg tracking-tight" data-testid="text-landing-logo">
-              Xpansion Console
-            </span>
+          <div className="flex items-center" data-testid="text-landing-logo">
+            <img src={logoPath} alt="Xpansion Console" className="h-8 w-auto" />
           </div>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowAdminLogin(!showAdminLogin)} data-testid="button-admin-login">
@@ -270,11 +266,8 @@ export default function LandingPage() {
 
       <footer className="py-8 px-6 border-t">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-1 text-sm text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <div className="flex h-5 w-5 items-center justify-center rounded bg-primary text-primary-foreground text-[10px] font-bold">
-              X
-            </div>
-            <span>Xpansion Console</span>
+          <div className="flex items-center">
+            <img src={logoPath} alt="Xpansion Console" className="h-5 w-auto" />
           </div>
           <span>Franchise Command Center</span>
         </div>

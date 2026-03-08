@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import logoPath from "@assets/XConsole_transparent.png";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -333,7 +334,9 @@ export default function OnboardingPage() {
   return (
     <div className="flex flex-col items-center p-6 space-y-6 max-w-3xl mx-auto">
       <div className="text-center space-y-1">
-        <h1 className="text-2xl font-bold" data-testid="text-onboarding-title">Welcome to Xpansion Console</h1>
+        <div className="flex items-center justify-center" data-testid="text-onboarding-title">
+          <img src={logoPath} alt="Xpansion Console" className="h-10 w-auto" />
+        </div>
         <p className="text-muted-foreground">Let's get your franchise set up in a few quick steps.</p>
       </div>
 
