@@ -1237,12 +1237,21 @@ export class DatabaseStorage implements IStorage {
         id: tenantUsers.id,
         userId: tenantUsers.userId,
         role: tenantUsers.role,
-        username: users.username,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
       })
       .from(tenantUsers)
       .leftJoin(users, eq(tenantUsers.userId, users.id))
       .where(eq(tenantUsers.tenantId, tenantId));
-    return rows;
+    return rows.map(r => ({
+      id: r.id,
+      userId: r.userId,
+      role: r.role,
+      username: r.firstName && r.lastName
+        ? `${r.firstName} ${r.lastName}`
+        : r.firstName || r.lastName || r.email || null,
+    }));
   }
 
   async getIpBlocks(): Promise<SecurityIpBlock[]> {

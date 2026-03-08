@@ -164,7 +164,7 @@ export async function registerRoutes(
       const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
       const hasAccess = await requireTenantAccess(req, res, tenantId);
       if (!hasAccess) return;
-      const users = await storage.getTenantUsers(tenantId);
+      const users = await storage.getTenantUsersWithNames(tenantId);
       res.json(ok(users));
     } catch (error: any) {
       if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));

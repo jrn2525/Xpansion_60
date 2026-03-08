@@ -153,3 +153,7 @@ Five workstreams to improve onboarding, daily usage, alert quality, import relia
 - Used across 6 admin pages to show human-readable names instead of raw IDs: data-quality, activity, tower, ops, security, alerts
 - Also provides `users`, `tenants`, `locations`, `metrics` arrays for building dropdowns
 - All admin ID text inputs replaced with searchable `<Select>` dropdowns (tower assign, alerts owner, activity actor filter, security force-logout/unlock)
+
+### Bug Fixes
+- **`getTenantUsersWithNames()` crash**: The `users` table has no `username` column — the query was referencing a non-existent column. Fixed to select `firstName`, `lastName`, `email` and derive a display name (e.g. "Admin User").
+- **Bulk action status route shadowed**: `PUT /tenants/:tenantId/actions/bulk-status` was registered after `PUT /tenants/:tenantId/actions/:actionId` in `phase5-routes.ts`, causing Express to match "bulk-status" as the `:actionId` parameter. Moved `bulk-status` route before the parameterized route to fix.

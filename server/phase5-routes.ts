@@ -259,6 +259,37 @@ phase5Router.post("/tenants/:tenantId/actions", isAuthenticated, async (req: any
   }
 });
 
+phase5Router.put("/tenants/:tenantId/actions/bulk-status", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const tu = await requireTenantAccess(req, res, tenantId);
+    if (!tu) return;
+
+    const bulkStatusSchema = z.object({
+      actionIds: z.array(z.coerce.number()).min(1, "actionIds must be a non-empty array"),
+      status: z.enum(["open", "in_progress", "blocked", "done"]),
+    });
+    const parsed = bulkStatusSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const { actionIds, status } = parsed.data;
+
+    const updated: any[] = [];
+    for (const id of actionIds) {
+      const existing = await storage.getAction(id);
+      if (existing && existing.tenantId === tenantId) {
+        const action = await storage.updateAction(id, { status });
+        updated.push(action);
+      }
+    }
+
+    await audit(tenantId, req.user.claims.sub, "action", actionIds.join(","), "bulk_status_update", null, { status, count: updated.length });
+    res.json(ok({ updated: updated.length }));
+  } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
 phase5Router.put("/tenants/:tenantId/actions/:actionId", isAuthenticated, async (req: any, res) => {
   try {
     const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
@@ -377,36 +408,6 @@ phase5Router.get("/tenants/:tenantId/actions/:actionId/checkins", isAuthenticate
   }
 });
 
-phase5Router.put("/tenants/:tenantId/actions/bulk-status", isAuthenticated, async (req: any, res) => {
-  try {
-    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
-    const tu = await requireTenantAccess(req, res, tenantId);
-    if (!tu) return;
-
-    const bulkStatusSchema = z.object({
-      actionIds: z.array(z.coerce.number()).min(1, "actionIds must be a non-empty array"),
-      status: z.enum(["open", "in_progress", "blocked", "done"]),
-    });
-    const parsed = bulkStatusSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
-    const { actionIds, status } = parsed.data;
-
-    const updated: any[] = [];
-    for (const id of actionIds) {
-      const existing = await storage.getAction(id);
-      if (existing && existing.tenantId === tenantId) {
-        const action = await storage.updateAction(id, { status });
-        updated.push(action);
-      }
-    }
-
-    await audit(tenantId, req.user.claims.sub, "action", actionIds.join(","), "bulk_status_update", null, { status, count: updated.length });
-    res.json(ok({ updated: updated.length }));
-  } catch (error: any) {
-      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
-    res.status(500).json(err("INTERNAL_ERROR", error.message));
-  }
-});
 
 // ── Opportunities ──
 
@@ -1045,20 +1046,6 @@ phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/apply", isAuthentica
 });
 
 // ── Tenant Users ──
-
-phase5Router.get("/tenants/:tenantId/users", isAuthenticated, async (req: any, res) => {
-  try {
-    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
-    const tu = await requireTenantAccess(req, res, tenantId);
-    if (!tu) return;
-
-    const users = await storage.getTenantUsersWithNames(tenantId);
-    res.json(ok(users));
-  } catch (error: any) {
-      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
-    res.status(500).json(err("INTERNAL_ERROR", error.message));
-  }
-});
 
 // ── Digests ──
 
