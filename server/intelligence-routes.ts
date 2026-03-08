@@ -6,7 +6,7 @@ import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { db } from "./db";
 import { metricValues, playbookApplications, playbooks, locations, metricDefinitions, goals, alertEvents, opportunities, actions, auditLogs, tenantUsers } from "@shared/schema";
-import { eq, and, desc, gte, lte, asc, count, sql } from "drizzle-orm";
+import { eq, and, desc, gte, lte, asc, sql } from "drizzle-orm";
 
 const ok = (data: any) => ({ ok: true, data });
 const err = (code: string, message: string) => ({ ok: false, error: { code, message } });
@@ -737,16 +737,16 @@ intelligenceRouter.get("/superadmin/tower/health", isAuthenticated, isSuperAdmin
       const lastActivity = recentLogs.length > 0 ? recentLogs[0].createdAt : null;
       const actionsThisWeek = recentLogs.filter(l => l.action === "create" && l.entityType === "action").length;
 
-      const latestMetricValue = await db.select({ createdAt: metricValues.createdAt })
+      const latestMetricValue = await db.select({ recordedAt: metricValues.recordedAt })
         .from(metricValues)
         .innerJoin(metricDefinitions, eq(metricValues.metricDefinitionId, metricDefinitions.id))
         .where(eq(metricDefinitions.tenantId, tenant.id))
-        .orderBy(desc(metricValues.createdAt))
+        .orderBy(desc(metricValues.recordedAt))
         .limit(1);
 
-      const lastDataDate = latestMetricValue.length > 0 ? latestMetricValue[0].createdAt : null;
+      const lastDataDate = latestMetricValue.length > 0 ? latestMetricValue[0].recordedAt : null;
 
-      const totalUsers = await db.select({ cnt: count() })
+      const totalUsersResult = await db.select({ cnt: sql<number>`count(*)` })
         .from(tenantUsers)
         .where(eq(tenantUsers.tenantId, tenant.id));
 
@@ -761,7 +761,7 @@ intelligenceRouter.get("/superadmin/tower/health", isAuthenticated, isSuperAdmin
         tenantId: tenant.id,
         tenantName: tenant.name,
         slug: tenant.slug,
-        totalUsers: totalUsers[0]?.cnt || 0,
+        totalUsers: Number(totalUsersResult[0]?.cnt) || 0,
         activeUsersLast7d: uniqueUsers.size,
         actionsCreatedThisWeek: actionsThisWeek,
         lastActivityDate: lastActivity,
@@ -777,6 +777,7 @@ intelligenceRouter.get("/superadmin/tower/health", isAuthenticated, isSuperAdmin
 
     res.json(ok(healthData));
   } catch (error: any) {
+    console.error("[HEALTH ERROR]", error.stack || error.message);
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
 });

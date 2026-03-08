@@ -33,6 +33,7 @@ import {
   Inbox,
   Newspaper,
   Star,
+  Palette,
 } from "lucide-react";
 import {
   Sidebar,
@@ -110,6 +111,7 @@ const adminItems: NavItem[] = [
   { title: "Data Quality", url: "/admin/data-quality", icon: ShieldCheck, visibleTo: adminOwnerRoles },
   { title: "Security", url: "/admin/security", icon: Shield, visibleTo: adminOwnerRoles },
   { title: "Activity", url: "/admin/activity", icon: Activity, visibleTo: adminOwnerRoles },
+  { title: "Branding", url: "/admin/branding", icon: Palette, visibleTo: adminOwnerRoles },
   { title: "Ops Health", url: "/admin/ops", icon: Server, visibleTo: adminOwnerRoles },
   { title: "Command Tower", url: "/superadmin/tower", icon: Radio, visibleTo: [], superadminOnly: true },
 ];

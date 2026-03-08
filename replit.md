@@ -208,3 +208,45 @@ Five workstreams to improve onboarding, daily usage, alert quality, import relia
 - `GET /api/notifications?tenantId=X` — list notifications with unread count
 - `POST /api/notifications/:id/read` — mark single notification as read
 - `POST /api/notifications/read-all` — mark all notifications as read for tenant
+
+## Phase 8: Client-Focused Platform Enhancements
+
+### Schema Changes
+- `tenants` table: added `logoUrl` (varchar, nullable) and `accentColor` (varchar(7), nullable) for per-tenant branding
+- `GET /api/tenants` now includes the user's `role` per tenant (joined from `tenant_users`)
+
+### 1. White-Label / Client Branding
+- Per-tenant `logoUrl` and `accentColor` stored in the tenants table
+- Sidebar header dynamically shows tenant logo (if set) instead of Xpansion logo
+- `accentColor` overrides `--primary` CSS variable at runtime for per-tenant theming
+- Branding settings page (`/admin/branding`) with logo URL input, color picker, preview, and reset
+- Files: `client/src/hooks/use-tenant-branding.ts`, `client/src/pages/tenant-branding.tsx`
+
+### 2. Role-Based View Simplification
+- Each sidebar nav item has a `visibleTo` property (viewer, manager, admin, owner)
+- Client-facing pages (Dashboard, Locations, Metrics, Scorecards, etc.) visible to all roles
+- Admin pages (Imports, Alerts, Reports, Security, etc.) visible only to admin/owner
+- Command Tower visible only to superadmins
+- `filterItemsByRole()` function filters sidebar items + favorites based on user's tenant role
+- Viewers/managers see a clean, focused sidebar; admins/owners see everything
+
+### 3. Scheduled Email Digests via Resend
+- `RESEND_API_KEY` environment secret configured
+- `sendEmail()` in `server/services/notifications.ts` uses Resend API for real delivery
+- Scheduler runs `runScheduledDigests` every 60s checking tenant digest schedules
+- Weekly coaching summaries with wins, risks, and next steps auto-generated per tenant
+
+### 4. Superadmin Client Health Dashboard
+- New `GET /api/superadmin/tower/health` endpoint with per-tenant engagement metrics
+- Health cards showing: active users (7d), actions created this week, last activity, data freshness
+- Status indicators: Active (green), Going Quiet (yellow), Inactive (red)
+- Quick-switch buttons to jump directly into any tenant's dashboard
+- Files: `server/intelligence-routes.ts`, `client/src/pages/superadmin-tower.tsx`
+
+### 5. Mobile-First Daily Brief
+- 44px minimum touch targets for all interactive elements
+- Swipe-friendly horizontal card scroll for risks/opportunities/actions on mobile
+- Simplified card content on mobile (secondary details hidden)
+- Full-width action buttons on mobile
+- Responsive padding and typography scaling
+- Files: `client/src/pages/daily-brief.tsx`
