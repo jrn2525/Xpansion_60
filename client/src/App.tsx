@@ -24,7 +24,7 @@ import TrendsPage from "@/pages/trends";
 import AdminImportsPage from "@/pages/admin-imports";
 import AdminAlertsPage from "@/pages/admin-alerts";
 import AdminReportsPage from "@/pages/admin-reports";
-import AdminAuditPage from "@/pages/admin-audit";
+import { ErrorBoundary } from "@/components/error-boundary";
 import AdminNotificationsPage from "@/pages/admin-notifications";
 import AdminDataQualityPage from "@/pages/admin-data-quality";
 import PortfolioPage from "@/pages/portfolio";
@@ -39,7 +39,6 @@ import AdminActivityPage from "@/pages/admin-activity";
 import AdminOpsPage from "@/pages/admin-ops";
 import RiskPage from "@/pages/risk";
 import WeeklyPlansPage from "@/pages/weekly-plans";
-import AdminExecutiveReportsPage from "@/pages/admin-executive-reports";
 import SuperadminTowerPage from "@/pages/superadmin-tower";
 import CampaignsPage from "@/pages/campaigns";
 import InboxPage from "@/pages/inbox";
@@ -63,19 +62,17 @@ const routeTitles: Record<string, string> = {
   "/admin/imports": "Data Imports | Xpansion Console",
   "/admin/alerts": "Alert Rules | Xpansion Console",
   "/admin/reports": "Reports | Xpansion Console",
-  "/admin/audit": "Audit Log | Xpansion Console",
   "/admin/notifications": "Notifications | Xpansion Console",
   "/admin/data-quality": "Data Quality | Xpansion Console",
   "/admin/digests": "Weekly Digests | Xpansion Console",
   "/admin/security": "Security | Xpansion Console",
-  "/admin/activity": "Activity Log | Xpansion Console",
+  "/admin/activity": "Activity Center | Xpansion Console",
   "/admin/ops": "Ops Health | Xpansion Console",
   "/risk": "Risk Dashboard | Xpansion Console",
   "/weekly-plans": "Weekly Plans | Xpansion Console",
   "/campaigns": "Campaigns | Xpansion Console",
   "/brief": "Daily Brief | Xpansion Console",
   "/inbox": "Command Inbox | Xpansion Console",
-  "/admin/executive-reports": "Executive Reports | Xpansion Console",
   "/superadmin/tower": "Command Tower | Xpansion Console",
   "/onboarding": "Onboarding | Xpansion Console",
 };
@@ -107,7 +104,6 @@ function AuthenticatedRouter() {
       <Route path="/admin/imports" component={AdminImportsPage} />
       <Route path="/admin/alerts" component={AdminAlertsPage} />
       <Route path="/admin/reports" component={AdminReportsPage} />
-      <Route path="/admin/audit" component={AdminAuditPage} />
       <Route path="/admin/notifications" component={AdminNotificationsPage} />
       <Route path="/admin/data-quality" component={AdminDataQualityPage} />
       <Route path="/admin/digests" component={AdminDigestsPage} />
@@ -116,7 +112,6 @@ function AuthenticatedRouter() {
       <Route path="/admin/ops" component={AdminOpsPage} />
       <Route path="/risk" component={RiskPage} />
       <Route path="/weekly-plans" component={WeeklyPlansPage} />
-      <Route path="/admin/executive-reports" component={AdminExecutiveReportsPage} />
       <Route path="/campaigns" component={CampaignsPage} />
       <Route path="/brief" component={DailyBriefPage} />
       <Route path="/inbox" component={InboxPage} />
@@ -142,7 +137,9 @@ function AuthenticatedLayout() {
             <SidebarTrigger data-testid="button-sidebar-toggle" />
           </header>
           <main className="flex-1 overflow-auto">
-            <AuthenticatedRouter />
+            <ErrorBoundary>
+              <AuthenticatedRouter />
+            </ErrorBoundary>
           </main>
         </div>
       </div>
@@ -200,7 +197,7 @@ function AppContent() {
   }
 
   if (!user) {
-    return <LandingPage />;
+    return <ErrorBoundary><LandingPage /></ErrorBoundary>;
   }
 
   return (

@@ -119,3 +119,21 @@ Five workstreams to improve onboarding, daily usage, alert quality, import relia
 - Session expiration graceful UX: 401 detection → toast + redirect
 - Backend: `server/middleware/security-headers.ts`
 - Frontend: session-expired event listener in App.tsx
+
+## Post-Phase 6: UX & Stability Polish
+
+### Error Boundary
+- React ErrorBoundary component wraps the authenticated router and landing page
+- Page-level crashes are contained — other pages remain accessible via sidebar
+- Fallback UI with error message, "Try Again" (resets boundary), and "Go Home" button
+- File: `client/src/components/error-boundary.tsx`
+
+### Page Consolidation (sidebar reduced from 27 → 25 items)
+- **Activity Center** (`/admin/activity`): Merged former "Audit Log" and "Activity Log" into a single page with two tabs — "Tenant Activity" (scoped to selected tenant, entity type filter) and "System Activity" (global view with advanced filters, pagination)
+- **Reporting Center** (`/admin/reports`): Merged former "Reports" and "Executive Reports" into a single page with two tabs — "Executive Summaries" (weekly intelligence reports with generate/view) and "Configurations" (report definitions CRUD, scheduler status)
+- Deleted files: `admin-audit.tsx`, `admin-executive-reports.tsx`
+
+### Theme-Aware Logo
+- Reusable `Logo` component (`client/src/components/logo.tsx`) selects dark or light variant based on active theme
+- Used in sidebar header, landing page nav/footer, onboarding header, and loading splash
+- Assets: `XConsole_transparent.png` (white text, for dark mode), `XConsole_light_transparent.png` (black text, for light mode)

@@ -27,8 +27,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Activity, Eye, User, Database, ChevronLeft, ChevronRight } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Activity, Eye, User, Database, ChevronLeft, ChevronRight, History } from "lucide-react";
 import { statusColors } from "@/lib/semantic-colors";
+import { useTenantStore } from "@/lib/tenant-store";
 
 const actionColors: Record<string, string> = {
   create: statusColors.success,
@@ -46,9 +48,142 @@ const actionColors: Record<string, string> = {
   login_failed: statusColors.error,
 };
 
+function renderDiff(before: string | null, after: string | null) {
+  let beforeObj: any = null;
+  let afterObj: any = null;
+  try { if (before) beforeObj = JSON.parse(before); } catch { /* ignore */ }
+  try { if (after) afterObj = JSON.parse(after); } catch { /* ignore */ }
+
+  if (!beforeObj && !afterObj) return <p className="text-muted-foreground">No diff data</p>;
+
+  const allKeys = new Set([
+    ...Object.keys(beforeObj || {}),
+    ...Object.keys(afterObj || {}),
+  ]);
+
+  return (
+    <div className="space-y-1 font-mono text-xs">
+      {Array.from(allKeys).map((key) => {
+        const bVal = beforeObj?.[key];
+        const aVal = afterObj?.[key];
+        const changed = JSON.stringify(bVal) !== JSON.stringify(aVal);
+        return (
+          <div key={key} className={changed ? "bg-status-warning/10 px-2 py-1 rounded" : "px-2 py-1"}>
+            <span className="text-muted-foreground">{key}:</span>{" "}
+            {beforeObj && <span className="text-status-error-foreground line-through">{JSON.stringify(bVal)}</span>}
+            {beforeObj && afterObj && " → "}
+            {afterObj && <span className="text-status-success-foreground">{JSON.stringify(aVal)}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const PAGE_SIZE = 50;
 
-export default function AdminActivityPage() {
+function TenantActivityTab() {
+  const { activeTenantId } = useTenantStore();
+  const [entityTypeFilter, setEntityTypeFilter] = useState<string>("");
+  const [selectedLog, setSelectedLog] = useState<any>(null);
+
+  const queryParams = new URLSearchParams();
+  if (activeTenantId) queryParams.set("tenantId", String(activeTenantId));
+  const effectiveEntityType = entityTypeFilter && entityTypeFilter !== "all" ? entityTypeFilter : "";
+  if (effectiveEntityType) queryParams.set("entityType", effectiveEntityType);
+
+  const { data: logsResponse, isLoading } = useQuery<any>({
+    queryKey: ["/api/admin/audit", `?${queryParams.toString()}`],
+    enabled: !!activeTenantId,
+  });
+
+  const logs = logsResponse?.data || logsResponse || [];
+
+  if (!activeTenantId) {
+    return <div className="py-8 text-center text-muted-foreground" data-testid="text-no-tenant">Select a tenant to view activity</div>;
+  }
+
+  return (
+    <>
+      <div className="flex gap-4 mb-4">
+        <Select value={entityTypeFilter} onValueChange={setEntityTypeFilter}>
+          <SelectTrigger className="w-48" data-testid="filter-tenant-entity-type"><SelectValue placeholder="All entity types" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All entity types</SelectItem>
+            <SelectItem value="tenant">Tenant</SelectItem>
+            <SelectItem value="location">Location</SelectItem>
+            <SelectItem value="metric_definition">Metric</SelectItem>
+            <SelectItem value="metric_threshold">Threshold</SelectItem>
+            <SelectItem value="scorecard_template">Scorecard</SelectItem>
+            <SelectItem value="import_job">Import</SelectItem>
+            <SelectItem value="alert_rule">Alert Rule</SelectItem>
+            <SelectItem value="report">Report</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
+      ) : logs.length === 0 ? (
+        <Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-tenant-logs">No activity found. Events will be recorded as you manage your franchise data.</CardContent></Card>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Timestamp</TableHead>
+                <TableHead>Entity</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Entity ID</TableHead>
+                <TableHead>Actor</TableHead>
+                <TableHead>Details</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.map((log: any) => (
+                <TableRow key={log.id} data-testid={`row-audit-${log.id}`}>
+                  <TableCell className="whitespace-nowrap">{new Date(log.createdAt).toLocaleString()}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                      <Database className="h-3 w-3" />{log.entityType}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={actionColors[log.action] || ""}>{log.action}</Badge>
+                  </TableCell>
+                  <TableCell className="font-mono text-sm">{log.entityId}</TableCell>
+                  <TableCell className="flex items-center gap-1">
+                    <User className="h-3 w-3" />{log.actorUserId?.slice(0, 12)}...
+                  </TableCell>
+                  <TableCell>
+                    {(log.beforeJson || log.afterJson) && (
+                      <Button size="sm" variant="ghost" onClick={() => setSelectedLog(log)} data-testid={`button-diff-${log.id}`}>
+                        <Eye className="h-3 w-3 mr-1" /> Diff
+                      </Button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <Dialog open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Change Details — {selectedLog?.entityType} #{selectedLog?.entityId} ({selectedLog?.action})
+            </DialogTitle>
+          </DialogHeader>
+          {selectedLog && renderDiff(selectedLog.beforeJson, selectedLog.afterJson)}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+function SystemActivityTab() {
   const [entityTypeFilter, setEntityTypeFilter] = useState<string>("");
   const [actionFilter, setActionFilter] = useState<string>("");
   const [actorFilter, setActorFilter] = useState<string>("");
@@ -76,42 +211,6 @@ export default function AdminActivityPage() {
   const hasMore = rawLogs.length > PAGE_SIZE;
   const logs = rawLogs.slice(0, PAGE_SIZE);
 
-  function renderDiff(before: string | null, after: string | null) {
-    let beforeObj: any = null;
-    let afterObj: any = null;
-    try { if (before) beforeObj = JSON.parse(before); } catch { /* ignore */ }
-    try { if (after) afterObj = JSON.parse(after); } catch { /* ignore */ }
-
-    if (!beforeObj && !afterObj) return <p className="text-muted-foreground">No diff data</p>;
-
-    const allKeys = new Set([
-      ...Object.keys(beforeObj || {}),
-      ...Object.keys(afterObj || {}),
-    ]);
-
-    return (
-      <div className="space-y-1 font-mono text-xs">
-        {Array.from(allKeys).map((key) => {
-          const bVal = beforeObj?.[key];
-          const aVal = afterObj?.[key];
-          const changed = JSON.stringify(bVal) !== JSON.stringify(aVal);
-          return (
-            <div key={key} className={changed ? "bg-status-warning/10 px-2 py-1 rounded" : "px-2 py-1"}>
-              <span className="text-muted-foreground">{key}:</span>{" "}
-              {beforeObj && <span className="text-status-error-foreground line-through">{JSON.stringify(bVal)}</span>}
-              {beforeObj && afterObj && " → "}
-              {afterObj && <span className="text-status-success-foreground">{JSON.stringify(aVal)}</span>}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  function handleApplyFilters() {
-    setPage(0);
-  }
-
   function handleClearFilters() {
     setEntityTypeFilter("");
     setActionFilter("");
@@ -122,13 +221,8 @@ export default function AdminActivityPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center gap-3 flex-wrap">
-        <Activity className="h-6 w-6" />
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Admin Activity Log</h1>
-      </div>
-
-      <Card>
+    <>
+      <Card className="mb-4">
         <CardHeader>
           <CardTitle className="text-base">Filters</CardTitle>
         </CardHeader>
@@ -208,7 +302,7 @@ export default function AdminActivityPage() {
           </div>
 
           <div className="flex flex-wrap gap-3 mt-4">
-            <Button onClick={handleApplyFilters} data-testid="button-apply-filters">Apply Filters</Button>
+            <Button onClick={() => setPage(0)} data-testid="button-apply-filters">Apply Filters</Button>
             <Button variant="outline" onClick={handleClearFilters} data-testid="button-clear-filters">Clear</Button>
           </div>
         </CardContent>
@@ -319,6 +413,36 @@ export default function AdminActivityPage() {
           {selectedLog && renderDiff(selectedLog.beforeJson, selectedLog.afterJson)}
         </DialogContent>
       </Dialog>
+    </>
+  );
+}
+
+export default function AdminActivityPage() {
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center gap-3 flex-wrap">
+        <Activity className="h-6 w-6" />
+        <h1 className="text-2xl font-bold" data-testid="text-page-title">Activity Center</h1>
+      </div>
+
+      <Tabs defaultValue="tenant" className="w-full">
+        <TabsList data-testid="tabs-activity">
+          <TabsTrigger value="tenant" data-testid="tab-tenant-activity">
+            <History className="h-4 w-4 mr-1.5" />
+            Tenant Activity
+          </TabsTrigger>
+          <TabsTrigger value="system" data-testid="tab-system-activity">
+            <Activity className="h-4 w-4 mr-1.5" />
+            System Activity
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="tenant" className="mt-4">
+          <TenantActivityTab />
+        </TabsContent>
+        <TabsContent value="system" className="mt-4">
+          <SystemActivityTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -12,7 +12,6 @@ import {
   Upload,
   Bell,
   FileBarChart,
-  History,
   Briefcase,
   Mail,
   ShieldCheck,
@@ -90,11 +89,9 @@ const adminItems = [
   { title: "Digests", url: "/admin/digests", icon: FileText },
   { title: "Notifications", url: "/admin/notifications", icon: Mail },
   { title: "Data Quality", url: "/admin/data-quality", icon: ShieldCheck },
-  { title: "Audit Log", url: "/admin/audit", icon: History },
   { title: "Security", url: "/admin/security", icon: Shield },
-  { title: "Activity Log", url: "/admin/activity", icon: Activity },
+  { title: "Activity", url: "/admin/activity", icon: Activity },
   { title: "Ops Health", url: "/admin/ops", icon: Server },
-  { title: "Executive Reports", url: "/admin/executive-reports", icon: FileText },
   { title: "Command Tower", url: "/superadmin/tower", icon: Radio },
 ];
 
