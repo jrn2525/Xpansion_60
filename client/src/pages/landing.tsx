@@ -44,7 +44,7 @@ export default function LandingPage() {
 
       <div className="relative z-10 w-full max-w-sm px-6">
         <div className="text-center mb-8">
-          <Logo className="h-12 w-auto mx-auto mb-4" />
+          <Logo className="h-20 w-auto mx-auto mb-5" />
           <p className="text-sm text-muted-foreground tracking-wide">
             Franchise Intelligence Platform
           </p>
