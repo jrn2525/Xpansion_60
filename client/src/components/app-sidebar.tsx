@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import logoPath from "@assets/XConsole_transparent.png";
+import { Logo } from "@/components/logo";
 import {
   LayoutDashboard,
   Building2,
@@ -123,7 +123,7 @@ export function AppSidebar() {
     <Sidebar>
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2" data-testid="text-app-title">
-          <img src={logoPath} alt="Xpansion Console" className="h-8 w-auto" />
+          <Logo className="h-8 w-auto" />
         </div>
 
         {tenantsLoading ? (
