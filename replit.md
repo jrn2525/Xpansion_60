@@ -71,3 +71,51 @@ Six workstreams delivering defense-in-depth security, durable job orchestration,
 - Fine-grained permissions: `checkPermission(tenantId, userId, resource, action)` checks tenant_users role against permission map
 - Recommendation lifecycle hooks: opportunity fetch → "viewed", create-action → "converted_to_action", action done → "completed" + effectiveness baseline
 - Files: `shared/schema.ts`, `server/storage.ts`, `server/security-v1-routes.ts`, `server/services/job-queue.ts`, `server/job-routes.ts`, `server/services/confidence-engine.ts`, `server/confidence-routes.ts`, `server/recommendation-routes.ts`, `server/inbox-routes.ts`, `server/middleware/tracing.ts`, `client/src/pages/inbox.tsx`, `client/src/pages/admin-ops.tsx`
+
+## Phase 6: Activation & Signal Quality
+Five workstreams to improve onboarding, daily usage, alert quality, import reliability, and security posture.
+
+### New Tables
+- `onboarding_progress` — per-user/tenant wizard state (currentStep, completedSteps, isComplete)
+- `import_mapping_templates` — reusable CSV field mapping configs per tenant
+- `alert_rules` extended with `impactLevel`, `persistentThresholdDays`, `recommendedActions` (jsonb), `ownerUserId`
+
+### 1. Onboarding Wizard (Time-to-value < 5 min)
+- 6-step guided wizard: Create Tenant → Add Location → Create 3 Starter KPIs → Create Scorecard → Run Scorecard → Enable Alert Rule
+- Template-driven KPIs (Revenue, Customer Satisfaction, Labor Cost %) with pre-configured thresholds
+- Auto-redirect for new users without tenants
+- Completion routes to Owner Daily Brief
+- Backend: `server/onboarding-routes.ts` (6 endpoints under /api/v1/onboarding/*)
+- Frontend: `client/src/pages/onboarding.tsx`
+
+### 2. Owner Daily Brief (New Home Experience)
+- Replaces dashboard as default authenticated home (/)
+- Hero card: overall score + band badge + trend vs prior period
+- Top 3 Risks with severity badges and risk scores
+- Top 3 Opportunities with impact scores + "Convert to Action"
+- "Do This Next" actions with "Mark Done" buttons
+- Empty states with clear CTAs
+- Backend: `server/daily-brief-routes.ts` (GET /api/v1/tenants/:tenantId/daily-brief)
+- Frontend: `client/src/pages/daily-brief.tsx`
+
+### 3. Alert Noise Reduction + Actionability
+- Persistent issue detection: same metric below threshold for X consecutive days → escalated severity alert
+- Impact scoring: computed from severity weight + metric importance (low/medium/high)
+- Recommended actions checklist on each alert (toggleable, from alert rule config)
+- Owner assignment on alert rules and events
+- Filter by impact level
+- Backend: enhanced `server/admin-routes.ts` evaluation logic
+- Frontend: enhanced `client/src/pages/admin-alerts.tsx`
+
+### 4. Import Reliability + Data Confidence
+- Pre-import CSV validation preview (dry-run): total/valid/warning/failed rows + quality score badge
+- Reusable field mapping templates per tenant (save/load/delete)
+- Post-import quality summary with % valid/warnings/failed + quality badge
+- Backend: POST /api/admin/imports/validate, CRUD /api/admin/import-templates
+- Frontend: enhanced `client/src/pages/admin-imports.tsx`
+
+### 5. Security & Platform Hardening
+- Security headers middleware: CSP, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy, HSTS
+- Session expiration graceful UX: 401 detection → toast + redirect
+- Backend: `server/middleware/security-headers.ts`
+- Frontend: session-expired event listener in App.tsx

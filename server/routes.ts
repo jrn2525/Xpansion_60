@@ -23,6 +23,8 @@ import { confidenceRouter } from "./confidence-routes";
 import { securityV1Router } from "./security-v1-routes";
 import { jobRouter } from "./job-routes";
 import { inboxRouter } from "./inbox-routes";
+import { onboardingRouter } from "./onboarding-routes";
+import { dailyBriefRouter } from "./daily-brief-routes";
 import { generateForecast, detectAnomalies } from "./services/analytics";
 import { startScheduler } from "./services/scheduler";
 import { startJobProcessor } from "./services/job-queue";
@@ -1009,6 +1011,8 @@ export async function registerRoutes(
   app.use("/api/v1", confidenceRouter);
   app.use("/api/v1", recommendationRouter);
   app.use("/api/v1", inboxRouter);
+  app.use("/api/v1", dailyBriefRouter);
+  app.use("/api/v1", onboardingRouter);
 
   seed().catch(console.error);
   startScheduler();

@@ -148,6 +148,8 @@ import {
   recommendationEffectiveness,
   securityAccessEvents,
   breakGlassSessions,
+  onboardingProgress,
+  importMappingTemplates,
   auditLogs,
   type JobQueueEntry,
   type InsertJobQueueEntry,
@@ -165,6 +167,10 @@ import {
   type InsertSecurityAccessEvent,
   type BreakGlassSession,
   type InsertBreakGlassSession,
+  type OnboardingProgress,
+  type InsertOnboardingProgress,
+  type ImportMappingTemplate,
+  type InsertImportMappingTemplate,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, lt, inArray, isNull, sql } from "drizzle-orm";
@@ -419,6 +425,13 @@ export interface IStorage {
 
   updateAuditLogHash(id: number, eventHash: string, prevHash: string | null): Promise<void>;
   getLatestAuditLogHash(tenantId: number): Promise<string | null>;
+
+  getOnboardingProgress(tenantId: number, userId: string): Promise<OnboardingProgress | undefined>;
+  upsertOnboardingProgress(data: InsertOnboardingProgress): Promise<OnboardingProgress>;
+
+  createMappingTemplate(data: InsertImportMappingTemplate): Promise<ImportMappingTemplate>;
+  getMappingTemplates(tenantId: number): Promise<ImportMappingTemplate[]>;
+  deleteMappingTemplate(id: number, tenantId?: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1610,6 +1623,42 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(auditLogs.tenantId, tenantId), sql`${auditLogs.eventHash} IS NOT NULL`))
       .orderBy(desc(auditLogs.id)).limit(1);
     return latest?.eventHash || null;
+  }
+
+  async getOnboardingProgress(tenantId: number, userId: string): Promise<OnboardingProgress | undefined> {
+    const [progress] = await db.select().from(onboardingProgress)
+      .where(and(eq(onboardingProgress.tenantId, tenantId), eq(onboardingProgress.userId, userId)));
+    return progress;
+  }
+
+  async upsertOnboardingProgress(data: InsertOnboardingProgress): Promise<OnboardingProgress> {
+    const existing = await this.getOnboardingProgress(data.tenantId, data.userId);
+    if (existing) {
+      const [updated] = await db.update(onboardingProgress)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(onboardingProgress.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(onboardingProgress).values(data).returning();
+    return created;
+  }
+
+  async createMappingTemplate(data: InsertImportMappingTemplate): Promise<ImportMappingTemplate> {
+    const [created] = await db.insert(importMappingTemplates).values(data).returning();
+    return created;
+  }
+
+  async getMappingTemplates(tenantId: number): Promise<ImportMappingTemplate[]> {
+    return db.select().from(importMappingTemplates)
+      .where(eq(importMappingTemplates.tenantId, tenantId))
+      .orderBy(desc(importMappingTemplates.createdAt));
+  }
+
+  async deleteMappingTemplate(id: number, tenantId?: number): Promise<void> {
+    const conditions = [eq(importMappingTemplates.id, id)];
+    if (tenantId) conditions.push(eq(importMappingTemplates.tenantId, tenantId));
+    await db.delete(importMappingTemplates).where(and(...conditions));
   }
 }
 

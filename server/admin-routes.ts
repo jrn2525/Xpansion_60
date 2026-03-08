@@ -7,6 +7,7 @@ import {
   insertReportSchema,
   insertNotificationSettingsSchema,
   insertDataQualityRuleSchema,
+  insertImportMappingTemplateSchema,
 } from "@shared/schema";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -88,7 +89,29 @@ adminRouter.post("/imports", upload.single("file"), async (req: any, res) => {
 
     const qualityResult = await runDataQualityChecks(tenantId, locationId, job.id, importStartedAt);
     await audit(tenantId, req.user.claims.sub, "import_job", String(job.id), "create", null, updated);
-    res.status(201).json(ok({ ...updated, qualityViolations: qualityResult.violations }));
+
+    const totalRows = result.totalRows || 1;
+    const validPct = Math.round((result.successRows / totalRows) * 100);
+    const failedPct = Math.round((result.failedRows / totalRows) * 100);
+    const warningPct = Math.round((qualityResult.violations / Math.max(totalRows, 1)) * 100);
+    const qualityScore = Math.max(0, 100 - failedPct - Math.floor(warningPct / 2));
+    const qualityBadge = qualityScore >= 90 ? "excellent" : qualityScore >= 70 ? "good" : qualityScore >= 50 ? "fair" : "poor";
+
+    res.status(201).json(ok({
+      ...updated,
+      qualityViolations: qualityResult.violations,
+      qualitySummary: {
+        totalRows: result.totalRows,
+        validRows: result.successRows,
+        validPct,
+        warningRows: qualityResult.violations,
+        warningPct,
+        failedRows: result.failedRows,
+        failedPct,
+        qualityScore,
+        qualityBadge,
+      },
+    }));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
@@ -307,7 +330,25 @@ adminRouter.get("/alert-events", async (req: any, res) => {
     if (req.query.severity) filters.severity = req.query.severity;
     if (req.query.locationId) filters.locationId = parseInt(req.query.locationId);
     const events = await storage.getAlertEvents(tenantId, filters);
-    res.json(ok(events));
+
+    const enrichedEvents = await Promise.all(events.map(async (event) => {
+      const rule = await storage.getAlertRule(event.alertRuleId);
+      let detailParsed: any = {};
+      try { detailParsed = JSON.parse(event.detailJson); } catch {}
+      return {
+        ...event,
+        impactLevel: detailParsed.impactLevel || null,
+        recommendedActions: rule?.recommendedActions || null,
+        ownerUserId: rule?.ownerUserId || null,
+      };
+    }));
+
+    if (req.query.impactLevel) {
+      const filtered = enrichedEvents.filter(e => e.impactLevel === req.query.impactLevel);
+      return res.json(ok(filtered));
+    }
+
+    res.json(ok(enrichedEvents));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }
@@ -472,10 +513,61 @@ async function shouldSkipDedup(rule: any, locationId: number, metricDefinitionId
   return (Date.now() - (dup.createdAt?.getTime() || 0)) / 60000 < rule.dedupWindowMinutes;
 }
 
+function computeImpactLevel(severity: string, metricImportance?: string): string {
+  const severityWeight: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
+  const importanceWeight: Record<string, number> = { low: 1, medium: 2, high: 3 };
+  const sWeight = severityWeight[severity] || 2;
+  const iWeight = importanceWeight[metricImportance || "medium"] || 2;
+  const score = (sWeight + iWeight) / 2;
+  if (score >= 3) return "high";
+  if (score >= 2) return "medium";
+  return "low";
+}
+
+async function checkPersistentIssue(rule: any, condition: any, locationId: number, values: any[]): Promise<{ isPersistent: boolean; consecutiveDays: number }> {
+  if (!rule.persistentThresholdDays || rule.persistentThresholdDays <= 0) {
+    return { isPersistent: false, consecutiveDays: 0 };
+  }
+
+  const thresholdDays = rule.persistentThresholdDays;
+  const cutoffDate = new Date(Date.now() - thresholdDays * 24 * 60 * 60 * 1000);
+
+  const recentValues = values.filter((v: any) => {
+    const recordedAt = v.recordedAt || v.periodEnd;
+    return recordedAt && new Date(recordedAt) >= cutoffDate;
+  });
+
+  if (recentValues.length === 0) return { isPersistent: false, consecutiveDays: 0 };
+
+  let allBreached = true;
+  for (const v of recentValues) {
+    let breached = false;
+    if (condition.operator === "above" && v.value > condition.threshold) breached = true;
+    if (condition.operator === "below" && v.value < condition.threshold) breached = true;
+    if (!breached) { allBreached = false; break; }
+  }
+
+  if (allBreached && recentValues.length >= 2) {
+    const earliest = recentValues[0].recordedAt || recentValues[0].periodStart;
+    const latest = recentValues[recentValues.length - 1].recordedAt || recentValues[recentValues.length - 1].periodEnd;
+    const daySpan = Math.ceil((new Date(latest).getTime() - new Date(earliest).getTime()) / (24 * 60 * 60 * 1000));
+    return { isPersistent: true, consecutiveDays: Math.max(daySpan, recentValues.length) };
+  }
+
+  return { isPersistent: false, consecutiveDays: 0 };
+}
+
+function escalateSeverity(severity: string): string {
+  const order = ["low", "medium", "high", "critical"];
+  const idx = order.indexOf(severity);
+  return idx < order.length - 1 ? order[idx + 1] : severity;
+}
+
 async function evaluateAlertRule(rule: any) {
   try {
     const condition = JSON.parse(rule.conditionJson);
     const locations = await storage.getLocations(rule.tenantId);
+    const impactLevel = rule.impactLevel || computeImpactLevel(rule.severity);
 
     for (const loc of locations) {
       if (await shouldSkipCooldown(rule, loc.id)) continue;
@@ -489,15 +581,41 @@ async function evaluateAlertRule(rule: any) {
         if (condition.operator === "above" && latest.value > condition.threshold) breached = true;
         if (condition.operator === "below" && latest.value < condition.threshold) breached = true;
         if (breached) {
+          const persistent = await checkPersistentIssue(rule, condition, loc.id, values);
+          const effectiveSeverity = persistent.isPersistent ? escalateSeverity(rule.severity) : rule.severity;
+          const effectiveImpact = persistent.isPersistent ? "high" : impactLevel;
+
+          const detailData: any = {
+            value: latest.value,
+            threshold: condition.threshold,
+            operator: condition.operator,
+            impactLevel: effectiveImpact,
+          };
+
+          if (persistent.isPersistent) {
+            detailData.persistentIssue = true;
+            detailData.consecutiveDays = persistent.consecutiveDays;
+          }
+          if (rule.recommendedActions) {
+            detailData.recommendedActions = rule.recommendedActions;
+          }
+          if (rule.ownerUserId) {
+            detailData.ownerUserId = rule.ownerUserId;
+          }
+
+          const persistentLabel = persistent.isPersistent
+            ? ` [PERSISTENT: ${persistent.consecutiveDays} days]`
+            : "";
+
           const event = await storage.createAlertEvent({
             alertRuleId: rule.id,
             tenantId: rule.tenantId,
             locationId: loc.id,
             metricDefinitionId: condition.metricDefinitionId,
             status: "open",
-            severity: rule.severity,
-            message: `${rule.name}: Value ${latest.value} ${condition.operator} threshold ${condition.threshold} at ${loc.name}`,
-            detailJson: JSON.stringify({ value: latest.value, threshold: condition.threshold, operator: condition.operator }),
+            severity: effectiveSeverity,
+            message: `${rule.name}: Value ${latest.value} ${condition.operator} threshold ${condition.threshold} at ${loc.name}${persistentLabel}`,
+            detailJson: JSON.stringify(detailData),
           });
           await notifyAlertEvent(rule.tenantId, event.message, event.severity, event.id);
         }
@@ -511,6 +629,19 @@ async function evaluateAlertRule(rule: any) {
         if (previous.value === 0) continue;
         const dropPct = ((previous.value - current.value) / Math.abs(previous.value)) * 100;
         if (dropPct >= (condition.dropPercent || 10)) {
+          const detailData: any = {
+            currentValue: current.value,
+            previousValue: previous.value,
+            dropPercent: dropPct,
+            impactLevel,
+          };
+          if (rule.recommendedActions) {
+            detailData.recommendedActions = rule.recommendedActions;
+          }
+          if (rule.ownerUserId) {
+            detailData.ownerUserId = rule.ownerUserId;
+          }
+
           const event = await storage.createAlertEvent({
             alertRuleId: rule.id,
             tenantId: rule.tenantId,
@@ -519,7 +650,7 @@ async function evaluateAlertRule(rule: any) {
             status: "open",
             severity: rule.severity,
             message: `${rule.name}: Value dropped ${dropPct.toFixed(1)}% at ${loc.name} (${previous.value} → ${current.value})`,
-            detailJson: JSON.stringify({ currentValue: current.value, previousValue: previous.value, dropPercent: dropPct }),
+            detailJson: JSON.stringify(detailData),
           });
           await notifyAlertEvent(rule.tenantId, event.message, event.severity, event.id);
         }
@@ -823,6 +954,132 @@ adminRouter.get("/data-quality", async (req: any, res) => {
     }
 
     res.json(ok({ rules, violations: violations.slice(0, 100), qualityScores }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.post("/imports/validate", upload.single("file"), async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.body.tenantId);
+    if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
+    const access = await requireAdminAccess(req, res, tenantId);
+    if (!access) return;
+    if (!req.file) return res.status(400).json(err("VALIDATION_ERROR", "CSV file is required"));
+
+    const mappingConfig = req.body.mappingConfig || "{}";
+    let mapping: Record<string, string>;
+    try { mapping = JSON.parse(mappingConfig); } catch { return res.status(400).json(err("VALIDATION_ERROR", "Invalid mappingConfig JSON")); }
+
+    const csvText = req.file.buffer.toString("utf-8");
+    const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim());
+    if (lines.length < 2) return res.json(ok({ totalRows: 0, validRows: 0, warningRows: 0, failedRows: 0, qualityScore: 100, qualityBadge: "excellent", errors: [] }));
+
+    const headers = lines[0].split(",").map((h: string) => h.trim().replace(/^"|"$/g, ""));
+    const metrics = await storage.getMetricDefinitions(tenantId);
+
+    const metricKey = mapping.metricKey || "metric";
+    const valueKey = mapping.valueKey || "value";
+    const periodStartKey = mapping.periodStartKey || "period_start";
+    const periodEndKey = mapping.periodEndKey || "period_end";
+
+    let validRows = 0;
+    let failedRows = 0;
+    const rowErrors: Array<{ line: number; reason: string }> = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const values = parseCSVLine(lines[i]);
+      const rowData: Record<string, string> = {};
+      headers.forEach((h: string, idx: number) => { rowData[h] = values[idx] || ""; });
+
+      const errors: string[] = [];
+      const metricName = rowData[metricKey];
+      const rawValue = rowData[valueKey];
+      const periodStartStr = rowData[periodStartKey];
+      const periodEndStr = rowData[periodEndKey];
+
+      if (!metricName) errors.push(`missing metric name in column "${metricKey}"`);
+      if (!rawValue || isNaN(parseFloat(rawValue))) errors.push(`non-numeric value "${rawValue}"`);
+      if (!periodStartStr || !periodEndStr) errors.push("missing period start/end dates");
+      else {
+        const ps = new Date(periodStartStr);
+        const pe = new Date(periodEndStr);
+        if (isNaN(ps.getTime()) || isNaN(pe.getTime())) errors.push("invalid date format");
+      }
+      if (metricName && metrics.length > 0) {
+        const found = metrics.find((m) => m.name.toLowerCase() === metricName.toLowerCase());
+        if (!found) errors.push(`metric "${metricName}" not found for tenant`);
+      }
+
+      if (errors.length > 0) {
+        failedRows++;
+        if (rowErrors.length < 10) {
+          rowErrors.push({ line: i + 1, reason: errors.join("; ") });
+        }
+      } else {
+        validRows++;
+      }
+    }
+
+    const totalRows = lines.length - 1;
+    const qualityScore = totalRows > 0 ? Math.round((validRows / totalRows) * 100) : 100;
+    const qualityBadge = qualityScore >= 90 ? "excellent" : qualityScore >= 70 ? "good" : qualityScore >= 50 ? "fair" : "poor";
+
+    res.json(ok({
+      totalRows,
+      validRows,
+      warningRows: 0,
+      failedRows,
+      qualityScore,
+      qualityBadge,
+      errors: rowErrors,
+    }));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.get("/import-templates", async (req: any, res) => {
+  try {
+    const tenantId = parseInt(req.query.tenantId as string);
+    if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
+    const access = await requireAdminAccess(req, res, tenantId);
+    if (!access) return;
+    const templates = await storage.getMappingTemplates(tenantId);
+    res.json(ok(templates));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.post("/import-templates", async (req: any, res) => {
+  try {
+    const parsed = insertImportMappingTemplateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
+    const access = await requireAdminAccess(req, res, parsed.data.tenantId);
+    if (!access) return;
+    const template = await storage.createMappingTemplate(parsed.data);
+    await audit(parsed.data.tenantId, req.user.claims.sub, "import_mapping_template", String(template.id), "create", null, template);
+    res.status(201).json(ok(template));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+adminRouter.delete("/import-templates/:id", async (req: any, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const userId = req.user?.claims?.sub;
+    if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
+
+    const tenantId = parseInt(req.query.tenantId as string);
+    if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
+    const access = await requireAdminAccess(req, res, tenantId);
+    if (!access) return;
+
+    await storage.deleteMappingTemplate(id, tenantId);
+    await audit(tenantId, userId, "import_mapping_template", String(id), "delete", null, null);
+    res.json(ok({ deleted: true }));
   } catch (error: any) {
     res.status(500).json(err("INTERNAL_ERROR", error.message));
   }

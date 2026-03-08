@@ -1,0 +1,95 @@
+100% understood. Here’s a single copy/paste prompt block for Replit:
+
+You are a senior product engineer and UX architect. Improve my app: “Xpansion Console — Franchise Command Center” (multi-tenant franchise management platform).
+
+GOAL:
+Increase activation, daily usage, and decision-making speed for franchise owners/operators.
+
+CURRENT APP CONTEXT (already exists):
+- Multi-tenant architecture
+- Modules/APIs around: tenants, locations, metrics, scorecards, trends, alerts, reports, imports, notifications, audit, security, executive dashboard, command tower
+- Auth endpoints exist
+- Dashboard and admin pages exist
+
+WHAT I WANT YOU TO BUILD (PHASE 1):
+Focus on highest-impact upgrades first. Implement in this order:
+
+1) ONBOARDING WIZARD (Time-to-value < 5 min)
+- Step 1: Create/select tenant
+- Step 2: Add first location
+- Step 3: Create 3 starter KPIs (template-driven)
+- Step 4: Create first weighted scorecard
+- Step 5: Run scorecard for location
+- Step 6: Enable first alert rule
+- Include progress bar, skip/save, and completion state
+- On completion, route to “Owner Daily Brief”
+
+2) OWNER DAILY BRIEF (new home experience)
+Create a concise, action-focused landing panel showing:
+- Overall score today
+- Trend vs prior period
+- Top 3 risks (with severity)
+- Top 3 opportunities
+- “Do this next” actions with buttons
+- Last updated timestamp
+- Empty states with clear CTA
+
+3) ALERT NOISE REDUCTION + ACTIONABILITY
+- Add defaults for cooldown, dedup, escalation
+- Introduce “persistent issue” trigger (same KPI below threshold for X days/runs)
+- Add impact score (low/medium/high, ideally revenue-weighted if data available)
+- For each alert, add “Recommended Action” checklist and owner assignment
+
+4) IMPORT RELIABILITY + DATA CONFIDENCE
+- CSV pre-import validation preview (rows that will fail + why)
+- Reusable field mapping templates per tenant
+- Post-import quality summary:
+- % valid
+- % warnings
+- % failed
+- quality score badge
+
+5) SECURITY & PLATFORM HARDENING
+- Add/verify headers:
+- Content-Security-Policy
+- X-Frame-Options (or frame-ancestors via CSP)
+- X-Content-Type-Options
+- Referrer-Policy
+- Standardize login/auth route usage and error handling
+- Ensure session-expiration UX is graceful and consistent
+
+DELIVERABLE FORMAT:
+1. First output a short implementation plan with:
+- Files/components/routes to add or modify
+- DB/schema changes
+- API changes
+- Risks and assumptions
+2. Then implement changes in small, reviewable commits.
+3. After coding, output:
+- What was built
+- What remains
+- Manual QA checklist
+- Suggested next sprint items
+
+UX/COPY REQUIREMENTS:
+- Tone: decisive, practical, no fluff
+- Prioritize owner/operator clarity over analytics complexity
+- Keep interfaces clean and mobile-friendly
+- Use plain language labels (avoid jargon where possible)
+
+TECH REQUIREMENTS:
+- Preserve existing architecture/style patterns
+- Add tests for core new flows (onboarding, brief, imports validation, alert rules)
+- Do not break existing APIs unless necessary; if changed, document migration
+- Add seed/demo data for quick local verification
+
+SUCCESS CRITERIA:
+- New user can reach first scorecard run in under 5 minutes
+- Daily Brief provides clear next actions without navigating multiple pages
+- Alerts are fewer but higher signal
+- CSV import confidence is visible and trustworthy
+- Security posture is measurably improved
+
+Start now with the implementation plan.
+
+If you want, next message I’ll give you Version 2 of this prompt tuned specifically for whatever stack you used (React/Vite, Express, Prisma, etc.) so Replit gets even sharper output.

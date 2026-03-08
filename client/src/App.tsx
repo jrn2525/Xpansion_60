@@ -10,6 +10,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import NotFound from "@/pages/not-found";
 import LandingPage from "@/pages/landing";
 import DashboardPage from "@/pages/dashboard";
@@ -40,9 +42,12 @@ import AdminExecutiveReportsPage from "@/pages/admin-executive-reports";
 import SuperadminTowerPage from "@/pages/superadmin-tower";
 import CampaignsPage from "@/pages/campaigns";
 import InboxPage from "@/pages/inbox";
+import OnboardingPage from "@/pages/onboarding";
+import DailyBriefPage from "@/pages/daily-brief";
 
 const routeTitles: Record<string, string> = {
-  "/": "Dashboard | Xpansion Console",
+  "/": "Daily Brief | Xpansion Console",
+  "/dashboard": "Dashboard | Xpansion Console",
   "/command-center": "Command Center | Xpansion Console",
   "/portfolio": "Portfolio | Xpansion Console",
   "/tenants": "Tenants | Xpansion Console",
@@ -67,9 +72,11 @@ const routeTitles: Record<string, string> = {
   "/risk": "Risk Dashboard | Xpansion Console",
   "/weekly-plans": "Weekly Plans | Xpansion Console",
   "/campaigns": "Campaigns | Xpansion Console",
+  "/brief": "Daily Brief | Xpansion Console",
   "/inbox": "Command Inbox | Xpansion Console",
   "/admin/executive-reports": "Executive Reports | Xpansion Console",
   "/superadmin/tower": "Command Tower | Xpansion Console",
+  "/onboarding": "Onboarding | Xpansion Console",
 };
 
 function RouteTitle() {
@@ -83,7 +90,8 @@ function RouteTitle() {
 function AuthenticatedRouter() {
   return (
     <Switch>
-      <Route path="/" component={DashboardPage} />
+      <Route path="/" component={DailyBriefPage} />
+      <Route path="/dashboard" component={DashboardPage} />
       <Route path="/command-center" component={CommandCenterPage} />
       <Route path="/portfolio" component={PortfolioPage} />
       <Route path="/tenants" component={TenantsPage} />
@@ -109,8 +117,10 @@ function AuthenticatedRouter() {
       <Route path="/weekly-plans" component={WeeklyPlansPage} />
       <Route path="/admin/executive-reports" component={AdminExecutiveReportsPage} />
       <Route path="/campaigns" component={CampaignsPage} />
+      <Route path="/brief" component={DailyBriefPage} />
       <Route path="/inbox" component={InboxPage} />
       <Route path="/superadmin/tower" component={SuperadminTowerPage} />
+      <Route path="/onboarding" component={OnboardingPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -139,6 +149,41 @@ function AuthenticatedLayout() {
   );
 }
 
+function SessionExpiredListener() {
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    const handler = () => {
+      toast({
+        title: "Session Expired",
+        description: "Your session has expired. Please log in again.",
+        variant: "destructive",
+      });
+      setLocation("/");
+    };
+    window.addEventListener("session-expired", handler);
+    return () => window.removeEventListener("session-expired", handler);
+  }, [toast, setLocation]);
+
+  return null;
+}
+
+function OnboardingRedirect() {
+  const [location, setLocation] = useLocation();
+  const { data: tenantsList, isLoading } = useQuery<any[]>({
+    queryKey: ["/api/tenants"],
+  });
+
+  useEffect(() => {
+    if (!isLoading && tenantsList && tenantsList.length === 0 && location !== "/onboarding") {
+      setLocation("/onboarding");
+    }
+  }, [isLoading, tenantsList, location, setLocation]);
+
+  return null;
+}
+
 function AppContent() {
   const { user, isLoading } = useAuth();
 
@@ -159,7 +204,12 @@ function AppContent() {
     return <LandingPage />;
   }
 
-  return <AuthenticatedLayout />;
+  return (
+    <>
+      <OnboardingRedirect />
+      <AuthenticatedLayout />
+    </>
+  );
 }
 
 function App() {
@@ -169,6 +219,7 @@ function App() {
         <TooltipProvider>
           <RouteTitle />
           <Toaster />
+          <SessionExpiredListener />
           <AppContent />
         </TooltipProvider>
       </QueryClientProvider>

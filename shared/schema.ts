@@ -311,6 +311,10 @@ export const alertRules = pgTable("alert_rules", {
   cooldownMinutes: integer("cooldown_minutes").notNull().default(0),
   escalationMinutes: integer("escalation_minutes").notNull().default(0),
   dedupWindowMinutes: integer("dedup_window_minutes").notNull().default(0),
+  impactLevel: varchar("impact_level", { length: 20 }),
+  persistentThresholdDays: integer("persistent_threshold_days"),
+  recommendedActions: jsonb("recommended_actions"),
+  ownerUserId: varchar("owner_user_id"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -1197,6 +1201,35 @@ export type SecurityAccessEvent = typeof securityAccessEvents.$inferSelect;
 export type InsertSecurityAccessEvent = z.infer<typeof insertSecurityAccessEventSchema>;
 export type BreakGlassSession = typeof breakGlassSessions.$inferSelect;
 export type InsertBreakGlassSession = z.infer<typeof insertBreakGlassSessionSchema>;
+
+// ── Phase 6: Activation & Signal Quality ──
+
+export const onboardingProgress = pgTable("onboarding_progress", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull(),
+  currentStep: integer("current_step").notNull().default(0),
+  completedSteps: jsonb("completed_steps").notNull().default([]),
+  isComplete: boolean("is_complete").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const importMappingTemplates = pgTable("import_mapping_templates", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  mappingConfig: jsonb("mapping_config").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertOnboardingProgressSchema = createInsertSchema(onboardingProgress).omit({ id: true });
+export const insertImportMappingTemplateSchema = createInsertSchema(importMappingTemplates).omit({ id: true });
+
+export type OnboardingProgress = typeof onboardingProgress.$inferSelect;
+export type InsertOnboardingProgress = z.infer<typeof insertOnboardingProgressSchema>;
+export type ImportMappingTemplate = typeof importMappingTemplates.$inferSelect;
+export type InsertImportMappingTemplate = z.infer<typeof insertImportMappingTemplateSchema>;
 
 export const jobQueueRelations = relations(jobQueue, ({ one, many }) => ({
   tenant: one(tenants, { fields: [jobQueue.tenantId], references: [tenants.id] }),

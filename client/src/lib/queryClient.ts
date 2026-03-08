@@ -2,8 +2,25 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
+    if (res.status === 401) {
+      handleSessionExpired();
+    }
     const text = (await res.text()) || res.statusText;
     throw new Error(`${res.status}: ${text}`);
+  }
+}
+
+let sessionExpiredHandled = false;
+function handleSessionExpired() {
+  if (sessionExpiredHandled) return;
+  sessionExpiredHandled = true;
+  setTimeout(() => {
+    sessionExpiredHandled = false;
+  }, 5000);
+
+  if (typeof window !== "undefined") {
+    const event = new CustomEvent("session-expired");
+    window.dispatchEvent(event);
   }
 }
 

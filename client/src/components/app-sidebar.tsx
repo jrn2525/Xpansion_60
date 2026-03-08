@@ -31,6 +31,7 @@ import {
   Radio,
   Megaphone,
   Inbox,
+  Newspaper,
 } from "lucide-react";
 import {
   Sidebar,
@@ -59,7 +60,7 @@ import type { Tenant } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
 
 const navItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Command Center", url: "/command-center", icon: Crosshair },
   { title: "Portfolio", url: "/portfolio", icon: Briefcase },
   { title: "Tenants", url: "/tenants", icon: Building2 },
@@ -70,6 +71,7 @@ const navItems = [
 ];
 
 const operationsItems = [
+  { title: "Daily Brief", url: "/brief", icon: Newspaper },
   { title: "Inbox", url: "/inbox", icon: Inbox },
   { title: "Actions", url: "/actions", icon: ListChecks },
   { title: "Goals", url: "/goals", icon: Target },
@@ -170,10 +172,7 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {navItems.map((item) => {
-                const isActive =
-                  item.url === "/"
-                    ? location === "/"
-                    : location.startsWith(item.url);
+                const isActive = location.startsWith(item.url);
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton

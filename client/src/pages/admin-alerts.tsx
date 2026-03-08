@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +33,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Plus, Shield, CheckCircle, Eye, AlertTriangle, Play, Clock } from "lucide-react";
+import { Bell, Plus, Shield, CheckCircle, Eye, AlertTriangle, Play, Clock, ListChecks, User } from "lucide-react";
 import { useTenantStore } from "@/lib/tenant-store";
 
 import { severityColors, statusColors } from "@/lib/semantic-colors";
@@ -43,6 +44,12 @@ const alertStatusColors: Record<string, string> = {
   resolved: statusColors.success,
 };
 
+const impactColors: Record<string, string> = {
+  low: "bg-status-info text-status-info-foreground",
+  medium: "bg-status-warning/15 text-status-warning-foreground",
+  high: "bg-status-error/20 text-status-error-foreground",
+};
+
 export default function AdminAlertsPage() {
   const { activeTenantId } = useTenantStore();
   const { toast } = useToast();
@@ -50,6 +57,9 @@ export default function AdminAlertsPage() {
   const [editingRule, setEditingRule] = useState<any>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [severityFilter, setSeverityFilter] = useState<string>("");
+  const [impactFilter, setImpactFilter] = useState<string>("");
+  const [expandedEventId, setExpandedEventId] = useState<number | null>(null);
+  const [checkedActions, setCheckedActions] = useState<Record<string, boolean>>({});
 
   const [ruleName, setRuleName] = useState("");
   const [ruleSeverity, setRuleSeverity] = useState("medium");
@@ -62,6 +72,10 @@ export default function AdminAlertsPage() {
   const [cooldownMinutes, setCooldownMinutes] = useState("0");
   const [escalationMinutes, setEscalationMinutes] = useState("0");
   const [dedupWindowMinutes, setDedupWindowMinutes] = useState("0");
+  const [ruleImpactLevel, setRuleImpactLevel] = useState("");
+  const [rulePersistentThresholdDays, setRulePersistentThresholdDays] = useState("");
+  const [ruleRecommendedActions, setRuleRecommendedActions] = useState("");
+  const [ruleOwnerUserId, setRuleOwnerUserId] = useState("");
 
   const { data: rulesResponse, isLoading: rulesLoading } = useQuery<any>({
     queryKey: ["/api/admin/alert-rules", `?tenantId=${activeTenantId}`],
@@ -70,7 +84,8 @@ export default function AdminAlertsPage() {
 
   const effectiveStatus = statusFilter && statusFilter !== "all" ? statusFilter : "";
   const effectiveSeverity = severityFilter && severityFilter !== "all" ? severityFilter : "";
-  const eventsQueryKey = ["/api/admin/alert-events", `?tenantId=${activeTenantId}${effectiveStatus ? `&status=${effectiveStatus}` : ""}${effectiveSeverity ? `&severity=${effectiveSeverity}` : ""}`];
+  const effectiveImpact = impactFilter && impactFilter !== "all" ? impactFilter : "";
+  const eventsQueryKey = ["/api/admin/alert-events", `?tenantId=${activeTenantId}${effectiveStatus ? `&status=${effectiveStatus}` : ""}${effectiveSeverity ? `&severity=${effectiveSeverity}` : ""}${effectiveImpact ? `&impactLevel=${effectiveImpact}` : ""}`];
   const { data: eventsResponse, isLoading: eventsLoading } = useQuery<any>({
     queryKey: eventsQueryKey,
     enabled: !!activeTenantId,
@@ -78,6 +93,11 @@ export default function AdminAlertsPage() {
 
   const { data: metricsData } = useQuery<any[]>({
     queryKey: ["/api/tenants", activeTenantId, "metrics"],
+    enabled: !!activeTenantId,
+  });
+
+  const { data: tenantUsersData } = useQuery<any>({
+    queryKey: ["/api/tenants", activeTenantId, "users"],
     enabled: !!activeTenantId,
   });
 
@@ -163,6 +183,10 @@ export default function AdminAlertsPage() {
     setCooldownMinutes("0");
     setEscalationMinutes("0");
     setDedupWindowMinutes("0");
+    setRuleImpactLevel("");
+    setRulePersistentThresholdDays("");
+    setRuleRecommendedActions("");
+    setRuleOwnerUserId("");
   }
 
   function openEditRule(rule: any) {
@@ -173,6 +197,15 @@ export default function AdminAlertsPage() {
     setCooldownMinutes(String(rule.cooldownMinutes || "0"));
     setEscalationMinutes(String(rule.escalationMinutes || "0"));
     setDedupWindowMinutes(String(rule.dedupWindowMinutes || "0"));
+    setRuleImpactLevel(rule.impactLevel || "");
+    setRulePersistentThresholdDays(String(rule.persistentThresholdDays || ""));
+    setRuleOwnerUserId(rule.ownerUserId || "");
+    const actions = rule.recommendedActions;
+    if (Array.isArray(actions)) {
+      setRuleRecommendedActions(actions.join("\n"));
+    } else {
+      setRuleRecommendedActions("");
+    }
     try {
       const cond = JSON.parse(rule.conditionJson);
       setConditionType(cond.type || "threshold_breach");
@@ -189,7 +222,12 @@ export default function AdminAlertsPage() {
       ? JSON.stringify({ type: "threshold_breach", metricDefinitionId: parseInt(conditionMetricId), operator: conditionOperator, threshold: parseFloat(conditionThreshold) })
       : JSON.stringify({ type: "trend_deterioration", metricDefinitionId: parseInt(conditionMetricId), dropPercent: parseFloat(conditionDropPercent) });
 
-    const data = {
+    const recommendedActionsArray = ruleRecommendedActions
+      .split("\n")
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    const data: any = {
       tenantId: activeTenantId,
       name: ruleName,
       severity: ruleSeverity,
@@ -199,6 +237,10 @@ export default function AdminAlertsPage() {
       cooldownMinutes: parseInt(cooldownMinutes) || 0,
       escalationMinutes: parseInt(escalationMinutes) || 0,
       dedupWindowMinutes: parseInt(dedupWindowMinutes) || 0,
+      impactLevel: ruleImpactLevel || null,
+      persistentThresholdDays: rulePersistentThresholdDays ? parseInt(rulePersistentThresholdDays) : null,
+      recommendedActions: recommendedActionsArray.length > 0 ? recommendedActionsArray : null,
+      ownerUserId: ruleOwnerUserId || null,
     };
 
     if (editingRule) {
@@ -208,9 +250,15 @@ export default function AdminAlertsPage() {
     }
   }
 
+  function toggleCheckedAction(eventId: number, actionIndex: number) {
+    const key = `${eventId}-${actionIndex}`;
+    setCheckedActions(prev => ({ ...prev, [key]: !prev[key] }));
+  }
+
   const rules = rulesResponse?.data || rulesResponse || [];
   const events = eventsResponse?.data || eventsResponse || [];
   const metrics = metricsData || [];
+  const tenantUsers = tenantUsersData?.data || tenantUsersData || [];
 
   if (!activeTenantId) {
     return <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">Select a tenant to manage alerts</div>;
@@ -223,7 +271,7 @@ export default function AdminAlertsPage() {
       </div>
 
       <Card>
-        <CardContent className="p-4 flex items-center justify-between">
+        <CardContent className="p-4 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <Clock className="h-5 w-5 text-muted-foreground" />
             <div>
@@ -259,7 +307,7 @@ export default function AdminAlertsPage() {
         </TabsList>
 
         <TabsContent value="events" className="space-y-4">
-          <div className="flex gap-4">
+          <div className="flex gap-4 flex-wrap">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-40" data-testid="filter-status"><SelectValue placeholder="All statuses" /></SelectTrigger>
               <SelectContent>
@@ -279,6 +327,15 @@ export default function AdminAlertsPage() {
                 <SelectItem value="critical">Critical</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={impactFilter} onValueChange={setImpactFilter}>
+              <SelectTrigger className="w-40" data-testid="filter-impact"><SelectValue placeholder="All impacts" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All impacts</SelectItem>
+                <SelectItem value="low">Low</SelectItem>
+                <SelectItem value="medium">Medium</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {eventsLoading ? (
@@ -286,40 +343,76 @@ export default function AdminAlertsPage() {
           ) : events.length === 0 ? (
             <Card><CardContent className="py-8 text-center text-muted-foreground" data-testid="text-no-events">No alert events yet. Events will appear here when alert rules are triggered.</CardContent></Card>
           ) : (
-            <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Severity</TableHead>
-                  <TableHead>Message</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {events.map((event: any) => (
-                  <TableRow key={event.id} data-testid={`row-event-${event.id}`}>
-                    <TableCell><Badge className={alertStatusColors[event.status] || ""} data-testid={`badge-event-status-${event.id}`}>{event.status}</Badge></TableCell>
-                    <TableCell><Badge className={severityColors[event.severity as keyof typeof severityColors] || ""} data-testid={`badge-event-severity-${event.id}`}>{event.severity}</Badge></TableCell>
-                    <TableCell className="max-w-md truncate">{event.message}</TableCell>
-                    <TableCell>{new Date(event.createdAt).toLocaleString()}</TableCell>
-                    <TableCell className="space-x-2">
-                      {event.status === "open" && (
-                        <Button size="sm" variant="outline" onClick={() => ackMutation.mutate(event.id)} data-testid={`button-ack-${event.id}`}>
-                          <Eye className="h-3 w-3 mr-1" /> Ack
-                        </Button>
+            <div className="space-y-2">
+              {events.map((event: any) => {
+                const isExpanded = expandedEventId === event.id;
+                const recActions: string[] = Array.isArray(event.recommendedActions) ? event.recommendedActions : [];
+                return (
+                  <Card key={event.id} data-testid={`card-event-${event.id}`}>
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Badge className={alertStatusColors[event.status] || ""} data-testid={`badge-event-status-${event.id}`}>{event.status}</Badge>
+                        <Badge className={severityColors[event.severity as keyof typeof severityColors] || ""} data-testid={`badge-event-severity-${event.id}`}>{event.severity}</Badge>
+                        {event.impactLevel && (
+                          <Badge className={impactColors[event.impactLevel] || ""} data-testid={`badge-event-impact-${event.id}`}>
+                            Impact: {event.impactLevel}
+                          </Badge>
+                        )}
+                        {event.ownerUserId && (
+                          <Badge variant="outline" data-testid={`badge-event-owner-${event.id}`}>
+                            <User className="h-3 w-3 mr-1" /> {event.ownerUserId}
+                          </Badge>
+                        )}
+                        <span className="ml-auto text-xs text-muted-foreground">{new Date(event.createdAt).toLocaleString()}</span>
+                      </div>
+                      <p className="text-sm" data-testid={`text-event-message-${event.id}`}>{event.message}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {event.status === "open" && (
+                          <Button size="sm" variant="outline" onClick={() => ackMutation.mutate(event.id)} data-testid={`button-ack-${event.id}`}>
+                            <Eye className="h-3 w-3 mr-1" /> Ack
+                          </Button>
+                        )}
+                        {event.status !== "resolved" && (
+                          <Button size="sm" variant="outline" onClick={() => resolveMutation.mutate(event.id)} data-testid={`button-resolve-${event.id}`}>
+                            <CheckCircle className="h-3 w-3 mr-1" /> Resolve
+                          </Button>
+                        )}
+                        {recActions.length > 0 && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setExpandedEventId(isExpanded ? null : event.id)}
+                            data-testid={`button-toggle-actions-${event.id}`}
+                          >
+                            <ListChecks className="h-3 w-3 mr-1" /> {isExpanded ? "Hide" : "Show"} Actions ({recActions.length})
+                          </Button>
+                        )}
+                      </div>
+                      {isExpanded && recActions.length > 0 && (
+                        <div className="border-t pt-3 space-y-2" data-testid={`section-recommended-actions-${event.id}`}>
+                          <p className="text-xs font-medium text-muted-foreground">Recommended Actions</p>
+                          {recActions.map((action: string, idx: number) => {
+                            const actionKey = `${event.id}-${idx}`;
+                            const isChecked = !!checkedActions[actionKey];
+                            return (
+                              <div key={idx} className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={isChecked}
+                                  onCheckedChange={() => toggleCheckedAction(event.id, idx)}
+                                  data-testid={`checkbox-action-${event.id}-${idx}`}
+                                />
+                                <span className={`text-sm ${isChecked ? "line-through text-muted-foreground" : ""}`} data-testid={`text-action-${event.id}-${idx}`}>
+                                  {action}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
-                      {event.status !== "resolved" && (
-                        <Button size="sm" variant="outline" onClick={() => resolveMutation.mutate(event.id)} data-testid={`button-resolve-${event.id}`}>
-                          <CheckCircle className="h-3 w-3 mr-1" /> Resolve
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -340,7 +433,9 @@ export default function AdminAlertsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Severity</TableHead>
+                  <TableHead>Impact</TableHead>
                   <TableHead>Condition</TableHead>
+                  <TableHead>Owner</TableHead>
                   <TableHead>Active</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -359,7 +454,21 @@ export default function AdminAlertsPage() {
                     <TableRow key={rule.id} data-testid={`row-rule-${rule.id}`}>
                       <TableCell className="font-medium">{rule.name}</TableCell>
                       <TableCell><Badge className={severityColors[rule.severity as keyof typeof severityColors] || ""}>{rule.severity}</Badge></TableCell>
+                      <TableCell>
+                        {rule.impactLevel ? (
+                          <Badge className={impactColors[rule.impactLevel] || ""} data-testid={`badge-rule-impact-${rule.id}`}>{rule.impactLevel}</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>{condDesc}</TableCell>
+                      <TableCell>
+                        {rule.ownerUserId ? (
+                          <span className="text-sm" data-testid={`text-rule-owner-${rule.id}`}>{rule.ownerUserId}</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
                       <TableCell>{rule.isActive ? <CheckCircle className="h-4 w-4 text-status-success-foreground" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}</TableCell>
                       <TableCell>
                         <Button size="sm" variant="outline" onClick={() => openEditRule(rule)} data-testid={`button-edit-rule-${rule.id}`}>Edit</Button>
@@ -375,7 +484,7 @@ export default function AdminAlertsPage() {
       </Tabs>
 
       <Dialog open={showRuleDialog} onOpenChange={setShowRuleDialog}>
-        <DialogContent>
+        <DialogContent className="max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingRule ? "Edit Alert Rule" : "Create Alert Rule"}</DialogTitle>
           </DialogHeader>
@@ -393,6 +502,18 @@ export default function AdminAlertsPage() {
                   <SelectItem value="medium">Medium</SelectItem>
                   <SelectItem value="high">High</SelectItem>
                   <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Impact Level</Label>
+              <Select value={ruleImpactLevel || "none"} onValueChange={(v) => setRuleImpactLevel(v === "none" ? "" : v)}>
+                <SelectTrigger data-testid="select-rule-impact"><SelectValue placeholder="Select impact" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not set</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -440,6 +561,21 @@ export default function AdminAlertsPage() {
               </div>
             )}
             <div className="border-t pt-4 mt-2">
+              <p className="text-sm font-medium mb-3">Noise Reduction</p>
+              <div>
+                <Label>Persistent Threshold (days)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 7"
+                  value={rulePersistentThresholdDays}
+                  onChange={(e) => setRulePersistentThresholdDays(e.target.value)}
+                  data-testid="input-persistent-threshold-days"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Triggers a persistent issue alert if metric stays below threshold for this many days.</p>
+              </div>
+            </div>
+            <div className="border-t pt-4 mt-2">
               <p className="text-sm font-medium mb-3">Workflow Automation</p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -456,6 +592,32 @@ export default function AdminAlertsPage() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-1">Cooldown prevents repeat alerts. Escalation bumps severity on unresolved events. Dedup suppresses duplicates.</p>
+            </div>
+            <div className="border-t pt-4 mt-2">
+              <p className="text-sm font-medium mb-3">Ownership & Actions</p>
+              <div>
+                <Label>Owner</Label>
+                <Select value={ruleOwnerUserId || "none"} onValueChange={(v) => setRuleOwnerUserId(v === "none" ? "" : v)}>
+                  <SelectTrigger data-testid="select-rule-owner"><SelectValue placeholder="Assign owner" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Unassigned</SelectItem>
+                    {Array.isArray(tenantUsers) && tenantUsers.map((tu: any) => (
+                      <SelectItem key={tu.userId} value={tu.userId}>{tu.userId} ({tu.role})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="mt-3">
+                <Label>Recommended Actions (one per line)</Label>
+                <Textarea
+                  value={ruleRecommendedActions}
+                  onChange={(e) => setRuleRecommendedActions(e.target.value)}
+                  placeholder={"Check revenue dashboard\nContact location manager\nReview recent imports"}
+                  rows={4}
+                  data-testid="textarea-recommended-actions"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Checklist items shown when this alert fires.</p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <Switch checked={ruleIsActive} onCheckedChange={setRuleIsActive} data-testid="switch-rule-active" />

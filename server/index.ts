@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { securityHeaders } from "./middleware/security-headers";
 
 console.log("[BOOT] xpansion-console server entrypoint loaded:", import.meta.filename ?? import.meta.url ?? "unknown-file");
 
@@ -31,6 +32,8 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+app.use(securityHeaders);
 
 const idempotencyCache = new Map<string, { status: number; body: any; timestamp: number }>();
 const IDEMPOTENCY_TTL = 5 * 60 * 1000;
