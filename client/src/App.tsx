@@ -201,15 +201,26 @@ function SessionExpiredListener() {
 
 function OnboardingRedirect() {
   const [location, setLocation] = useLocation();
+  const { user } = useAuth();
   const { data: tenantsList, isLoading } = useQuery<any[]>({
     queryKey: ["/api/tenants"],
   });
 
+  const { data: progressData } = useQuery<any>({
+    queryKey: ["/api/v1/onboarding/progress"],
+  });
+
   useEffect(() => {
-    if (!isLoading && tenantsList && tenantsList.length === 0 && location !== "/onboarding") {
+    if (location === "/onboarding") return;
+
+    const mustChange = (user as any)?.mustChangePassword === true;
+    const noTenants = !isLoading && tenantsList && tenantsList.length === 0;
+    const onboardingIncomplete = progressData && !progressData.isComplete && progressData.currentStep > 0;
+
+    if (mustChange || noTenants || onboardingIncomplete) {
       setLocation("/onboarding");
     }
-  }, [isLoading, tenantsList, location, setLocation]);
+  }, [isLoading, tenantsList, location, setLocation, user, progressData]);
 
   return null;
 }

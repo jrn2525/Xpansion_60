@@ -7,6 +7,7 @@ import { db } from "../../db";
 import { users } from "@shared/models/auth";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
+import { sendEmail } from "../../services/notifications";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS_PER_IP = 20;
@@ -230,7 +231,7 @@ export function registerAuthRoutes(app: Express): void {
           }
           clearAttempts(clientIp, email);
           auditLog("LOGIN_SUCCESS", { userId: user.id, email, ip: clientIp, userAgent: req.headers["user-agent"] });
-          res.json({ ok: true, data: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, isSuperAdmin: user.isSuperAdmin === "true" } });
+          res.json({ ok: true, data: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, isSuperAdmin: user.isSuperAdmin === "true", mustChangePassword: user.mustChangePassword === true } });
         });
       });
     } catch (error: any) {
@@ -295,7 +296,10 @@ export function registerAuthRoutes(app: Express): void {
           firstName: user.firstName,
           lastName: user.lastName,
           profileImageUrl: user.profileImageUrl,
+          phone: (user as any).phone,
+          jobTitle: (user as any).jobTitle,
           isSuperAdmin: (user as any).isSuperAdmin === "true",
+          mustChangePassword: (user as any).mustChangePassword === true,
           tenants: tenantUsers.map((tu: any) => ({
             tenantId: tu.tenantId,
             role: tu.role,
@@ -362,12 +366,13 @@ export function registerAuthRoutes(app: Express): void {
         lastName: lastName || null,
         passwordHash,
         isSuperAdmin: "false",
+        mustChangePassword: true,
       }).returning();
 
       if (tenantId) {
         const tid = parseInt(tenantId);
         if (!isNaN(tid)) {
-          await storage.createTenantUser({ tenantId: tid, userId, role: role || "viewer" });
+          await storage.createTenantUser({ tenantId: tid, userId, role: role || "owner" });
         }
       }
 
@@ -379,6 +384,18 @@ export function registerAuthRoutes(app: Express): void {
         role: role || null,
       });
 
+      const appUrl = `https://${req.get("host")}`;
+      const clientName = firstName || "there";
+      try {
+        await sendEmail(
+          email,
+          "Welcome to Xpansion Console — Your Account is Ready",
+          buildWelcomeEmail(clientName, email, password, appUrl)
+        );
+      } catch (emailErr: any) {
+        console.error("[AUTH] Welcome email failed:", emailErr.message);
+      }
+
       const { passwordHash: _, ...safeUser } = newUser as any;
       res.status(201).json({ ok: true, data: safeUser });
     } catch (error: any) {
@@ -386,4 +403,131 @@ export function registerAuthRoutes(app: Express): void {
       res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
     }
   });
+
+  app.put("/api/auth/change-password", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { currentPassword, newPassword } = req.body;
+
+      if (!newPassword || newPassword.length < 8) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "New password must be at least 8 characters" } });
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "User not found" } });
+      }
+
+      if (user.passwordHash) {
+        if (!currentPassword) {
+          return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Current password is required" } });
+        }
+        const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!valid) {
+          return res.status(401).json({ ok: false, error: { code: "UNAUTHORIZED", message: "Current password is incorrect" } });
+        }
+      }
+
+      const newHash = await bcrypt.hash(newPassword, 10);
+      await db.update(users).set({
+        passwordHash: newHash,
+        mustChangePassword: false,
+        updatedAt: new Date(),
+      }).where(eq(users.id, userId));
+
+      auditLog("PASSWORD_CHANGED", { userId });
+      res.json({ ok: true, data: { message: "Password updated successfully" } });
+    } catch (error: any) {
+      console.error("[AUTH] Change password error:", error);
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+    }
+  });
+
+  app.put("/api/auth/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { firstName, lastName, phone, jobTitle, profileImageUrl } = req.body;
+
+      const updates: any = { updatedAt: new Date() };
+      if (firstName !== undefined) updates.firstName = firstName;
+      if (lastName !== undefined) updates.lastName = lastName;
+      if (phone !== undefined) updates.phone = phone;
+      if (jobTitle !== undefined) updates.jobTitle = jobTitle;
+      if (profileImageUrl !== undefined) updates.profileImageUrl = profileImageUrl;
+
+      const [updated] = await db.update(users).set(updates).where(eq(users.id, userId)).returning();
+      const { passwordHash: _, ...safeUser } = updated as any;
+
+      auditLog("PROFILE_UPDATED", { userId });
+      res.json({ ok: true, data: safeUser });
+    } catch (error: any) {
+      console.error("[AUTH] Profile update error:", error);
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+    }
+  });
+}
+
+function buildWelcomeEmail(name: string, email: string, password: string, appUrl: string): string {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" style="max-width:520px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#dc2626,#b91c1c);padding:32px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.5px;">Xpansion Console</h1>
+              <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;letter-spacing:1px;text-transform:uppercase;">Franchise Intelligence Platform</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 40px;">
+              <h2 style="margin:0 0 16px;color:#18181b;font-size:20px;font-weight:600;">Welcome, ${name}!</h2>
+              <p style="margin:0 0 24px;color:#3f3f46;font-size:15px;line-height:1.6;">
+                Your account has been created and is ready to go. Sign in to set up your business profile and start tracking the metrics that matter most to your franchise.
+              </p>
+              <div style="background-color:#fafafa;border:1px solid #e4e4e7;border-radius:8px;padding:20px;margin:0 0 24px;">
+                <p style="margin:0 0 12px;font-size:13px;color:#71717a;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;">Your Login Credentials</p>
+                <table width="100%" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="padding:6px 0;color:#52525b;font-size:14px;width:80px;">Email:</td>
+                    <td style="padding:6px 0;color:#18181b;font-size:14px;font-weight:600;">${email}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:6px 0;color:#52525b;font-size:14px;width:80px;">Password:</td>
+                    <td style="padding:6px 0;color:#18181b;font-size:14px;font-weight:600;">${password}</td>
+                  </tr>
+                </table>
+              </div>
+              <p style="margin:0 0 24px;color:#71717a;font-size:13px;line-height:1.5;">
+                You'll be asked to set a new password when you first sign in. A quick setup wizard will guide you through getting everything configured.
+              </p>
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${appUrl}" style="display:inline-block;background-color:#dc2626;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 32px;border-radius:8px;">
+                      Sign In to Get Started
+                    </a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background-color:#fafafa;border-top:1px solid #e4e4e7;text-align:center;">
+              <p style="margin:0;color:#a1a1aa;font-size:12px;">Powered by Xpansion Console</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }

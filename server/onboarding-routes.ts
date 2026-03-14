@@ -55,8 +55,12 @@ onboardingRouter.get("/onboarding/progress", isAuthenticated, async (req: any, r
     if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
 
     const { db: dbInstance } = await import("./db");
-    const { tenantUsers: tuTable, tenants: tenantsTable } = await import("@shared/schema");
+    const { onboardingProgress } = await import("@shared/schema");
+    const { tenantUsers: tuTable } = await import("@shared/schema");
     const { eq: eqOp } = await import("drizzle-orm");
+
+    const [progress] = await dbInstance.select().from(onboardingProgress).where(eqOp(onboardingProgress.userId, userId));
+
     const userMemberships = await dbInstance.select({ tenantId: tuTable.tenantId }).from(tuTable).where(eqOp(tuTable.userId, userId));
     const userTenants: any[] = [];
     for (const m of userMemberships) {
@@ -64,25 +68,13 @@ onboardingRouter.get("/onboarding/progress", isAuthenticated, async (req: any, r
       if (t) userTenants.push(t);
     }
 
-    if (userTenants.length === 0) {
-      return res.json(ok({
-        progress: null,
-        hasTenants: false,
-        currentStep: 0,
-        completedSteps: [],
-        isComplete: false,
-      }));
-    }
-
-    const tenantId = userTenants[0].id;
-    const progress = await storage.getOnboardingProgress(tenantId, userId);
-
     res.json(ok({
-      progress,
-      hasTenants: true,
-      tenantId,
+      progress: progress || null,
+      hasTenants: userTenants.length > 0,
+      tenantId: progress?.tenantId || (userTenants.length > 0 ? userTenants[0].id : null),
       currentStep: progress?.currentStep || 0,
       completedSteps: progress?.completedSteps || [],
+      savedData: progress?.savedData || {},
       isComplete: progress?.isComplete || false,
     }));
   } catch (error: any) {
@@ -97,25 +89,49 @@ onboardingRouter.put("/onboarding/progress", isAuthenticated, async (req: any, r
     if (!userId) return res.status(401).json(err("UNAUTHORIZED", "Unauthorized"));
 
     const progressSchema = z.object({
-      tenantId: z.coerce.number({ required_error: "tenantId required" }),
+      tenantId: z.coerce.number().optional(),
       currentStep: z.coerce.number().int().min(0).optional(),
       completedSteps: z.array(z.string()).optional(),
+      savedData: z.record(z.any()).optional(),
+      isComplete: z.boolean().optional(),
     });
     const parsed = progressSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(parsed.error).toString()));
-    const { tenantId, currentStep, completedSteps } = parsed.data;
+    const { tenantId, currentStep, completedSteps, savedData, isComplete } = parsed.data;
 
-    const progress = await storage.upsertOnboardingProgress({
-      tenantId,
+    const { db: dbInstance } = await import("./db");
+    const { onboardingProgress } = await import("@shared/schema");
+    const { eq: eqOp } = await import("drizzle-orm");
+
+    const [existing] = await dbInstance.select().from(onboardingProgress).where(eqOp(onboardingProgress.userId, userId));
+
+    if (existing) {
+      const updates: any = { updatedAt: new Date() };
+      if (tenantId !== undefined) updates.tenantId = tenantId;
+      if (currentStep !== undefined) updates.currentStep = currentStep;
+      if (completedSteps !== undefined) updates.completedSteps = completedSteps;
+      if (savedData !== undefined) {
+        const merged = { ...(existing.savedData as any || {}), ...savedData };
+        updates.savedData = merged;
+      }
+      if (isComplete !== undefined) {
+        updates.isComplete = isComplete;
+        if (isComplete) updates.completedAt = new Date();
+      }
+      const [updated] = await dbInstance.update(onboardingProgress).set(updates).where(eqOp(onboardingProgress.id, existing.id)).returning();
+      return res.json(ok(updated));
+    }
+
+    const [created] = await dbInstance.insert(onboardingProgress).values({
       userId,
+      tenantId: tenantId || null,
       currentStep: currentStep || 0,
       completedSteps: completedSteps || [],
-      isComplete: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
+      savedData: savedData || {},
+      isComplete: isComplete || false,
+    }).returning();
 
-    res.json(ok(progress));
+    res.json(ok(created));
   } catch (error: any) {
       if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));

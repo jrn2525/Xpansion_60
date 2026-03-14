@@ -1208,11 +1208,13 @@ export type InsertBreakGlassSession = z.infer<typeof insertBreakGlassSessionSche
 
 export const onboardingProgress = pgTable("onboarding_progress", {
   id: serial("id").primaryKey(),
-  tenantId: integer("tenant_id").notNull().references(() => tenants.id, { onDelete: "cascade" }),
+  tenantId: integer("tenant_id").references(() => tenants.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull(),
   currentStep: integer("current_step").notNull().default(0),
   completedSteps: jsonb("completed_steps").notNull().default([]),
+  savedData: jsonb("saved_data").notNull().default({}),
   isComplete: boolean("is_complete").notNull().default(false),
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
