@@ -39,6 +39,7 @@ import {
   Store,
   Settings,
   UserCheck,
+  ClipboardEdit,
 } from "lucide-react";
 import {
   Sidebar,
@@ -87,6 +88,8 @@ type TenantWithRole = Tenant & { role?: string };
 const clientNavItems: NavItem[] = [
   { title: "Home", url: "/", icon: Home, visibleTo: allRoles },
   { title: "My Business", url: "/my-business", icon: Store, visibleTo: allRoles },
+  { title: "Enter Data", url: "/enter-data", icon: ClipboardEdit, visibleTo: allRoles },
+  { title: "My Scorecard", url: "/my-scorecard", icon: Trophy, visibleTo: allRoles },
   { title: "Locations", url: "/locations", icon: MapPin, visibleTo: allRoles },
   { title: "Metrics", url: "/metrics", icon: BarChart3, visibleTo: allRoles },
   { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck, visibleTo: allRoles },

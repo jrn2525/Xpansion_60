@@ -55,6 +55,8 @@ const ClientHomePage = lazy(() => import("@/pages/client-home"));
 const ConsultantClientsPage = lazy(() => import("@/pages/consultant-clients"));
 const MyBusinessPage = lazy(() => import("@/pages/my-business"));
 const ClientSettingsPage = lazy(() => import("@/pages/client-settings"));
+const EnterDataPage = lazy(() => import("@/pages/enter-data"));
+const MyScorecardPage = lazy(() => import("@/pages/my-scorecard"));
 
 function LoadingSkeleton() {
   return (
@@ -71,6 +73,8 @@ const routeTitles: Record<string, string> = {
   "/": "Home | Xpansion Console",
   "/clients": "Clients | Xpansion Console",
   "/my-business": "My Business | Xpansion Console",
+  "/enter-data": "Enter Data | Xpansion Console",
+  "/my-scorecard": "My Scorecard | Xpansion Console",
   "/settings": "Settings | Xpansion Console",
   "/dashboard": "Dashboard | Xpansion Console",
   "/command-center": "Command Center | Xpansion Console",
@@ -133,6 +137,8 @@ function AuthenticatedRouter() {
       <Route path="/" component={RoleBasedHome} />
       <Route path="/clients">{() => <SuperAdminRoute component={ConsultantClientsPage} />}</Route>
       <Route path="/my-business" component={MyBusinessPage} />
+      <Route path="/enter-data" component={EnterDataPage} />
+      <Route path="/my-scorecard" component={MyScorecardPage} />
       <Route path="/settings" component={ClientSettingsPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/command-center" component={CommandCenterPage} />

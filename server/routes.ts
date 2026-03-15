@@ -711,6 +711,107 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/tenants/:tenantId/metric-values", isAuthenticated, async (req: any, res) => {
+    try {
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const hasAccess = await requireTenantAccess(req, res, tenantId);
+      if (!hasAccess) return;
+
+      const querySchema = z.object({
+        locationId: z.string().transform(Number),
+        periodStart: z.string().optional(),
+        periodEnd: z.string().optional(),
+      });
+      const parsed = querySchema.safeParse(req.query);
+      if (!parsed.success) return zodError(res, parsed.error);
+
+      const { locationId, periodStart, periodEnd } = parsed.data;
+
+      const location = await storage.getLocation(locationId);
+      if (!location || location.tenantId !== tenantId) {
+        return res.status(404).json(err("NOT_FOUND", "Location not found in this tenant"));
+      }
+
+      const metrics = await storage.getMetricDefinitions(tenantId);
+      const allValues: any[] = [];
+
+      for (const metric of metrics) {
+        if (periodStart && periodEnd) {
+          const value = await storage.getMetricValueForPeriod(
+            metric.id, locationId, new Date(periodStart), new Date(periodEnd)
+          );
+          if (value) allValues.push(value);
+        } else {
+          const values = await storage.getMetricValues(metric.id, locationId);
+          allValues.push(...values);
+        }
+      }
+
+      res.json(ok(allValues));
+    } catch (error: any) {
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
+    }
+  });
+
+  app.put("/api/tenants/:tenantId/metric-values/bulk", isAuthenticated, async (req: any, res) => {
+    try {
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin", "manager"]);
+      if (!hasAccess) return;
+
+      const bodySchema = z.object({
+        locationId: z.number(),
+        period: z.string(),
+        periodStart: z.string(),
+        periodEnd: z.string(),
+        entries: z.array(z.object({
+          metricDefinitionId: z.number(),
+          value: z.number(),
+        })),
+      });
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) return zodError(res, parsed.error);
+
+      const { locationId, period, periodStart, periodEnd, entries } = parsed.data;
+
+      const location = await storage.getLocation(locationId);
+      if (!location || location.tenantId !== tenantId) {
+        return res.status(404).json(err("NOT_FOUND", "Location not found in this tenant"));
+      }
+
+      const results = [];
+      for (const entry of entries) {
+        const metric = await storage.getMetricDefinition(entry.metricDefinitionId);
+        if (!metric || metric.tenantId !== tenantId) continue;
+
+        const existing = await storage.getMetricValueForPeriod(
+          entry.metricDefinitionId, locationId,
+          new Date(periodStart), new Date(periodEnd)
+        );
+
+        if (existing) {
+          const updated = await storage.updateMetricValue(existing.id, { value: entry.value });
+          results.push(updated);
+        } else {
+          const created = await storage.createMetricValue({
+            metricDefinitionId: entry.metricDefinitionId,
+            locationId,
+            period,
+            periodStart: new Date(periodStart),
+            periodEnd: new Date(periodEnd),
+            value: entry.value,
+          });
+          results.push(created);
+        }
+      }
+
+      res.json(ok(results));
+    } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
+    }
+  });
+
   app.get("/api/tenants/:tenantId/trends", isAuthenticated, async (req: any, res) => {
     try {
       const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");

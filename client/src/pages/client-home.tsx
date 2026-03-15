@@ -18,8 +18,9 @@ import {
   Store,
   ListChecks,
   TrendingUp,
+  ClipboardEdit,
 } from "lucide-react";
-import type { Location, MetricDefinition } from "@shared/schema";
+import type { Location, MetricDefinition, MetricValue } from "@shared/schema";
 
 interface ChecklistItem {
   id: string;
@@ -51,6 +52,20 @@ export default function ClientHomePage() {
   const { data: progressData } = useQuery<any>({
     queryKey: ["/api/v1/onboarding/progress"],
   });
+
+  const firstLocationId = locations?.[0]?.id;
+  const { data: metricValues } = useQuery<MetricValue[]>({
+    queryKey: ["/api/tenants", activeTenantId, "metric-values", { locationId: firstLocationId }],
+    enabled: !!activeTenantId && !!firstLocationId,
+    queryFn: async () => {
+      const params = new URLSearchParams({ locationId: String(firstLocationId) });
+      const res = await fetch(`/api/tenants/${activeTenantId}/metric-values?${params}`, { credentials: "include" });
+      const data = await res.json();
+      return data.data || [];
+    },
+  });
+
+  const hasEnteredData = (metricValues?.length || 0) > 0;
 
   const activeTenant = tenants?.find((t: any) => t.id === activeTenantId);
   const activeLocations = locations?.filter((l) => l.isActive) || [];
@@ -98,6 +113,14 @@ export default function ClientHomePage() {
       done: !!(savedData.trackingFrequency),
       href: "/my-business",
       icon: Target,
+    },
+    {
+      id: "data",
+      label: "Enter your first numbers",
+      description: "Start tracking your performance",
+      done: hasEnteredData,
+      href: "/enter-data",
+      icon: ClipboardEdit,
     },
   ];
 
@@ -185,24 +208,24 @@ export default function ClientHomePage() {
       )}
 
       {allDone && (
-        <Card data-testid="card-all-set">
+        <Card data-testid="card-all-set" className="border-primary/20 bg-primary/5">
           <CardContent className="py-8 text-center">
             <CheckCircle2 className="h-10 w-10 text-primary mx-auto mb-3" />
             <h3 className="text-lg font-semibold">You're all set!</h3>
             <p className="text-muted-foreground mt-1 max-w-md mx-auto">
-              Your business is configured and ready to go. Start tracking your performance by entering data for your KPIs.
+              Your business is configured. Keep entering your numbers regularly to track performance.
             </p>
             <div className="flex justify-center gap-3 mt-4">
-              <Link href="/metrics">
-                <Button variant="outline" data-testid="button-view-metrics">
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  View Metrics
+              <Link href="/enter-data">
+                <Button data-testid="button-enter-data">
+                  <ClipboardEdit className="h-4 w-4 mr-2" />
+                  Enter Your Numbers
                 </Button>
               </Link>
-              <Link href="/actions">
-                <Button data-testid="button-view-actions">
-                  <ListChecks className="h-4 w-4 mr-2" />
-                  Actions
+              <Link href="/my-scorecard">
+                <Button variant="outline" data-testid="button-view-scorecard">
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  My Scorecard
                 </Button>
               </Link>
             </div>

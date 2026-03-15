@@ -241,6 +241,7 @@ export interface IStorage {
     periodEnd: Date
   ): Promise<MetricValue | undefined>;
   createMetricValue(data: InsertMetricValue): Promise<MetricValue>;
+  updateMetricValue(id: number, data: { value: number }): Promise<MetricValue>;
   getMetricTrends(
     metricDefinitionId: number,
     locationId: number,
@@ -781,6 +782,15 @@ export class DatabaseStorage implements IStorage {
   async createMetricValue(data: InsertMetricValue): Promise<MetricValue> {
     const [value] = await db.insert(metricValues).values(data).returning();
     return value;
+  }
+
+  async updateMetricValue(id: number, data: { value: number }): Promise<MetricValue> {
+    const [updated] = await db
+      .update(metricValues)
+      .set({ value: data.value, recordedAt: new Date() })
+      .where(eq(metricValues.id, id))
+      .returning();
+    return updated;
   }
 
   async getMetricTrends(

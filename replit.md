@@ -6,7 +6,7 @@ Xpansion Console is a multi-tenant franchise management platform designed to emp
 ## Project Roadmap
 - **Phase A — Onboarding Wizard**: COMPLETE. 6-step client onboarding (profile, business, corporate structure, first location, KPIs, targets). Welcome email via Resend. mustChangePassword flow. Persistent progress.
 - **Phase B — Role-Based Experience**: COMPLETE. Client vs consultant sidebar + home pages. Client Home dashboard, Consultant Clients overview, My Business page, Client Settings page. Route guards. lastLoginAt tracking. Corporate structure step (umbrella/holding company + subsidiaries, or multiple locations for standalone businesses).
-- **Phase C — Data Entry & Metrics**: Clients can enter their numbers (manual data entry for KPIs). Score runs, scorecards, trend analysis come alive with real data.
+- **Phase C — Data Entry & Metrics**: COMPLETE. Enter Data page (`/enter-data`) with period navigation and bulk upsert. My Scorecard page (`/my-scorecard`) with auto-scorecard creation, score calculation, and score history. Client Home updated with "Enter your first numbers" checklist item, data-aware CTAs, and links to Enter Data + My Scorecard. Sidebar updated with both new nav items.
 - **Phase D — Operational Tools**: Actions, goals, weekly plans, playbooks, daily briefs — the day-to-day tools clients use to run their business.
 - **Phase E — Integrations**: Connect to third-party apps via API (QuickBooks, Xero, Square, Toast, Stripe, Google Sheets, Zapier, etc.). Per-tenant API key/token storage. Scheduled data sync. Auto-populate KPIs from external sources.
 - **Phase F — Intelligence & Automation**: Predictive risk scoring, automated weekly planning, coaching summaries, anomaly detection, executive narrative reports.
