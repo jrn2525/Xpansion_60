@@ -81,7 +81,7 @@ export function useEntityLookup(tenantIdOverride?: number) {
 
   function resolveTenant(id: number | null | undefined): string {
     if (id == null) return "—";
-    return tenantMap.get(id) || `Tenant #${id}`;
+    return tenantMap.get(id) || `Business #${id}`;
   }
 
   function resolveLocation(id: number | null | undefined): string {
