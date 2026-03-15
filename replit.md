@@ -3,6 +3,14 @@
 ## Overview
 Xpansion Console is a multi-tenant franchise management platform designed to empower franchise organizations with advanced tools for performance monitoring, strategic planning, and operational excellence. It offers robust features such as role-based access control, a comprehensive metrics engine with scorecards and trend analysis, CSV data import capabilities, and a sophisticated alert rules engine. The platform automates reporting, notifications, and workflow processes, providing an executive portfolio dashboard for high-level oversight, forecasting, and anomaly detection. Its core vision is to serve as a Growth Operating System, integrating weekly command center functionalities, action management, goal setting, benchmarking, playbooks, and executive digests. Ultimately, Xpansion Console aims to deliver Intelligence + Automation at Scale through predictive risk engines, autonomous weekly planning, playbook effectiveness analytics, and executive narrative reports, enabling franchises to achieve sustainable growth and operational efficiency.
 
+## Project Roadmap
+- **Phase A — Onboarding Wizard**: COMPLETE. 6-step client onboarding (profile, business, corporate structure, first location, KPIs, targets). Welcome email via Resend. mustChangePassword flow. Persistent progress.
+- **Phase B — Role-Based Experience**: COMPLETE. Client vs consultant sidebar + home pages. Client Home dashboard, Consultant Clients overview, My Business page, Client Settings page. Route guards. lastLoginAt tracking. Corporate structure step (umbrella/holding company + subsidiaries, or multiple locations for standalone businesses).
+- **Phase C — Data Entry & Metrics**: Clients can enter their numbers (manual data entry for KPIs). Score runs, scorecards, trend analysis come alive with real data.
+- **Phase D — Operational Tools**: Actions, goals, weekly plans, playbooks, daily briefs — the day-to-day tools clients use to run their business.
+- **Phase E — Integrations**: Connect to third-party apps via API (QuickBooks, Xero, Square, Toast, Stripe, Google Sheets, Zapier, etc.). Per-tenant API key/token storage. Scheduled data sync. Auto-populate KPIs from external sources.
+- **Phase F — Intelligence & Automation**: Predictive risk scoring, automated weekly planning, coaching summaries, anomaly detection, executive narrative reports.
+
 ## User Preferences
 I want to prioritize a clear and consistent architecture. Avoid introducing new patterns unless absolutely necessary. Focus on delivering high-quality, maintainable code. I prefer detailed explanations for complex logic. Do not make changes to files within the `server/replit_integrations/` folder.
 
