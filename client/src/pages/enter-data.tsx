@@ -27,73 +27,17 @@ import {
   ArrowUp,
   ArrowDown,
   ClipboardEdit,
+  Target,
 } from "lucide-react";
 import type { Location, MetricDefinition, MetricValue } from "@shared/schema";
+import { getPeriodDates, stepPeriod, getBandForValue, getTargetDisplay } from "@/lib/period-utils";
 
-function getPeriodDates(frequency: string, referenceDate: Date) {
-  const d = new Date(referenceDate);
-  if (frequency === "daily") {
-    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    end.setMilliseconds(-1);
-    return {
-      period: "day",
-      periodStart: start,
-      periodEnd: end,
-      label: start.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", year: "numeric" }),
-    };
-  }
-  if (frequency === "weekly") {
-    const dayOfWeek = d.getDay();
-    const monday = new Date(d);
-    monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
-    monday.setHours(0, 0, 0, 0);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
-    return {
-      period: "week",
-      periodStart: monday,
-      periodEnd: sunday,
-      label: `${monday.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${sunday.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
-    };
-  }
-  if (frequency === "biweekly") {
-    const startOfYear = new Date(d.getFullYear(), 0, 1);
-    const daysSinceStart = Math.floor((d.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
-    const biweekNum = Math.floor(daysSinceStart / 14);
-    const periodStart = new Date(startOfYear);
-    periodStart.setDate(startOfYear.getDate() + biweekNum * 14);
-    periodStart.setHours(0, 0, 0, 0);
-    const periodEnd = new Date(periodStart);
-    periodEnd.setDate(periodStart.getDate() + 13);
-    periodEnd.setHours(23, 59, 59, 999);
-    return {
-      period: "biweek",
-      periodStart,
-      periodEnd,
-      label: `${periodStart.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${periodEnd.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
-    };
-  }
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-  return {
-    period: "month",
-    periodStart: start,
-    periodEnd: end,
-    label: start.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-  };
-}
-
-function stepPeriod(frequency: string, date: Date, direction: number): Date {
-  const d = new Date(date);
-  if (frequency === "daily") { d.setDate(d.getDate() + direction); return d; }
-  if (frequency === "weekly") { d.setDate(d.getDate() + 7 * direction); return d; }
-  if (frequency === "biweekly") { d.setDate(d.getDate() + 14 * direction); return d; }
-  d.setMonth(d.getMonth() + direction);
-  return d;
-}
+const BAND_INPUT_COLORS: Record<string, string> = {
+  excellent: "border-green-500/50 bg-green-500/5",
+  good: "border-blue-500/50 bg-blue-500/5",
+  acceptable: "border-amber-500/50 bg-amber-500/5",
+  poor: "border-red-500/50 bg-red-500/5",
+};
 
 export default function EnterDataPage() {
   const { toast } = useToast();
@@ -108,7 +52,7 @@ export default function EnterDataPage() {
     queryKey: ["/api/v1/onboarding/progress"],
   });
 
-  const frequency = progressData?.savedData?.trackingFrequency || "weekly";
+  const frequency = progressData?.progress?.savedData?.trackingFrequency || progressData?.savedData?.trackingFrequency || "weekly";
 
   const periodInfo = useMemo(() => getPeriodDates(frequency, referenceDate), [frequency, referenceDate]);
 
@@ -120,6 +64,21 @@ export default function EnterDataPage() {
   const { data: metrics, isLoading: metricsLoading } = useQuery<MetricDefinition[]>({
     queryKey: ["/api/tenants", activeTenantId, "metrics"],
     enabled: !!activeTenantId,
+  });
+
+  const activeMetricIds = metrics?.filter(m => m.isActive !== false).map(m => m.id) || [];
+  const { data: allThresholds } = useQuery<Record<number, Array<{ band: string; minValue: number | null; maxValue: number | null }>>>({
+    queryKey: ["/api/tenants", activeTenantId, "thresholds-all", activeMetricIds.join(",")],
+    enabled: !!activeTenantId && activeMetricIds.length > 0,
+    queryFn: async () => {
+      const result: Record<number, Array<{ band: string; minValue: number | null; maxValue: number | null }>> = {};
+      await Promise.all(activeMetricIds.map(async (metricId) => {
+        const res = await fetch(`/api/tenants/${activeTenantId}/metrics/${metricId}/thresholds`, { credentials: "include" });
+        const data = await res.json();
+        result[metricId] = data.data || [];
+      }));
+      return result;
+    },
   });
 
   useEffect(() => {
@@ -302,27 +261,37 @@ export default function EnterDataPage() {
                 const existingVal = existingValues?.find(v => v.metricDefinitionId === metric.id);
                 const currentVal = entryValues[metric.id] || "";
                 const hasValue = currentVal !== "" && !isNaN(Number(currentVal));
+                const thresholds = allThresholds?.[metric.id] || [];
+                const targetHint = getTargetDisplay(thresholds, metric.direction || "higher_is_better");
+                const valueBand = hasValue ? getBandForValue(Number(currentVal), thresholds) : null;
+                const bandClass = valueBand ? BAND_INPUT_COLORS[valueBand] || "" : "";
 
                 return (
                   <div
                     key={metric.id}
                     className={`flex items-center gap-4 p-3 rounded-lg border transition-colors ${
-                      hasValue ? "border-primary/30 bg-primary/5" : "border-border"
+                      valueBand ? bandClass : hasValue ? "border-primary/30 bg-primary/5" : "border-border"
                     }`}
                     data-testid={`metric-entry-${metric.id}`}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{metric.name}</p>
-                      <div className="flex items-center gap-2 mt-0.5">
+                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-xs text-muted-foreground">{metric.unit}</span>
                         {metric.direction === "higher_is_better" ? (
                           <ArrowUp className="h-3 w-3 text-green-500" />
                         ) : (
                           <ArrowDown className="h-3 w-3 text-blue-500" />
                         )}
+                        {targetHint && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-0.5" data-testid={`target-hint-${metric.id}`}>
+                            <Target className="h-3 w-3" />
+                            {targetHint}
+                          </span>
+                        )}
                         {existingVal && (
                           <Badge variant="outline" className="text-xs px-1.5 py-0">
-                            Previously: {existingVal.value}
+                            Prev: {existingVal.value}
                           </Badge>
                         )}
                       </div>

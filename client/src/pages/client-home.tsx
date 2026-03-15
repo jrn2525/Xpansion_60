@@ -13,14 +13,15 @@ import {
   CheckCircle2,
   Circle,
   ArrowRight,
-  Building2,
   Calendar,
   Store,
-  ListChecks,
   TrendingUp,
   ClipboardEdit,
+  Trophy,
+  Clock,
 } from "lucide-react";
-import type { Location, MetricDefinition, MetricValue } from "@shared/schema";
+import type { Location, MetricDefinition, MetricValue, ScorecardTemplate } from "@shared/schema";
+import { getPeriodDates } from "@/lib/period-utils";
 
 interface ChecklistItem {
   id: string;
@@ -53,8 +54,41 @@ export default function ClientHomePage() {
     queryKey: ["/api/v1/onboarding/progress"],
   });
 
+  const { data: scorecards } = useQuery<ScorecardTemplate[]>({
+    queryKey: ["/api/tenants", activeTenantId, "scorecards"],
+    enabled: !!activeTenantId,
+  });
+
+  const activeScorecard = scorecards?.[0];
+  const { data: runs } = useQuery<any[]>({
+    queryKey: ["/api/tenants", activeTenantId, "scorecards", activeScorecard?.id, "runs"],
+    enabled: !!activeTenantId && !!activeScorecard?.id,
+  });
+
   const firstLocationId = locations?.[0]?.id;
-  const { data: metricValues } = useQuery<MetricValue[]>({
+  const frequency = progressData?.progress?.savedData?.trackingFrequency || progressData?.savedData?.trackingFrequency || "weekly";
+  const currentPeriod = getPeriodDates(frequency, new Date());
+
+  const { data: currentPeriodValues } = useQuery<MetricValue[]>({
+    queryKey: ["/api/tenants", activeTenantId, "metric-values", {
+      locationId: firstLocationId,
+      periodStart: currentPeriod.periodStart.toISOString(),
+      periodEnd: currentPeriod.periodEnd.toISOString(),
+    }],
+    enabled: !!activeTenantId && !!firstLocationId,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        locationId: String(firstLocationId),
+        periodStart: currentPeriod.periodStart.toISOString(),
+        periodEnd: currentPeriod.periodEnd.toISOString(),
+      });
+      const res = await fetch(`/api/tenants/${activeTenantId}/metric-values?${params}`, { credentials: "include" });
+      const data = await res.json();
+      return data.data || [];
+    },
+  });
+
+  const { data: allMetricValues } = useQuery<MetricValue[]>({
     queryKey: ["/api/tenants", activeTenantId, "metric-values", { locationId: firstLocationId }],
     enabled: !!activeTenantId && !!firstLocationId,
     queryFn: async () => {
@@ -65,13 +99,40 @@ export default function ClientHomePage() {
     },
   });
 
-  const hasEnteredData = (metricValues?.length || 0) > 0;
+  const hasEnteredData = (allMetricValues?.length || 0) > 0;
 
   const activeTenant = tenants?.find((t: any) => t.id === activeTenantId);
   const activeLocations = locations?.filter((l) => l.isActive) || [];
   const activeMetrics = metrics?.filter((m) => m.isActive) || [];
   const isLoading = locsLoading || metricsLoading;
-  const savedData = progressData?.savedData || {};
+  const savedData = progressData?.progress?.savedData || progressData?.savedData || {};
+
+  const latestRun = runs
+    ?.filter((r: any) => r.locationId === Number(firstLocationId))
+    .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0] || null;
+
+  const latestScore = latestRun ? Math.round(latestRun.totalScore) : null;
+  const latestBand = latestRun?.band || null;
+
+  const filledThisPeriod = currentPeriodValues?.length || 0;
+  const totalActiveMetrics = activeMetrics.length;
+
+  const lastUpdatedAt = allMetricValues?.length
+    ? allMetricValues.reduce((latest, v) => {
+        const t = new Date(v.recordedAt).getTime();
+        return t > latest ? t : latest;
+      }, 0)
+    : null;
+
+  const BAND_BADGE_COLORS: Record<string, string> = {
+    excellent: "text-green-700 dark:text-green-400 bg-green-500/10",
+    good: "text-blue-700 dark:text-blue-400 bg-blue-500/10",
+    acceptable: "text-amber-700 dark:text-amber-400 bg-amber-500/10",
+    poor: "text-red-700 dark:text-red-400 bg-red-500/10",
+  };
+  const BAND_LABELS: Record<string, string> = {
+    excellent: "Excellent", good: "Good", acceptable: "Needs Work", poor: "Critical",
+  };
 
   const checklist: ChecklistItem[] = [
     {
@@ -139,7 +200,7 @@ export default function ClientHomePage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="Locations"
           value={isLoading ? "—" : String(activeLocations.length)}
@@ -152,13 +213,52 @@ export default function ClientHomePage() {
           icon={BarChart3}
           testId="text-stat-kpis"
         />
-        <StatCard
-          label="Frequency"
-          value={savedData.trackingFrequency || "—"}
-          icon={Calendar}
-          testId="text-stat-frequency"
-          capitalize
-        />
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                <Trophy className="h-4.5 w-4.5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Latest Score</p>
+                {latestScore !== null ? (
+                  <div className="flex items-center gap-2">
+                    <p className="text-lg font-semibold" data-testid="text-stat-score">{latestScore}</p>
+                    <Badge className={`text-xs ${BAND_BADGE_COLORS[latestBand!] || ""}`} data-testid="badge-stat-band">
+                      {BAND_LABELS[latestBand!] || latestBand}
+                    </Badge>
+                  </div>
+                ) : (
+                  <p className="text-lg font-semibold text-muted-foreground" data-testid="text-stat-score">—</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                <Clock className="h-4.5 w-4.5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">This Period</p>
+                {totalActiveMetrics > 0 ? (
+                  <div>
+                    <p className="text-lg font-semibold" data-testid="text-stat-completeness">
+                      {filledThisPeriod}/{totalActiveMetrics}
+                    </p>
+                    <p className="text-xs text-muted-foreground" data-testid="text-stat-freshness">
+                      {lastUpdatedAt ? `Updated ${getRelativeTime(lastUpdatedAt)}` : "No data yet"}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-lg font-semibold text-muted-foreground" data-testid="text-stat-completeness">—</p>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {!allDone && (
@@ -354,4 +454,17 @@ function getGreeting() {
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
+}
+
+function getRelativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days}d ago`;
+  return new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

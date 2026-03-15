@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -27,7 +27,9 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { Link } from "wouter";
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, ReferenceLine } from "recharts";
 import type { Location, MetricDefinition, ScorecardTemplate } from "@shared/schema";
+import { getPeriodDates, stepPeriod } from "@/lib/period-utils";
 
 const BAND_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   excellent: { bg: "bg-green-500/10", text: "text-green-700 dark:text-green-400", border: "border-green-500/30" },
@@ -43,16 +45,12 @@ const BAND_LABELS: Record<string, string> = {
   poor: "Critical",
 };
 
-function getMonthPeriod(referenceDate: Date) {
-  const start = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
-  const end = new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0, 23, 59, 59, 999);
-  return {
-    period: "month",
-    periodStart: start,
-    periodEnd: end,
-    label: start.toLocaleDateString("en-US", { month: "long", year: "numeric" }),
-  };
-}
+const BAND_CHART_COLORS: Record<string, string> = {
+  excellent: "#22c55e",
+  good: "#3b82f6",
+  acceptable: "#f59e0b",
+  poor: "#ef4444",
+};
 
 export default function MyScorecardPage() {
   const { toast } = useToast();
@@ -61,7 +59,13 @@ export default function MyScorecardPage() {
   const [selectedLocationId, setSelectedLocationId] = useState<string>("");
   const [referenceDate, setReferenceDate] = useState(new Date());
 
-  const periodInfo = getMonthPeriod(referenceDate);
+  const { data: progressData } = useQuery<any>({
+    queryKey: ["/api/v1/onboarding/progress"],
+  });
+
+  const frequency = progressData?.progress?.savedData?.trackingFrequency || progressData?.savedData?.trackingFrequency || "weekly";
+
+  const periodInfo = useMemo(() => getPeriodDates(frequency, referenceDate), [frequency, referenceDate]);
 
   const { data: locations, isLoading: locsLoading } = useQuery<Location[]>({
     queryKey: ["/api/tenants", activeTenantId, "locations"],
@@ -91,9 +95,33 @@ export default function MyScorecardPage() {
     enabled: !!activeTenantId && !!activeScorecard?.id,
   });
 
-  const latestRun = runs?.find(
-    (r: any) => r.locationId === Number(selectedLocationId)
-  );
+  const locationRuns = useMemo(() => {
+    if (!runs) return [];
+    return runs
+      .filter((r: any) => r.locationId === Number(selectedLocationId))
+      .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }, [runs, selectedLocationId]);
+
+  const periodRun = useMemo(() => {
+    if (!locationRuns.length) return null;
+    const pStart = periodInfo.periodStart.toISOString();
+    const match = locationRuns.find((r: any) => {
+      const runStart = new Date(r.periodStart).toISOString();
+      return runStart === pStart;
+    });
+    return match || null;
+  }, [locationRuns, periodInfo]);
+
+  const chartData = useMemo(() => {
+    return locationRuns
+      .slice(0, 12)
+      .reverse()
+      .map((run: any) => ({
+        label: new Date(run.periodStart).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        score: Math.round(run.totalScore),
+        band: run.band,
+      }));
+  }, [locationRuns]);
 
   const createScorecardMutation = useMutation({
     mutationFn: async () => {
@@ -201,10 +229,10 @@ export default function MyScorecardPage() {
     );
   }
 
-  const band = latestRun?.band || null;
-  const totalScore = latestRun?.totalScore ?? null;
+  const band = periodRun?.band || null;
+  const totalScore = periodRun?.totalScore ?? null;
   const bandStyle = band ? BAND_COLORS[band] : null;
-  const details = latestRun?.details || [];
+  const details = periodRun?.details || [];
 
   return (
     <div className="p-6 space-y-6 max-w-2xl mx-auto" data-testid="page-my-scorecard">
@@ -236,8 +264,8 @@ export default function MyScorecardPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setReferenceDate(prev => { const d = new Date(prev); d.setMonth(d.getMonth() - 1); return d; })}
-              data-testid="button-prev-month"
+              onClick={() => setReferenceDate(stepPeriod(frequency, referenceDate, -1))}
+              data-testid="button-prev-period"
             >
               <ChevronLeft className="h-5 w-5" />
             </Button>
@@ -248,8 +276,8 @@ export default function MyScorecardPage() {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setReferenceDate(prev => { const d = new Date(prev); d.setMonth(d.getMonth() + 1); return d; })}
-              data-testid="button-next-month"
+              onClick={() => setReferenceDate(stepPeriod(frequency, referenceDate, 1))}
+              data-testid="button-next-period"
             >
               <ChevronRight className="h-5 w-5" />
             </Button>
@@ -331,31 +359,94 @@ export default function MyScorecardPage() {
         </CardContent>
       </Card>
 
-      {runs && runs.filter((r: any) => r.locationId === Number(selectedLocationId)).length > 1 && (
+      {chartData.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Score Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-48" data-testid="chart-score-trend">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: "8px", border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
+                    formatter={(value: number, _name: string, props: any) => [
+                      `${value} — ${BAND_LABELS[props.payload.band] || props.payload.band}`,
+                      "Score",
+                    ]}
+                  />
+                  <ReferenceLine y={90} stroke="#22c55e" strokeDasharray="3 3" strokeOpacity={0.4} />
+                  <ReferenceLine y={70} stroke="#3b82f6" strokeDasharray="3 3" strokeOpacity={0.4} />
+                  <ReferenceLine y={50} stroke="#f59e0b" strokeDasharray="3 3" strokeOpacity={0.4} />
+                  <Area
+                    type="monotone"
+                    dataKey="score"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    fill="url(#scoreGradient)"
+                    dot={(props: any) => {
+                      const color = BAND_CHART_COLORS[props.payload.band] || "hsl(var(--primary))";
+                      return (
+                        <circle
+                          key={props.index}
+                          cx={props.cx}
+                          cy={props.cy}
+                          r={4}
+                          fill={color}
+                          stroke="hsl(var(--card))"
+                          strokeWidth={2}
+                        />
+                      );
+                    }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex items-center justify-center gap-4 mt-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Excellent (90+)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block" /> Good (70+)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> Needs Work (50+)</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Critical</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {locationRuns.length > 1 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Score History</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {runs
-                .filter((r: any) => r.locationId === Number(selectedLocationId))
-                .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+              {locationRuns
                 .slice(0, 10)
                 .map((run: any, i: number) => {
                   const runBand = run.band || "poor";
                   const runStyle = BAND_COLORS[runBand];
+                  const isCurrentPeriod = new Date(run.periodStart).toISOString() === periodInfo.periodStart.toISOString();
                   return (
                     <div
                       key={run.id || i}
-                      className="flex items-center justify-between p-2 rounded-lg border"
+                      className={`flex items-center justify-between p-2 rounded-lg border ${isCurrentPeriod ? "border-primary/40 bg-primary/5" : ""}`}
                       data-testid={`score-history-${i}`}
                     >
                       <div className="text-sm">
                         <span className="font-medium">{run.period}</span>
                         <span className="text-muted-foreground ml-2 text-xs">
-                          {new Date(run.createdAt).toLocaleDateString()}
+                          {new Date(run.periodStart).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                         </span>
+                        {isCurrentPeriod && (
+                          <Badge variant="outline" className="ml-2 text-xs px-1.5 py-0">Current</Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={`font-semibold text-sm ${runStyle?.text}`}>{Math.round(run.totalScore)}</span>
