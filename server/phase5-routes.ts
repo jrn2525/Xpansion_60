@@ -600,8 +600,46 @@ phase5Router.get("/tenants/:tenantId/goals", isAuthenticated, async (req: any, r
     if (req.query.metricDefinitionId) filters.metricDefinitionId = parseIntOrThrow(req.query.metricDefinitionId as string, "metricDefinitionId");
     if (req.query.status) filters.status = req.query.status;
 
-    const data = await storage.getGoals(tenantId, filters);
-    res.json(ok(data));
+    const allGoals = await storage.getGoals(tenantId);
+
+    const enriched = await Promise.all(allGoals.map(async (goal) => {
+      if (goal.metricDefinitionId && goal.locationId) {
+        const values = await storage.getMetricTrends(
+          goal.metricDefinitionId,
+          goal.locationId,
+          goal.period,
+          goal.startDate,
+          goal.endDate,
+        );
+        if (values.length > 0) {
+          const latestValue = values[values.length - 1].value;
+          const variance = goal.targetValue !== 0
+            ? ((latestValue - goal.targetValue) / goal.targetValue) * 100
+            : null;
+          const newStatus = variance === null ? goal.status :
+            variance >= -5 ? "on_track" :
+            variance >= -15 ? "at_risk" : "off_track";
+          if (latestValue !== goal.currentValue || newStatus !== goal.status) {
+            const newConsecutiveOffTrack = newStatus === "off_track" ? (goal.consecutiveOffTrack || 0) + 1 : 0;
+            await storage.updateGoal(goal.id, {
+              currentValue: latestValue,
+              status: newStatus,
+              consecutiveOffTrack: newConsecutiveOffTrack,
+            } as any);
+            return { ...goal, currentValue: latestValue, status: newStatus, consecutiveOffTrack: newConsecutiveOffTrack };
+          }
+          return { ...goal, currentValue: latestValue };
+        }
+      }
+      return goal;
+    }));
+
+    let result = enriched;
+    if (filters.locationId) result = result.filter(g => g.locationId === filters.locationId);
+    if (filters.metricDefinitionId) result = result.filter(g => g.metricDefinitionId === filters.metricDefinitionId);
+    if (filters.status) result = result.filter(g => g.status === filters.status);
+
+    res.json(ok(result));
   } catch (error: any) {
       if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
     res.status(500).json(err("INTERNAL_ERROR", error.message));

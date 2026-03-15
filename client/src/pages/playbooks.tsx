@@ -145,10 +145,18 @@ function ConsultantPlaybooksView() {
   const [editSteps, setEditSteps] = useState<PlaybookStep[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [activeTab, setActiveTab] = useState("playbooks");
+  const getLocalDateStr = (daysFromNow: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + daysFromNow);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
   const [applyOverrides, setApplyOverrides] = useState({
     ownerUserId: "",
     priority: "medium",
-    dueDate: "",
+    dueDate: getLocalDateStr(14),
   });
 
   const { data: playbooksData, isLoading } = useQuery<{ ok: boolean; data: PlaybookWithSteps[] }>({
@@ -256,7 +264,7 @@ function ConsultantPlaybooksView() {
       queryClient.invalidateQueries({ queryKey: ["/api/tenants", activeTenantId, "playbooks"] });
       setShowApply(null);
       setSelectedLocationIds(new Set());
-      setApplyOverrides({ ownerUserId: "", priority: "medium", dueDate: "" });
+      setApplyOverrides({ ownerUserId: "", priority: "medium", dueDate: getLocalDateStr(14) });
       toast({ title: "Playbook applied", description: "Actions created for selected locations." });
     },
   });
@@ -570,7 +578,7 @@ function ConsultantPlaybooksView() {
                         onClick={() => {
                           setShowApply(pb.id);
                           setSelectedLocationIds(new Set());
-                          setApplyOverrides({ ownerUserId: "", priority: "medium", dueDate: "" });
+                          setApplyOverrides({ ownerUserId: "", priority: "medium", dueDate: getLocalDateStr(14) });
                         }}
                         data-testid={`button-apply-playbook-${pb.id}`}
                       >
@@ -920,12 +928,30 @@ function ConsultantPlaybooksView() {
                   <Calendar className="h-3 w-3" />
                   Due Date
                 </Label>
-                <Input
-                  type="date"
-                  value={applyOverrides.dueDate}
-                  onChange={e => setApplyOverrides(p => ({ ...p, dueDate: e.target.value }))}
-                  data-testid="input-apply-due-date"
-                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Input
+                    type="date"
+                    value={applyOverrides.dueDate}
+                    onChange={e => setApplyOverrides(p => ({ ...p, dueDate: e.target.value }))}
+                    className="flex-1"
+                    data-testid="input-apply-due-date"
+                  />
+                  {[
+                    { label: "1 Week", days: 7 },
+                    { label: "2 Weeks", days: 14 },
+                    { label: "1 Month", days: 30 },
+                  ].map(preset => (
+                    <Button
+                      key={preset.label}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setApplyOverrides(p => ({ ...p, dueDate: getLocalDateStr(preset.days) }))}
+                      data-testid={`button-preset-${preset.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {preset.label}
+                    </Button>
+                  ))}
+                </div>
               </div>
             </TabsContent>
           </Tabs>

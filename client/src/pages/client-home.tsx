@@ -370,7 +370,7 @@ export default function ClientHomePage() {
         </Card>
       )}
 
-      {allDone && (openActions.length > 0 || activeGoals.length > 0 || activeAssignments.length > 0) && (
+      {(openActions.length > 0 || activeGoals.length > 0 || activeAssignments.length > 0) && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {openActions.length > 0 && (
             <Card data-testid="card-quick-actions">

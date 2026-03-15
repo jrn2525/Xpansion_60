@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -27,8 +27,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, Plus, CheckCircle, XCircle, ArrowRight, Sparkles, User, Clock } from "lucide-react";
+import { Calendar, Plus, CheckCircle, XCircle, ArrowRight, Sparkles, User, Clock, Circle, ListChecks } from "lucide-react";
 import { useTenantStore } from "@/lib/tenant-store";
+import { useAuth } from "@/hooks/use-auth";
 import { severityColors, statusColors } from "@/lib/semantic-colors";
 
 const planStatusStyles: Record<string, string> = {
@@ -47,7 +48,9 @@ const priorityStyles: Record<string, string> = {
 
 export default function WeeklyPlansPage() {
   const { activeTenantId } = useTenantStore();
+  const { user } = useAuth();
   const { toast } = useToast();
+  const isClient = user?.isSuperAdmin !== "true";
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
 
@@ -154,6 +157,99 @@ export default function WeeklyPlansPage() {
 
   if (!activeTenantId) {
     return <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">Select a tenant to manage weekly plans</div>;
+  }
+
+  if (isClient) {
+    const publishedPlans = plans.filter((p: any) => p.status === "approved" || p.status === "pushed");
+    const activePlan = publishedPlans.length > 0
+      ? publishedPlans.sort((a: any, b: any) => new Date(b.generatedAt || 0).getTime() - new Date(a.generatedAt || 0).getTime())[0]
+      : null;
+
+    return (
+      <div className="p-6 space-y-6 max-w-4xl">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">This Week's Focus</h1>
+          <p className="text-muted-foreground text-sm mt-1">Your priorities for the week, prepared by your consultant.</p>
+        </div>
+
+        {plansLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+          </div>
+        ) : !activePlan ? (
+          <Card>
+            <CardContent className="py-12 text-center">
+              <Calendar className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+              <h3 className="font-medium text-lg">No active plan this week</h3>
+              <p className="text-muted-foreground text-sm mt-1 max-w-sm mx-auto" data-testid="text-no-active-plan">
+                Your consultant hasn't published a weekly plan yet. Check back soon, or review your actions in the meantime.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <ClientPlanView plan={activePlan} tenantId={activeTenantId} />
+        )}
+
+        {plans.filter((p: any) => p.id !== activePlan?.id && (p.status === "approved" || p.status === "pushed")).length > 0 && (
+          <div>
+            <h2 className="text-sm font-medium text-muted-foreground mb-3">Previous Weeks</h2>
+            <div className="grid gap-2">
+              {plans
+                .filter((p: any) => p.id !== activePlan?.id && (p.status === "approved" || p.status === "pushed"))
+                .slice(0, 5)
+                .map((plan: any) => (
+                  <Card
+                    key={plan.id}
+                    className="cursor-pointer hover:bg-muted/50 transition-colors"
+                    onClick={() => openPlanDetail(plan)}
+                    data-testid={`card-prev-plan-${plan.id}`}
+                  >
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">{plan.weekKey}</span>
+                      </div>
+                      <Badge className={planStatusStyles[plan.status] || ""}>{plan.status}</Badge>
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+          </div>
+        )}
+
+        <Dialog open={!!selectedPlanData} onOpenChange={(open) => { if (!open) { setSelectedPlanData(null); setSelectedPlanId(null); } }}>
+          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+            {selectedPlanData && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Week: {selectedPlanData.plan.weekKey}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2 mt-2">
+                  {selectedPlanData.items.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No items in this plan</p>
+                  ) : (
+                    selectedPlanData.items
+                      .sort((a: any, b: any) => (b.priorityScore || 0) - (a.priorityScore || 0))
+                      .map((item: any) => (
+                        <div key={item.id} className="flex items-start gap-3 p-3 rounded-lg border" data-testid={`client-item-${item.id}`}>
+                          <div className={`mt-0.5 ${item.actionId ? "text-primary" : "text-muted-foreground/40"}`}>
+                            {item.actionId ? <CheckCircle className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium">{item.title}</p>
+                            {item.description && <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>}
+                          </div>
+                          <Badge className={priorityStyles[item.priority] || ""} variant="outline">{item.priority}</Badge>
+                        </div>
+                      ))
+                  )}
+                </div>
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
   }
 
   return (
@@ -377,6 +473,84 @@ export default function WeeklyPlansPage() {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function ClientPlanView({ plan, tenantId }: { plan: any; tenantId: number }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/tenants/${tenantId}/weekly-plans/${plan.id}/items`, { credentials: "include" })
+      .then(res => res.json())
+      .then(data => {
+        setItems(data?.data || data || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [tenantId, plan.id]);
+
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}
+      </div>
+    );
+  }
+
+  const sorted = [...items].sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
+  const pushed = sorted.filter(i => i.actionId);
+  const pending = sorted.filter(i => !i.actionId);
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-primary" />
+              Week of {plan.weekKey}
+            </CardTitle>
+            <Badge className={planStatusStyles[plan.status] || ""}>{plan.status}</Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">{items.length} focus items</p>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {items.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4" data-testid="text-no-items">No items in this week's plan</p>
+          ) : (
+            sorted.map((item: any) => (
+              <div
+                key={item.id}
+                className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${item.actionId ? "bg-muted/30" : ""}`}
+                data-testid={`focus-item-${item.id}`}
+              >
+                <div className={`mt-0.5 ${item.actionId ? "text-primary" : "text-muted-foreground/40"}`}>
+                  {item.actionId ? <CheckCircle className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${item.actionId ? "line-through text-muted-foreground" : ""}`}>{item.title}</p>
+                  {item.description && <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>}
+                  {item.suggestedDueDate && (
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Due {new Date(item.suggestedDueDate).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+                <Badge className={priorityStyles[item.priority] || ""} variant="outline">{item.priority}</Badge>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      {pushed.length > 0 && pending.length > 0 && (
+        <p className="text-xs text-muted-foreground text-center">
+          {pushed.length} of {items.length} items have been converted to actions
+        </p>
+      )}
     </div>
   );
 }
