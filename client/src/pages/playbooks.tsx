@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import { useTenantStore } from "@/lib/tenant-store";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +45,9 @@ import {
   Lightbulb,
   Loader2,
   RefreshCw,
+  CheckCircle2,
+  Circle,
+  ChevronRight,
 } from "lucide-react";
 import {
   Table,
@@ -55,6 +59,7 @@ import {
 } from "@/components/ui/table";
 import type { Location } from "@shared/schema";
 import { severityColors } from "@/lib/semantic-colors";
+import { Progress } from "@/components/ui/progress";
 
 interface PlaybookStep {
   title: string;
@@ -120,6 +125,13 @@ interface PlaybookRecommendation {
 }
 
 export default function PlaybooksPage() {
+  const { user } = useAuth();
+  const isClient = user?.isSuperAdmin !== "true";
+  if (isClient) return <ClientPlaybooksView />;
+  return <ConsultantPlaybooksView />;
+}
+
+function ConsultantPlaybooksView() {
   const { activeTenantId } = useTenantStore();
   const { toast } = useToast();
   const [showCreate, setShowCreate] = useState(false);
@@ -969,6 +981,225 @@ export default function PlaybooksPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+interface AssignmentWithPlaybook {
+  id: number;
+  playbookId: number;
+  tenantId: number;
+  locationId: number;
+  appliedByUserId: string;
+  status: string;
+  completedSteps: number[];
+  completedAt: string | null;
+  createdAt: string | null;
+  playbook: {
+    id: number;
+    name: string;
+    description: string | null;
+    category: string | null;
+    steps: Array<{ id: number; stepOrder: number; title: string; description: string | null }>;
+  } | null;
+}
+
+function ClientPlaybooksView() {
+  const { activeTenantId } = useTenantStore();
+  const { toast } = useToast();
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  const { data: assignmentsData, isLoading } = useQuery<{ ok: boolean; data: AssignmentWithPlaybook[] }>({
+    queryKey: ["/api/tenants", activeTenantId, "playbook-assignments"],
+    enabled: !!activeTenantId,
+  });
+
+  const { data: locsData } = useQuery<Location[]>({
+    queryKey: ["/api/tenants", activeTenantId, "locations"],
+    enabled: !!activeTenantId,
+  });
+
+  const toggleStepMutation = useMutation({
+    mutationFn: ({ applicationId, stepOrder, completed }: { applicationId: number; stepOrder: number; completed: boolean }) =>
+      apiRequest("PATCH", `/api/tenants/${activeTenantId}/playbook-assignments/${applicationId}/steps`, { stepOrder, completed }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants", activeTenantId, "playbook-assignments"] });
+    },
+    onError: (error: any) => {
+      toast({ title: "Failed to update step", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const assignments = assignmentsData?.data || [];
+  const locations = locsData || [];
+  const active = assignments.filter(a => a.status !== "completed");
+  const completed = assignments.filter(a => a.status === "completed");
+
+  if (!activeTenantId) {
+    return (
+      <div className="p-6">
+        <h1 className="text-2xl font-bold" data-testid="text-playbooks-title">My Playbooks</h1>
+        <p className="text-muted-foreground mt-1">Select a tenant to view your playbooks.</p>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-4">
+        <Skeleton className="h-8 w-48" />
+        {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32" />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6 max-w-3xl" data-testid="page-client-playbooks">
+      <div>
+        <h1 className="text-2xl font-bold" data-testid="text-playbooks-title">My Playbooks</h1>
+        <p className="text-muted-foreground text-sm">Step-by-step guides assigned to help improve your business</p>
+      </div>
+
+      {assignments.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <BookOpen className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground" data-testid="text-no-playbooks">
+              No playbooks assigned yet. Your consultant will assign playbooks when there's a specific area to work on.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {active.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Active</h2>
+              {active.map(assignment => {
+                const pb = assignment.playbook;
+                if (!pb) return null;
+                const totalSteps = pb.steps.length;
+                const doneCount = (assignment.completedSteps || []).length;
+                const pct = totalSteps > 0 ? Math.round((doneCount / totalSteps) * 100) : 0;
+                const isExpanded = expandedId === assignment.id;
+                const loc = locations.find(l => l.id === assignment.locationId);
+
+                return (
+                  <Card key={assignment.id} data-testid={`playbook-assignment-${assignment.id}`}>
+                    <CardContent className="p-4">
+                      <button
+                        className="w-full text-left"
+                        onClick={() => setExpandedId(isExpanded ? null : assignment.id)}
+                        data-testid={`button-expand-playbook-${assignment.id}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <BookOpen className="h-4 w-4 text-primary shrink-0" />
+                              <span className="font-semibold truncate">{pb.name}</span>
+                              {pb.category && (
+                                <Badge variant="outline" className="text-xs shrink-0">{pb.category}</Badge>
+                              )}
+                            </div>
+                            {loc && (
+                              <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />
+                                {loc.name}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <div className="text-right">
+                              <span className="text-sm font-medium">{doneCount}/{totalSteps}</span>
+                              <span className="text-xs text-muted-foreground ml-1">steps</span>
+                            </div>
+                            <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                          </div>
+                        </div>
+                        <Progress value={pct} className="mt-3 h-2" />
+                      </button>
+
+                      {isExpanded && (
+                        <div className="mt-4 space-y-2 border-t pt-4">
+                          {pb.description && (
+                            <p className="text-sm text-muted-foreground mb-3">{pb.description}</p>
+                          )}
+                          {pb.steps.map((step) => {
+                            const isDone = (assignment.completedSteps || []).includes(step.stepOrder);
+                            return (
+                              <div
+                                key={step.id}
+                                className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${isDone ? "bg-muted/50 border-muted" : "hover:bg-muted/30"}`}
+                                data-testid={`playbook-step-${assignment.id}-${step.stepOrder}`}
+                              >
+                                <button
+                                  className="mt-0.5 shrink-0"
+                                  onClick={() => toggleStepMutation.mutate({
+                                    applicationId: assignment.id,
+                                    stepOrder: step.stepOrder,
+                                    completed: !isDone,
+                                  })}
+                                  disabled={toggleStepMutation.isPending}
+                                  data-testid={`button-toggle-step-${assignment.id}-${step.stepOrder}`}
+                                >
+                                  {isDone ? (
+                                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                                  ) : (
+                                    <Circle className="h-5 w-5 text-muted-foreground" />
+                                  )}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
+                                    {step.title}
+                                  </p>
+                                  {step.description && (
+                                    <p className="text-xs text-muted-foreground mt-1">{step.description}</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {completed.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Completed</h2>
+              {completed.map(assignment => {
+                const pb = assignment.playbook;
+                if (!pb) return null;
+                const loc = locations.find(l => l.id === assignment.locationId);
+                return (
+                  <Card key={assignment.id} className="opacity-70" data-testid={`playbook-completed-${assignment.id}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          <span className="font-medium">{pb.name}</span>
+                          {loc && <span className="text-xs text-muted-foreground">· {loc.name}</span>}
+                        </div>
+                        <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30">
+                          Completed
+                        </Badge>
+                      </div>
+                      {assignment.completedAt && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Completed on {new Date(assignment.completedAt).toLocaleDateString()}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

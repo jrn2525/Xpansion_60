@@ -1045,6 +1045,63 @@ phase5Router.post("/tenants/:tenantId/playbooks/:playbookId/apply", isAuthentica
   }
 });
 
+phase5Router.get("/tenants/:tenantId/playbook-assignments", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const applications = await storage.getPlaybookApplications(tenantId);
+    const playbookIds = [...new Set(applications.map(a => a.playbookId))];
+    const playbooksWithSteps = await Promise.all(
+      playbookIds.map(async (pbId) => {
+        const pb = await storage.getPlaybook(pbId);
+        if (!pb) return null;
+        const steps = await storage.getPlaybookSteps(pbId);
+        return { ...pb, steps: steps.sort((a, b) => a.stepOrder - b.stepOrder) };
+      })
+    );
+    const pbMap = new Map(playbooksWithSteps.filter(Boolean).map(pb => [pb!.id, pb]));
+    const enriched = applications.map(app => ({
+      ...app,
+      playbook: pbMap.get(app.playbookId) || null,
+    }));
+    res.json(ok(enriched));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
+phase5Router.patch("/tenants/:tenantId/playbook-assignments/:applicationId/steps", isAuthenticated, async (req: any, res) => {
+  try {
+    const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+    const applicationId = parseIntOrThrow(req.params.applicationId, "applicationId");
+    const { stepOrder, completed } = req.body;
+    if (typeof stepOrder !== "number" || typeof completed !== "boolean") {
+      return res.status(400).json(err("VALIDATION_ERROR", "stepOrder (number) and completed (boolean) required"));
+    }
+    const app = await storage.getPlaybookApplication(applicationId);
+    if (!app || app.tenantId !== tenantId) return res.status(404).json(err("NOT_FOUND", "Application not found"));
+
+    let completedSteps = app.completedSteps || [];
+    if (completed && !completedSteps.includes(stepOrder)) {
+      completedSteps = [...completedSteps, stepOrder];
+    } else if (!completed) {
+      completedSteps = completedSteps.filter(s => s !== stepOrder);
+    }
+
+    const pb = await storage.getPlaybook(app.playbookId);
+    const totalSteps = pb ? (await storage.getPlaybookSteps(pb.id)).length : 0;
+    const allDone = totalSteps > 0 && completedSteps.length >= totalSteps;
+
+    const updated = await storage.updatePlaybookApplication(applicationId, {
+      completedSteps,
+      status: allDone ? "completed" : "applied",
+      completedAt: allDone ? new Date() : null,
+    });
+    res.json(ok(updated));
+  } catch (error: any) {
+    res.status(500).json(err("INTERNAL_ERROR", error.message));
+  }
+});
+
 // ── Tenant Users ──
 
 // ── Digests ──

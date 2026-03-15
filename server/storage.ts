@@ -333,7 +333,9 @@ export interface IStorage {
   createPlaybookStep(data: InsertPlaybookStep): Promise<PlaybookStep>;
   deletePlaybookSteps(playbookId: number): Promise<boolean>;
   getPlaybookApplications(tenantId: number): Promise<PlaybookApplication[]>;
+  getPlaybookApplication(id: number): Promise<PlaybookApplication | undefined>;
   createPlaybookApplication(data: InsertPlaybookApplication): Promise<PlaybookApplication>;
+  updatePlaybookApplication(id: number, data: Partial<PlaybookApplication>): Promise<PlaybookApplication>;
 
   getDigests(tenantId: number): Promise<Digest[]>;
   createDigest(data: InsertDigest): Promise<Digest>;
@@ -1189,8 +1191,18 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(playbookApplications).where(eq(playbookApplications.tenantId, tenantId)).orderBy(desc(playbookApplications.createdAt));
   }
 
+  async getPlaybookApplication(id: number): Promise<PlaybookApplication | undefined> {
+    const [app] = await db.select().from(playbookApplications).where(eq(playbookApplications.id, id));
+    return app;
+  }
+
   async createPlaybookApplication(data: InsertPlaybookApplication): Promise<PlaybookApplication> {
     const [app] = await db.insert(playbookApplications).values(data).returning();
+    return app;
+  }
+
+  async updatePlaybookApplication(id: number, data: Partial<PlaybookApplication>): Promise<PlaybookApplication> {
+    const [app] = await db.update(playbookApplications).set(data).where(eq(playbookApplications.id, id)).returning();
     return app;
   }
 

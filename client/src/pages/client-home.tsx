@@ -19,8 +19,13 @@ import {
   ClipboardEdit,
   Trophy,
   Clock,
+  ListChecks,
+  BookOpen,
+  AlertCircle,
+  Newspaper,
 } from "lucide-react";
-import type { Location, MetricDefinition, MetricValue, ScorecardTemplate } from "@shared/schema";
+import { Progress } from "@/components/ui/progress";
+import type { Location, MetricDefinition, MetricValue, ScorecardTemplate, Action, Goal } from "@shared/schema";
 import { getPeriodDates } from "@/lib/period-utils";
 
 interface ChecklistItem {
@@ -100,6 +105,38 @@ export default function ClientHomePage() {
   });
 
   const hasEnteredData = (allMetricValues?.length || 0) > 0;
+
+  const { data: actionsData } = useQuery<{ ok: boolean; data: Action[] }>({
+    queryKey: ["/api/tenants", activeTenantId, "actions"],
+    enabled: !!activeTenantId,
+  });
+
+  const { data: goalsData } = useQuery<{ ok: boolean; data: Goal[] }>({
+    queryKey: ["/api/tenants", activeTenantId, "goals"],
+    enabled: !!activeTenantId,
+  });
+
+  const { data: assignmentsData } = useQuery<{ ok: boolean; data: any[] }>({
+    queryKey: ["/api/tenants", activeTenantId, "playbook-assignments"],
+    enabled: !!activeTenantId,
+  });
+
+  const allActions = actionsData?.data || [];
+  const openActions = allActions.filter(a => a.status !== "done");
+  const overdueActions = openActions.filter(a => a.dueDate && new Date(a.dueDate) < new Date());
+  const upcomingActions = openActions
+    .sort((a, b) => {
+      if (!a.dueDate) return 1;
+      if (!b.dueDate) return -1;
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    })
+    .slice(0, 3);
+
+  const allGoals = goalsData?.data || [];
+  const activeGoals = allGoals.filter(g => g.status !== "completed");
+
+  const assignments = assignmentsData?.data || [];
+  const activeAssignments = assignments.filter((a: any) => a.status !== "completed");
 
   const activeTenant = tenants?.find((t: any) => t.id === activeTenantId);
   const activeLocations = locations?.filter((l) => l.isActive) || [];
@@ -331,6 +368,110 @@ export default function ClientHomePage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {allDone && (openActions.length > 0 || activeGoals.length > 0 || activeAssignments.length > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {openActions.length > 0 && (
+            <Card data-testid="card-quick-actions">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ListChecks className="h-4 w-4 text-primary" />
+                  Actions
+                </CardTitle>
+                <Link href="/actions">
+                  <Button variant="ghost" size="sm" data-testid="button-view-all-actions">
+                    View All <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {overdueActions.length > 0 && (
+                  <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 mb-2" data-testid="text-overdue-count">
+                    <AlertCircle className="h-4 w-4" />
+                    {overdueActions.length} overdue
+                  </div>
+                )}
+                {upcomingActions.map(action => (
+                  <div key={action.id} className="flex items-center gap-2 py-1.5" data-testid={`action-home-${action.id}`}>
+                    <Circle className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                    <span className="text-sm truncate flex-1">{action.title}</span>
+                    {action.dueDate && (
+                      <span className={`text-xs shrink-0 ${new Date(action.dueDate) < new Date() ? "text-red-500" : "text-muted-foreground"}`}>
+                        {new Date(action.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeGoals.length > 0 && (
+            <Card data-testid="card-goals-summary">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Target className="h-4 w-4 text-primary" />
+                  Goals
+                </CardTitle>
+                <Link href="/goals">
+                  <Button variant="ghost" size="sm" data-testid="button-view-all-goals">
+                    View All <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {activeGoals.slice(0, 3).map(goal => {
+                  const statusColor = goal.status === "on_track" ? "text-green-600 dark:text-green-400"
+                    : goal.status === "at_risk" ? "text-amber-600 dark:text-amber-400"
+                    : "text-red-600 dark:text-red-400";
+                  const statusLabel = goal.status === "on_track" ? "On Track"
+                    : goal.status === "at_risk" ? "At Risk" : "Off Track";
+                  return (
+                    <div key={goal.id} className="flex items-center justify-between gap-2 py-1.5" data-testid={`goal-home-${goal.id}`}>
+                      <span className="text-sm truncate flex-1">{goal.title}</span>
+                      <Badge variant="outline" className={`text-xs shrink-0 ${statusColor}`}>{statusLabel}</Badge>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeAssignments.length > 0 && (
+            <Card data-testid="card-playbook-progress">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  Playbooks
+                </CardTitle>
+                <Link href="/playbooks">
+                  <Button variant="ghost" size="sm" data-testid="button-view-all-playbooks">
+                    View All <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </Link>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {activeAssignments.slice(0, 3).map((assignment: any) => {
+                  const pb = assignment.playbook;
+                  if (!pb) return null;
+                  const totalSteps = pb.steps?.length || 0;
+                  const doneCount = (assignment.completedSteps || []).length;
+                  const pct = totalSteps > 0 ? Math.round((doneCount / totalSteps) * 100) : 0;
+                  return (
+                    <div key={assignment.id} data-testid={`playbook-home-${assignment.id}`}>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-sm font-medium truncate">{pb.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{doneCount}/{totalSteps}</span>
+                      </div>
+                      <Progress value={pct} className="h-1.5" />
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">

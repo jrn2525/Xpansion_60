@@ -745,6 +745,8 @@ export const playbookApplications = pgTable("playbook_applications", {
     .references(() => locations.id, { onDelete: "cascade" }),
   appliedByUserId: varchar("applied_by_user_id").notNull(),
   status: varchar("status", { length: 50 }).notNull().default("applied"),
+  completedSteps: integer("completed_steps").array().notNull().default([]),
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

@@ -97,8 +97,11 @@ const clientNavItems: NavItem[] = [
 ];
 
 const clientOperationsItems: NavItem[] = [
+  { title: "Daily Brief", url: "/brief", icon: Newspaper, visibleTo: allRoles },
   { title: "Actions", url: "/actions", icon: ListChecks, visibleTo: allRoles },
   { title: "Goals", url: "/goals", icon: Target, visibleTo: allRoles },
+  { title: "Playbooks", url: "/playbooks", icon: BookOpen, visibleTo: allRoles },
+  { title: "Weekly Plans", url: "/weekly-plans", icon: Calendar, visibleTo: allRoles },
   { title: "Settings", url: "/settings", icon: Settings, visibleTo: allRoles },
 ];
 
