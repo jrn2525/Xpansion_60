@@ -150,7 +150,6 @@ import {
   breakGlassSessions,
   onboardingProgress,
   importMappingTemplates,
-  auditLogs,
   type JobQueueEntry,
   type InsertJobQueueEntry,
   type JobRun,
@@ -173,10 +172,16 @@ import {
   type InsertImportMappingTemplate,
   userPreferences,
   userNotifications,
+  tenantIntegrations,
+  integrationSyncLogs,
   type UserPreference,
   type InsertUserPreference,
   type UserNotification,
   type InsertUserNotification,
+  type TenantIntegration,
+  type InsertTenantIntegration,
+  type IntegrationSyncLog,
+  type InsertIntegrationSyncLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, asc, gte, lte, lt, inArray, isNull, sql } from "drizzle-orm";
@@ -450,6 +455,14 @@ export interface IStorage {
   createUserNotification(data: InsertUserNotification): Promise<UserNotification>;
   markNotificationRead(id: number, userId: string): Promise<void>;
   markAllNotificationsRead(userId: string, tenantId: number): Promise<void>;
+
+  getTenantIntegrations(tenantId: number): Promise<TenantIntegration[]>;
+  getTenantIntegration(id: number): Promise<TenantIntegration | undefined>;
+  createTenantIntegration(data: InsertTenantIntegration): Promise<TenantIntegration>;
+  updateTenantIntegration(id: number, data: Partial<TenantIntegration>): Promise<TenantIntegration | undefined>;
+  deleteTenantIntegration(id: number): Promise<boolean>;
+  createIntegrationSyncLog(data: InsertIntegrationSyncLog): Promise<IntegrationSyncLog>;
+  getIntegrationSyncLogs(integrationId: number, limit?: number): Promise<IntegrationSyncLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1760,6 +1773,39 @@ export class DatabaseStorage implements IStorage {
         eq(userNotifications.tenantId, tenantId),
         eq(userNotifications.isRead, false)
       ));
+  }
+
+  async getTenantIntegrations(tenantId: number): Promise<TenantIntegration[]> {
+    return db.select().from(tenantIntegrations).where(eq(tenantIntegrations.tenantId, tenantId)).orderBy(desc(tenantIntegrations.createdAt));
+  }
+
+  async getTenantIntegration(id: number): Promise<TenantIntegration | undefined> {
+    const [row] = await db.select().from(tenantIntegrations).where(eq(tenantIntegrations.id, id));
+    return row;
+  }
+
+  async createTenantIntegration(data: InsertTenantIntegration): Promise<TenantIntegration> {
+    const [created] = await db.insert(tenantIntegrations).values(data).returning();
+    return created;
+  }
+
+  async updateTenantIntegration(id: number, data: Partial<TenantIntegration>): Promise<TenantIntegration | undefined> {
+    const [updated] = await db.update(tenantIntegrations).set({ ...data, updatedAt: new Date() }).where(eq(tenantIntegrations.id, id)).returning();
+    return updated;
+  }
+
+  async deleteTenantIntegration(id: number): Promise<boolean> {
+    const result = await db.delete(tenantIntegrations).where(eq(tenantIntegrations.id, id));
+    return true;
+  }
+
+  async createIntegrationSyncLog(data: InsertIntegrationSyncLog): Promise<IntegrationSyncLog> {
+    const [created] = await db.insert(integrationSyncLogs).values(data).returning();
+    return created;
+  }
+
+  async getIntegrationSyncLogs(integrationId: number, limit = 20): Promise<IntegrationSyncLog[]> {
+    return db.select().from(integrationSyncLogs).where(eq(integrationSyncLogs.integrationId, integrationId)).orderBy(desc(integrationSyncLogs.startedAt)).limit(limit);
   }
 }
 

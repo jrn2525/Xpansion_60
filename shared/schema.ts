@@ -1355,3 +1355,52 @@ export const insertUserNotificationSchema = createInsertSchema(userNotifications
 
 export type UserNotification = typeof userNotifications.$inferSelect;
 export type InsertUserNotification = z.infer<typeof insertUserNotificationSchema>;
+
+export const tenantIntegrations = pgTable("tenant_integrations", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  config: jsonb("config").notNull().default({}),
+  credentials: jsonb("credentials").notNull().default({}),
+  fieldMapping: jsonb("field_mapping").notNull().default({}),
+  syncSchedule: varchar("sync_schedule", { length: 50 }).default("manual"),
+  locationId: integer("location_id").references(() => locations.id),
+  status: varchar("status", { length: 30 }).notNull().default("draft"),
+  lastSyncAt: timestamp("last_sync_at"),
+  nextSyncAt: timestamp("next_sync_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTenantIntegrationSchema = createInsertSchema(tenantIntegrations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type TenantIntegration = typeof tenantIntegrations.$inferSelect;
+export type InsertTenantIntegration = z.infer<typeof insertTenantIntegrationSchema>;
+
+export const integrationSyncLogs = pgTable("integration_sync_logs", {
+  id: serial("id").primaryKey(),
+  integrationId: integer("integration_id")
+    .notNull()
+    .references(() => tenantIntegrations.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 30 }).notNull(),
+  recordsProcessed: integer("records_processed").default(0),
+  recordsSuccess: integer("records_success").default(0),
+  recordsFailed: integer("records_failed").default(0),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertIntegrationSyncLogSchema = createInsertSchema(integrationSyncLogs).omit({
+  id: true,
+});
+
+export type IntegrationSyncLog = typeof integrationSyncLogs.$inferSelect;
+export type InsertIntegrationSyncLog = z.infer<typeof insertIntegrationSyncLogSchema>;

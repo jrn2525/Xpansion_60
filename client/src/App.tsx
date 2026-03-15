@@ -57,6 +57,9 @@ const MyBusinessPage = lazy(() => import("@/pages/my-business"));
 const ClientSettingsPage = lazy(() => import("@/pages/client-settings"));
 const EnterDataPage = lazy(() => import("@/pages/enter-data"));
 const MyScorecardPage = lazy(() => import("@/pages/my-scorecard"));
+const IntegrationsPage = lazy(() => import("@/pages/integrations"));
+const ImportWizardPage = lazy(() => import("@/pages/import-wizard"));
+const ApiWizardPage = lazy(() => import("@/pages/api-wizard"));
 
 function LoadingSkeleton() {
   return (
@@ -99,6 +102,9 @@ const routeTitles: Record<string, string> = {
   "/admin/ops": "Ops Health | Xpansion Console",
   "/risk": "Risk Dashboard | Xpansion Console",
   "/weekly-plans": "Weekly Plans | Xpansion Console",
+  "/integrations": "Integrations | Xpansion Console",
+  "/integrations/import": "Import Wizard | Xpansion Console",
+  "/integrations/api": "API Integration | Xpansion Console",
   "/campaigns": "Campaigns | Xpansion Console",
   "/brief": "Daily Brief | Xpansion Console",
   "/inbox": "Command Inbox | Xpansion Console",
@@ -169,6 +175,9 @@ function AuthenticatedRouter() {
       <Route path="/admin/branding" component={TenantBrandingPage} />
       <Route path="/admin/users" component={AdminUsersPage} />
       <Route path="/superadmin/tower" component={SuperadminTowerPage} />
+      <Route path="/integrations" component={IntegrationsPage} />
+      <Route path="/integrations/import" component={ImportWizardPage} />
+      <Route path="/integrations/api" component={ApiWizardPage} />
       <Route path="/onboarding" component={OnboardingPage} />
       <Route component={NotFound} />
     </Switch>

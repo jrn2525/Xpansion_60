@@ -40,6 +40,7 @@ import {
   Settings,
   UserCheck,
   ClipboardEdit,
+  PlugZap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -102,6 +103,7 @@ const clientOperationsItems: NavItem[] = [
   { title: "Goals", url: "/goals", icon: Target, visibleTo: allRoles },
   { title: "Playbooks", url: "/playbooks", icon: BookOpen, visibleTo: allRoles },
   { title: "Weekly Plans", url: "/weekly-plans", icon: Calendar, visibleTo: allRoles },
+  { title: "Integrations", url: "/integrations", icon: PlugZap, visibleTo: allRoles },
   { title: "Settings", url: "/settings", icon: Settings, visibleTo: allRoles },
 ];
 
@@ -127,6 +129,7 @@ const operationsItems: NavItem[] = [
   { title: "Risk", url: "/risk", icon: AlertTriangle, visibleTo: allRoles },
   { title: "Weekly Plans", url: "/weekly-plans", icon: Calendar, visibleTo: allRoles },
   { title: "Campaigns", url: "/campaigns", icon: Megaphone, visibleTo: allRoles },
+  { title: "Integrations", url: "/integrations", icon: PlugZap, visibleTo: allRoles },
 ];
 
 const adminItems: NavItem[] = [
