@@ -144,6 +144,9 @@ export default function OnboardingPage() {
   const [parentCompanyName, setParentCompanyName] = useState("");
   const [subsidiaryCount, setSubsidiaryCount] = useState(1);
   const [subsidiaries, setSubsidiaries] = useState<{ name: string; type: string }[]>([{ name: "", type: "location" }]);
+  const [hasMultipleLocations, setHasMultipleLocations] = useState<boolean | null>(null);
+  const [locationCount, setLocationCount] = useState(1);
+  const [locationEntries, setLocationEntries] = useState<{ name: string }[]>([{ name: "" }]);
 
   const [locName, setLocName] = useState("");
   const [locCity, setLocCity] = useState("");
@@ -195,6 +198,9 @@ export default function OnboardingPage() {
       if (saved.parentCompanyName) setParentCompanyName(saved.parentCompanyName);
       if (saved.subsidiaryCount) setSubsidiaryCount(saved.subsidiaryCount);
       if (saved.subsidiaries) setSubsidiaries(saved.subsidiaries);
+      if (saved.hasMultipleLocations !== undefined) setHasMultipleLocations(saved.hasMultipleLocations);
+      if (saved.locationCount) setLocationCount(saved.locationCount);
+      if (saved.locationEntries) setLocationEntries(saved.locationEntries);
       if (saved.locName) setLocName(saved.locName);
       if (saved.locCity) setLocCity(saved.locCity);
       if (saved.locState) setLocState(saved.locState);
@@ -222,11 +228,12 @@ export default function OnboardingPage() {
       savedData: {
         businessName, industry,
         hasParentCompany, parentCompanyType, parentCompanyName, subsidiaryCount, subsidiaries,
+        hasMultipleLocations, locationCount, locationEntries,
         locName, locCity, locState, locAddress, trackingFrequency,
         ...(overrides?.savedData || {}),
       },
     }).catch(() => {});
-  }, [currentStep, completedSteps, createdTenantId, businessName, industry, hasParentCompany, parentCompanyType, parentCompanyName, subsidiaryCount, subsidiaries, locName, locCity, locState, locAddress, trackingFrequency]);
+  }, [currentStep, completedSteps, createdTenantId, businessName, industry, hasParentCompany, parentCompanyType, parentCompanyName, subsidiaryCount, subsidiaries, hasMultipleLocations, locationCount, locationEntries, locName, locCity, locState, locAddress, trackingFrequency]);
 
   const goToStep = (step: number) => {
     setCurrentStep(step);
@@ -347,6 +354,7 @@ export default function OnboardingPage() {
           businessName, industry, trackingFrequency,
           hasParentCompany, parentCompanyType, parentCompanyName,
           subsidiaryCount, subsidiaries,
+          hasMultipleLocations, locationCount, locationEntries,
         },
       });
     },
@@ -384,9 +392,16 @@ export default function OnboardingPage() {
     (!needsPasswordChange || (newPassword.length >= 8 && newPassword === confirmPassword));
 
   const canProceedBusiness = businessName.trim() && industry;
-  const canProceedStructure = hasParentCompany === false ||
-    (hasParentCompany === true && parentCompanyType && parentCompanyName.trim() &&
-     subsidiaries.length > 0 && subsidiaries.every(s => s.name.trim()));
+  const canProceedStructure = (() => {
+    if (hasParentCompany === null) return false;
+    if (hasParentCompany === true) {
+      return !!(parentCompanyType && parentCompanyName.trim() &&
+        subsidiaries.length > 0 && subsidiaries.every(s => s.name.trim()));
+    }
+    if (hasMultipleLocations === null) return false;
+    if (hasMultipleLocations === false) return true;
+    return locationEntries.length > 0 && locationEntries.every(l => l.name.trim());
+  })();
   const canProceedLocation = locName.trim();
   const canProceedKpis = kpiItems.some(k => k.selected);
 
@@ -668,6 +683,113 @@ export default function OnboardingPage() {
                   </button>
                 </div>
               </div>
+
+              {hasParentCompany === false && (
+                <div className="space-y-5 pt-2 border-t">
+                  <div className="space-y-3">
+                    <Label>Do you have multiple locations?</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHasMultipleLocations(true);
+                          if (locationEntries.length < 2) {
+                            setLocationCount(2);
+                            setLocationEntries([{ name: "" }, { name: "" }]);
+                          }
+                        }}
+                        className={`p-3 rounded-lg border-2 text-center transition-colors ${
+                          hasMultipleLocations === true
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-muted-foreground/30"
+                        }`}
+                        data-testid="button-multi-loc-yes"
+                      >
+                        <p className="font-medium text-sm">Yes</p>
+                        <p className="text-xs text-muted-foreground mt-1">I have more than one location</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHasMultipleLocations(false);
+                          setLocationCount(1);
+                          setLocationEntries([{ name: "" }]);
+                        }}
+                        className={`p-3 rounded-lg border-2 text-center transition-colors ${
+                          hasMultipleLocations === false
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-muted-foreground/30"
+                        }`}
+                        data-testid="button-multi-loc-no"
+                      >
+                        <p className="font-medium text-sm">No</p>
+                        <p className="text-xs text-muted-foreground mt-1">Just one location</p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {hasMultipleLocations === true && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label>How many locations do you have?</Label>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={locationCount <= 2}
+                            onClick={() => {
+                              const newCount = Math.max(2, locationCount - 1);
+                              setLocationCount(newCount);
+                              setLocationEntries(prev => prev.slice(0, newCount));
+                            }}
+                            data-testid="button-loc-count-minus"
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <span className="text-lg font-semibold w-8 text-center" data-testid="text-loc-count">{locationCount}</span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={locationCount >= 50}
+                            onClick={() => {
+                              const newCount = locationCount + 1;
+                              setLocationCount(newCount);
+                              setLocationEntries(prev => [...prev, { name: "" }]);
+                            }}
+                            data-testid="button-loc-count-plus"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                        {locationEntries.map((loc, i) => (
+                          <div key={i} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20" data-testid={`location-row-${i}`}>
+                            <span className="text-sm text-muted-foreground font-medium w-6 shrink-0">{i + 1}.</span>
+                            <Input
+                              value={loc.name}
+                              onChange={e => {
+                                const updated = [...locationEntries];
+                                updated[i] = { name: e.target.value };
+                                setLocationEntries(updated);
+                              }}
+                              placeholder={`Location name ${i + 1} (e.g., Downtown, Westside)`}
+                              className="flex-1"
+                              data-testid={`input-loc-name-${i}`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        You'll add full address details for each location later.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {hasParentCompany === true && (
                 <div className="space-y-5 pt-2 border-t">
