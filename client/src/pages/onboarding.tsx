@@ -31,6 +31,8 @@ import {
   Plus,
   Trash2,
   PartyPopper,
+  Network,
+  Minus,
 } from "lucide-react";
 
 const INDUSTRY_OPTIONS = [
@@ -90,6 +92,7 @@ const INDUSTRY_KPI_SUGGESTIONS: Record<string, { name: string; unit: string; dat
 const STEPS = [
   { key: "profile", label: "Your Profile", icon: User, description: "Set up your account" },
   { key: "business", label: "Your Business", icon: Building2, description: "Tell us about your business" },
+  { key: "structure", label: "Company Structure", icon: Network, description: "Tell us about your corporate structure" },
   { key: "location", label: "First Location", icon: MapPin, description: "Add your first location" },
   { key: "kpis", label: "What to Track", icon: BarChart3, description: "Choose your key metrics" },
   { key: "targets", label: "Set Targets", icon: Target, description: "Define what success looks like" },
@@ -136,6 +139,12 @@ export default function OnboardingPage() {
   const [businessName, setBusinessName] = useState("");
   const [industry, setIndustry] = useState("");
 
+  const [hasParentCompany, setHasParentCompany] = useState<boolean | null>(null);
+  const [parentCompanyType, setParentCompanyType] = useState<string>("");
+  const [parentCompanyName, setParentCompanyName] = useState("");
+  const [subsidiaryCount, setSubsidiaryCount] = useState(1);
+  const [subsidiaries, setSubsidiaries] = useState<{ name: string; type: string }[]>([{ name: "", type: "location" }]);
+
   const [locName, setLocName] = useState("");
   const [locCity, setLocCity] = useState("");
   const [locState, setLocState] = useState("");
@@ -181,6 +190,11 @@ export default function OnboardingPage() {
       const saved = d.savedData || {};
       if (saved.businessName) setBusinessName(saved.businessName);
       if (saved.industry) setIndustry(saved.industry);
+      if (saved.hasParentCompany !== undefined) setHasParentCompany(saved.hasParentCompany);
+      if (saved.parentCompanyType) setParentCompanyType(saved.parentCompanyType);
+      if (saved.parentCompanyName) setParentCompanyName(saved.parentCompanyName);
+      if (saved.subsidiaryCount) setSubsidiaryCount(saved.subsidiaryCount);
+      if (saved.subsidiaries) setSubsidiaries(saved.subsidiaries);
       if (saved.locName) setLocName(saved.locName);
       if (saved.locCity) setLocCity(saved.locCity);
       if (saved.locState) setLocState(saved.locState);
@@ -206,11 +220,13 @@ export default function OnboardingPage() {
       completedSteps: overrides?.completedSteps ?? completedSteps,
       tenantId: overrides?.tenantId ?? createdTenantId ?? undefined,
       savedData: {
-        businessName, industry, locName, locCity, locState, locAddress, trackingFrequency,
+        businessName, industry,
+        hasParentCompany, parentCompanyType, parentCompanyName, subsidiaryCount, subsidiaries,
+        locName, locCity, locState, locAddress, trackingFrequency,
         ...(overrides?.savedData || {}),
       },
     }).catch(() => {});
-  }, [currentStep, completedSteps, createdTenantId, businessName, industry, locName, locCity, locState, locAddress, trackingFrequency]);
+  }, [currentStep, completedSteps, createdTenantId, businessName, industry, hasParentCompany, parentCompanyType, parentCompanyName, subsidiaryCount, subsidiaries, locName, locCity, locState, locAddress, trackingFrequency]);
 
   const goToStep = (step: number) => {
     setCurrentStep(step);
@@ -327,7 +343,11 @@ export default function OnboardingPage() {
         currentStep: STEPS.length,
         completedSteps: STEPS.map(s => s.key),
         isComplete: true,
-        savedData: { businessName, industry, trackingFrequency },
+        savedData: {
+          businessName, industry, trackingFrequency,
+          hasParentCompany, parentCompanyType, parentCompanyName,
+          subsidiaryCount, subsidiaries,
+        },
       });
     },
     onSuccess: () => {
@@ -364,6 +384,9 @@ export default function OnboardingPage() {
     (!needsPasswordChange || (newPassword.length >= 8 && newPassword === confirmPassword));
 
   const canProceedBusiness = businessName.trim() && industry;
+  const canProceedStructure = hasParentCompany === false ||
+    (hasParentCompany === true && parentCompanyType && parentCompanyName.trim() &&
+     subsidiaries.length > 0 && subsidiaries.every(s => s.name.trim()));
   const canProceedLocation = locName.trim();
   const canProceedKpis = kpiItems.some(k => k.selected);
 
@@ -600,6 +623,195 @@ export default function OnboardingPage() {
 
         {currentStep === 2 && (
           <StepWrapper
+            title="Tell us about your company structure"
+            subtitle="Do you operate under an umbrella company or holding company? This helps us understand how your business is organized."
+          >
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <Label>Do you have an Umbrella Company or Holding Company?</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHasParentCompany(true);
+                    }}
+                    className={`p-4 rounded-lg border-2 text-center transition-colors ${
+                      hasParentCompany === true
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/30"
+                    }`}
+                    data-testid="button-has-parent-yes"
+                  >
+                    <Network className="h-6 w-6 mx-auto mb-2" />
+                    <p className="font-medium text-sm">Yes</p>
+                    <p className="text-xs text-muted-foreground mt-1">I have a parent company</p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHasParentCompany(false);
+                      setParentCompanyType("");
+                      setParentCompanyName("");
+                      setSubsidiaries([{ name: "", type: "location" }]);
+                      setSubsidiaryCount(1);
+                    }}
+                    className={`p-4 rounded-lg border-2 text-center transition-colors ${
+                      hasParentCompany === false
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-muted-foreground/30"
+                    }`}
+                    data-testid="button-has-parent-no"
+                  >
+                    <Building2 className="h-6 w-6 mx-auto mb-2" />
+                    <p className="font-medium text-sm">No</p>
+                    <p className="text-xs text-muted-foreground mt-1">Just my business</p>
+                  </button>
+                </div>
+              </div>
+
+              {hasParentCompany === true && (
+                <div className="space-y-5 pt-2 border-t">
+                  <div className="space-y-3">
+                    <Label>What type of parent company?</Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setParentCompanyType("umbrella")}
+                        className={`p-3 rounded-lg border-2 text-center transition-colors ${
+                          parentCompanyType === "umbrella"
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-muted-foreground/30"
+                        }`}
+                        data-testid="button-type-umbrella"
+                      >
+                        <p className="font-medium text-sm">Umbrella Company</p>
+                        <p className="text-xs text-muted-foreground mt-1">Multiple brands under one entity</p>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setParentCompanyType("holding")}
+                        className={`p-3 rounded-lg border-2 text-center transition-colors ${
+                          parentCompanyType === "holding"
+                            ? "border-primary bg-primary/5"
+                            : "border-border hover:border-muted-foreground/30"
+                        }`}
+                        data-testid="button-type-holding"
+                      >
+                        <p className="font-medium text-sm">Holding Company</p>
+                        <p className="text-xs text-muted-foreground mt-1">Owns controlling interest in subsidiaries</p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {parentCompanyType && (
+                    <>
+                      <div className="space-y-2">
+                        <Label htmlFor="parentCompanyName">
+                          {parentCompanyType === "umbrella" ? "Umbrella" : "Holding"} Company Name
+                        </Label>
+                        <Input
+                          id="parentCompanyName"
+                          value={parentCompanyName}
+                          onChange={e => setParentCompanyName(e.target.value)}
+                          placeholder={`e.g., ${parentCompanyType === "umbrella" ? "Smith Restaurant Group" : "Smith Holdings LLC"}`}
+                          data-testid="input-onb-parent-company-name"
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label>How many subsidiaries or locations?</Label>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              disabled={subsidiaryCount <= 1}
+                              onClick={() => {
+                                const newCount = Math.max(1, subsidiaryCount - 1);
+                                setSubsidiaryCount(newCount);
+                                setSubsidiaries(prev => prev.slice(0, newCount));
+                              }}
+                              data-testid="button-sub-count-minus"
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <span className="text-lg font-semibold w-8 text-center" data-testid="text-sub-count">{subsidiaryCount}</span>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-8 w-8"
+                              disabled={subsidiaryCount >= 20}
+                              onClick={() => {
+                                const newCount = subsidiaryCount + 1;
+                                setSubsidiaryCount(newCount);
+                                setSubsidiaries(prev => [...prev, { name: "", type: "location" }]);
+                              }}
+                              data-testid="button-sub-count-plus"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                          {subsidiaries.map((sub, i) => (
+                            <div key={i} className="flex items-center gap-3 p-3 rounded-lg border bg-muted/20" data-testid={`subsidiary-row-${i}`}>
+                              <span className="text-sm text-muted-foreground font-medium w-6 shrink-0">{i + 1}.</span>
+                              <Input
+                                value={sub.name}
+                                onChange={e => {
+                                  const updated = [...subsidiaries];
+                                  updated[i] = { ...updated[i], name: e.target.value };
+                                  setSubsidiaries(updated);
+                                }}
+                                placeholder={`Name of subsidiary/location ${i + 1}`}
+                                className="flex-1"
+                                data-testid={`input-sub-name-${i}`}
+                              />
+                              <Select
+                                value={sub.type}
+                                onValueChange={val => {
+                                  const updated = [...subsidiaries];
+                                  updated[i] = { ...updated[i], type: val };
+                                  setSubsidiaries(updated);
+                                }}
+                              >
+                                <SelectTrigger className="w-36" data-testid={`select-sub-type-${i}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="location">Location</SelectItem>
+                                  <SelectItem value="subsidiary">Subsidiary</SelectItem>
+                                  <SelectItem value="brand">Brand</SelectItem>
+                                  <SelectItem value="franchise">Franchise</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              <Button
+                className="w-full"
+                size="lg"
+                disabled={!canProceedStructure}
+                onClick={() => completeStep("structure")}
+                data-testid="button-onb-save-structure"
+              >
+                Continue
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          </StepWrapper>
+        )}
+
+        {currentStep === 3 && (
+          <StepWrapper
             title="Where is your first location?"
             subtitle="Add the details for your first business location. You can add more locations later."
           >
@@ -661,7 +873,7 @@ export default function OnboardingPage() {
           </StepWrapper>
         )}
 
-        {currentStep === 3 && (
+        {currentStep === 4 && (
           <StepWrapper
             title="What numbers matter most to your business?"
             subtitle="We've suggested some KPIs based on your industry. Select the ones you want to track, or add your own."
@@ -755,7 +967,7 @@ export default function OnboardingPage() {
           </StepWrapper>
         )}
 
-        {currentStep === 4 && (
+        {currentStep === 5 && (
           <StepWrapper
             title="What does success look like?"
             subtitle="Set target values for your metrics so you can easily spot when you're on or off track."

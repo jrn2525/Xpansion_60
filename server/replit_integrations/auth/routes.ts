@@ -396,7 +396,7 @@ export function registerAuthRoutes(app: Express): void {
           ...u,
           status,
           onboardingStep: progress?.currentStep || 0,
-          onboardingTotal: 5,
+          onboardingTotal: 6,
           completedSteps: progress?.completedSteps || [],
           businessName: tenantMap[primaryTenantId!] || null,
           tenantId: primaryTenantId,
