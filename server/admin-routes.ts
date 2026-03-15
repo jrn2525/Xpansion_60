@@ -14,6 +14,7 @@ import { fromZodError } from "zod-validation-error";
 import { parseIntOrThrow, ValidationError } from "./utils";
 import { notifyAlertEvent, notifyReportReady, sendEmail, sendSlackWebhook, sendNotification } from "./services/notifications";
 import { manualRunNow, getSchedulerStatus } from "./services/scheduler";
+import { parseFileBuffer } from "./services/file-parser";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -59,7 +60,7 @@ adminRouter.post("/imports", upload.single("file"), async (req: any, res) => {
     if (!tenantId || !locationId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId and locationId are required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
-    if (!req.file) return res.status(400).json(err("VALIDATION_ERROR", "CSV file is required"));
+    if (!req.file) return res.status(400).json(err("VALIDATION_ERROR", "File is required (CSV or Excel)"));
 
     const locations = await storage.getLocations(tenantId);
     const locationBelongs = locations.some(l => l.id === locationId);
@@ -77,8 +78,14 @@ adminRouter.post("/imports", upload.single("file"), async (req: any, res) => {
     });
 
     const importStartedAt = new Date();
-    const csvText = req.file.buffer.toString("utf-8");
-    const result = await processCSV(csvText, mapping, tenantId, locationId, job.id);
+    let parsed;
+    try {
+      parsed = parseFileBuffer(req.file.buffer, req.file.originalname);
+    } catch (parseErr: any) {
+      await storage.updateImportJob(job.id, { status: "failed", totalRows: 0, successRows: 0, failedRows: 0 });
+      return res.status(400).json(err("PARSE_ERROR", parseErr.message));
+    }
+    const result = await processRows(parsed.rows, mapping, tenantId, locationId, job.id);
 
     const finalStatus = result.failedRows === 0 ? "completed" : result.successRows === 0 ? "failed" : "partial";
     const updated = await storage.updateImportJob(job.id, {
@@ -199,48 +206,29 @@ adminRouter.post("/imports/:jobId/reprocess", async (req: any, res) => {
   }
 });
 
-async function processCSV(csvText: string, mapping: Record<string, string>, tenantId: number, locationId: number, jobId: number) {
-  const lines = csvText.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return { totalRows: 0, successRows: 0, failedRows: 0 };
+async function processRows(rows: Record<string, string>[], mapping: Record<string, string>, tenantId: number, locationId: number, jobId: number) {
+  if (rows.length === 0) return { totalRows: 0, successRows: 0, failedRows: 0 };
 
-  const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
   let successRows = 0;
   let failedRows = 0;
 
-  for (let i = 1; i < lines.length; i++) {
-    const values = parseCSVLine(lines[i]);
-    const rowData: Record<string, string> = {};
-    headers.forEach((h, idx) => { rowData[h] = values[idx] || ""; });
-
+  for (let i = 0; i < rows.length; i++) {
+    const lineNumber = i + 2;
     try {
-      await processRow(rowData, mapping, tenantId, locationId, i, jobId, false);
+      await processRow(rows[i], mapping, tenantId, locationId, lineNumber, jobId, false);
       successRows++;
     } catch (e: any) {
       failedRows++;
       await storage.createImportRowError({
         importJobId: jobId,
-        rowNumber: i,
-        rawData: JSON.stringify(rowData),
+        rowNumber: lineNumber,
+        rawData: JSON.stringify(rows[i]),
         errorMessage: e.message,
       });
     }
   }
 
-  return { totalRows: lines.length - 1, successRows, failedRows };
-}
-
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') { inQuotes = !inQuotes; }
-    else if (ch === "," && !inQuotes) { result.push(current.trim()); current = ""; }
-    else { current += ch; }
-  }
-  result.push(current.trim());
-  return result;
+  return { totalRows: rows.length, successRows, failedRows };
 }
 
 async function processRow(rowData: Record<string, string>, mapping: Record<string, string>, tenantId: number, locationId: number, rowNumber: number, jobId: number, isReprocess: boolean) {
@@ -1032,17 +1020,15 @@ adminRouter.post("/imports/validate", upload.single("file"), async (req: any, re
     if (!tenantId) return res.status(400).json(err("VALIDATION_ERROR", "tenantId is required"));
     const access = await requireAdminAccess(req, res, tenantId);
     if (!access) return;
-    if (!req.file) return res.status(400).json(err("VALIDATION_ERROR", "CSV file is required"));
+    if (!req.file) return res.status(400).json(err("VALIDATION_ERROR", "File is required (CSV or Excel)"));
 
     const mappingConfig = req.body.mappingConfig || "{}";
     let mapping: Record<string, string>;
     try { mapping = JSON.parse(mappingConfig); } catch { return res.status(400).json(err("VALIDATION_ERROR", "Invalid mappingConfig JSON")); }
 
-    const csvText = req.file.buffer.toString("utf-8");
-    const lines = csvText.split(/\r?\n/).filter((l: string) => l.trim());
-    if (lines.length < 2) return res.json(ok({ totalRows: 0, validRows: 0, warningRows: 0, failedRows: 0, qualityScore: 100, qualityBadge: "excellent", errors: [] }));
+    const parsed = parseFileBuffer(req.file.buffer, req.file.originalname);
+    if (parsed.rows.length === 0) return res.json(ok({ totalRows: 0, validRows: 0, warningRows: 0, failedRows: 0, qualityScore: 100, qualityBadge: "excellent", errors: [], headers: parsed.headers }));
 
-    const headers = lines[0].split(",").map((h: string) => h.trim().replace(/^"|"$/g, ""));
     const metrics = await storage.getMetricDefinitions(tenantId);
 
     const metricKey = mapping.metricKey || "metric";
@@ -1054,10 +1040,8 @@ adminRouter.post("/imports/validate", upload.single("file"), async (req: any, re
     let failedRows = 0;
     const rowErrors: Array<{ line: number; reason: string }> = [];
 
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i]);
-      const rowData: Record<string, string> = {};
-      headers.forEach((h: string, idx: number) => { rowData[h] = values[idx] || ""; });
+    for (let i = 0; i < parsed.rows.length; i++) {
+      const rowData = parsed.rows[i];
 
       const errors: string[] = [];
       const metricName = rowData[metricKey];
@@ -1081,14 +1065,14 @@ adminRouter.post("/imports/validate", upload.single("file"), async (req: any, re
       if (errors.length > 0) {
         failedRows++;
         if (rowErrors.length < 10) {
-          rowErrors.push({ line: i + 1, reason: errors.join("; ") });
+          rowErrors.push({ line: i + 2, reason: errors.join("; ") });
         }
       } else {
         validRows++;
       }
     }
 
-    const totalRows = lines.length - 1;
+    const totalRows = parsed.rows.length;
     const qualityScore = totalRows > 0 ? Math.round((validRows / totalRows) * 100) : 100;
     const qualityBadge = qualityScore >= 90 ? "excellent" : qualityScore >= 70 ? "good" : qualityScore >= 50 ? "fair" : "poor";
 
@@ -1100,6 +1084,7 @@ adminRouter.post("/imports/validate", upload.single("file"), async (req: any, re
       qualityScore,
       qualityBadge,
       errors: rowErrors,
+      headers: parsed.headers,
     }));
   } catch (error: any) {
       if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));

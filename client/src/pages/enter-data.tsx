@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -9,6 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -28,6 +34,9 @@ import {
   ArrowDown,
   ClipboardEdit,
   Target,
+  Upload,
+  FileSpreadsheet,
+  AlertTriangle,
 } from "lucide-react";
 import type { Location, MetricDefinition, MetricValue } from "@shared/schema";
 import { getPeriodDates, stepPeriod, getBandForValue, getTargetDisplay } from "@/lib/period-utils";
@@ -47,6 +56,9 @@ export default function EnterDataPage() {
   const [referenceDate, setReferenceDate] = useState(new Date());
   const [entryValues, setEntryValues] = useState<Record<number, string>>({});
   const [savedSuccessfully, setSavedSuccessfully] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const { data: progressData } = useQuery<any>({
     queryKey: ["/api/v1/onboarding/progress"],
@@ -153,6 +165,38 @@ export default function EnterDataPage() {
     },
   });
 
+  const importMutation = useMutation({
+    mutationFn: async () => {
+      const file = importFileRef.current?.files?.[0];
+      if (!file || !selectedLocationId || !activeTenantId) throw new Error("Select a file and location");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("locationId", selectedLocationId);
+      fd.append("period", periodInfo.period);
+      fd.append("periodStart", periodInfo.periodStart.toISOString());
+      fd.append("periodEnd", periodInfo.periodEnd.toISOString());
+      const res = await fetch(`/api/tenants/${activeTenantId}/import-file`, {
+        method: "POST",
+        body: fd,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error((await res.json()).error?.message || "Import failed");
+      return res.json();
+    },
+    onSuccess: (result) => {
+      const data = result.data || result;
+      setImportResult(data);
+      queryClient.invalidateQueries({ queryKey: ["/api/tenants", activeTenantId, "metric-values"] });
+      if (data.failedRows === 0) {
+        toast({ title: "Import complete", description: `${data.successRows} metrics imported successfully.` });
+      } else {
+        toast({ title: "Import partially complete", description: `${data.successRows} succeeded, ${data.failedRows} failed.`, variant: "destructive" });
+      }
+      if (importFileRef.current) importFileRef.current.value = "";
+    },
+    onError: (e: Error) => toast({ title: "Import failed", description: e.message, variant: "destructive" }),
+  });
+
   const filledCount = Object.values(entryValues).filter(v => v !== "" && !isNaN(Number(v))).length;
   const totalMetrics = metrics?.length || 0;
   const isFuturePeriod = periodInfo.periodStart > new Date();
@@ -195,11 +239,17 @@ export default function EnterDataPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-2xl mx-auto" data-testid="page-enter-data">
-      <div>
-        <h1 className="text-2xl font-bold" data-testid="text-page-title">Enter Your Numbers</h1>
-        <p className="text-muted-foreground mt-1">
-          Record your {frequency} performance data. Fill in as many metrics as you have available.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Enter Your Numbers</h1>
+          <p className="text-muted-foreground mt-1">
+            Record your {frequency} performance data. Fill in as many metrics as you have available.
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => { setShowImport(true); setImportResult(null); }} data-testid="button-open-import">
+          <Upload className="h-4 w-4 mr-2" />
+          Import File
+        </Button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-4">
@@ -350,6 +400,91 @@ export default function EnterDataPage() {
       <p className="text-xs text-muted-foreground text-center">
         You can come back and update these numbers anytime. Previous entries will be overwritten for the same period.
       </p>
+
+      <Dialog open={showImport} onOpenChange={setShowImport}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5" />
+              Import from File
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Upload a CSV or Excel file with your KPI data. The file should have columns for metric name and value.
+              Data will be imported for the currently selected period: <strong>{periodInfo.label}</strong>
+              {selectedLocationId && locations && (
+                <> at <strong>{locations.find(l => String(l.id) === selectedLocationId)?.name}</strong></>
+              )}
+            </p>
+
+            <div className="bg-muted/50 rounded-lg p-3 space-y-1">
+              <p className="text-xs font-medium">Expected format:</p>
+              <div className="font-mono text-xs text-muted-foreground">
+                <p>metric, value</p>
+                <p>Revenue, 58000</p>
+                <p>Labor Cost %, 28.5</p>
+                <p>Customer Count, 1200</p>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Column headers like "metric", "kpi", "name", "value", "amount", or "actual" are auto-detected.
+              </p>
+            </div>
+
+            <div>
+              <Label>Select File</Label>
+              <Input
+                ref={importFileRef}
+                type="file"
+                accept=".csv,.xlsx,.xls"
+                data-testid="input-import-file"
+              />
+            </div>
+
+            {importResult && (
+              <div className="border rounded-lg p-3 space-y-2" data-testid="import-result">
+                <div className="flex items-center gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Total: </span>
+                    <strong>{importResult.totalRows}</strong>
+                  </div>
+                  <div className="text-green-600">
+                    <CheckCircle2 className="h-3 w-3 inline mr-1" />
+                    {importResult.successRows} imported
+                  </div>
+                  {importResult.failedRows > 0 && (
+                    <div className="text-red-600">
+                      <AlertTriangle className="h-3 w-3 inline mr-1" />
+                      {importResult.failedRows} failed
+                    </div>
+                  )}
+                </div>
+                {importResult.errors?.length > 0 && (
+                  <div className="space-y-1">
+                    {importResult.errors.map((e: any, idx: number) => (
+                      <p key={idx} className="text-xs text-destructive">Row {e.line}: {e.reason}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Button
+              onClick={() => importMutation.mutate()}
+              disabled={importMutation.isPending || !selectedLocationId}
+              className="w-full"
+              data-testid="button-import-file"
+            >
+              {importMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Upload className="h-4 w-4 mr-2" />
+              )}
+              {importMutation.isPending ? "Importing..." : "Import Data"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

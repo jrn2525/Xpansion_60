@@ -138,7 +138,7 @@ export default function AdminImportsPage() {
       }
       setValidationPreview(null);
       setShowSaveTemplate(true);
-      toast({ title: "Import started", description: "CSV is being processed" });
+      toast({ title: "Import started", description: "File is being processed" });
       if (fileRef.current) fileRef.current.value = "";
     },
     onError: (e: Error) => toast({ title: "Upload failed", description: e.message, variant: "destructive" }),
@@ -237,11 +237,11 @@ export default function AdminImportsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold" data-testid="text-page-title">CSV Imports</h1>
+      <h1 className="text-2xl font-bold" data-testid="text-page-title">Data Imports</h1>
 
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload CSV</CardTitle>
+          <CardTitle className="flex items-center gap-2"><Upload className="h-5 w-5" /> Upload File</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -257,8 +257,8 @@ export default function AdminImportsPage() {
               </Select>
             </div>
             <div>
-              <Label>CSV File</Label>
-              <Input ref={fileRef} type="file" accept=".csv" data-testid="input-csv-file" />
+              <Label>File (CSV or Excel)</Label>
+              <Input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" data-testid="input-csv-file" />
             </div>
             <div>
               <Label>Column Mapping (JSON)</Label>
@@ -417,7 +417,7 @@ export default function AdminImportsPage() {
           {isLoading ? (
             <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : jobs.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8" data-testid="text-no-imports">No imports yet. Upload a CSV file above to import metric data.</p>
+            <p className="text-muted-foreground text-center py-8" data-testid="text-no-imports">No imports yet. Upload a CSV or Excel file above to import metric data.</p>
           ) : (
             <div className="overflow-x-auto">
             <Table>

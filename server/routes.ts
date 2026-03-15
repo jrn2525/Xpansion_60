@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import multer from "multer";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import {
@@ -18,6 +19,7 @@ import { adminRouter } from "./admin-routes";
 import { phase5Router } from "./phase5-routes";
 import { securityRouter } from "./security-routes";
 import { intelligenceRouter } from "./intelligence-routes";
+import { parseFileBuffer } from "./services/file-parser";
 import { recommendationRouter } from "./recommendation-routes";
 import { confidenceRouter } from "./confidence-routes";
 import { securityV1Router } from "./security-v1-routes";
@@ -806,6 +808,110 @@ export async function registerRoutes(
       }
 
       res.json(ok(results));
+    } catch (error: any) {
+      if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
+      res.status(500).json(err("INTERNAL_ERROR", error.message));
+    }
+  });
+
+  const fileUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+  app.post("/api/tenants/:tenantId/import-file", isAuthenticated, fileUpload.single("file"), async (req: any, res) => {
+    try {
+      const tenantId = parseIntOrThrow(req.params.tenantId, "tenantId");
+      const hasAccess = await requireTenantAccess(req, res, tenantId, ["owner", "admin", "manager"]);
+      if (!hasAccess) return;
+      if (!req.file) return res.status(400).json(err("VALIDATION_ERROR", "File is required (CSV or Excel)"));
+
+      const importSchema = z.object({
+        locationId: z.string().transform(Number).pipe(z.number().int().positive()),
+        period: z.enum(["week", "month", "quarter", "bi-year", "year", "weekly", "monthly", "quarterly"]).default("month"),
+        periodStart: z.string().refine(s => !isNaN(new Date(s).getTime()), "Invalid start date"),
+        periodEnd: z.string().refine(s => !isNaN(new Date(s).getTime()), "Invalid end date"),
+      });
+      const bodyParsed = importSchema.safeParse(req.body);
+      if (!bodyParsed.success) return res.status(400).json(err("VALIDATION_ERROR", fromZodError(bodyParsed.error).toString()));
+
+      const { locationId, period, periodStart, periodEnd } = bodyParsed.data;
+
+      const location = await storage.getLocation(locationId);
+      if (!location || location.tenantId !== tenantId) {
+        return res.status(404).json(err("NOT_FOUND", "Location not found in this tenant"));
+      }
+
+      let parsed;
+      try {
+        parsed = parseFileBuffer(req.file.buffer, req.file.originalname);
+      } catch (parseErr: any) {
+        return res.status(400).json(err("PARSE_ERROR", parseErr.message));
+      }
+      if (parsed.rows.length === 0) return res.json(ok({ totalRows: 0, successRows: 0, failedRows: 0, errors: [] }));
+
+      const metrics = await storage.getMetricDefinitions(tenantId);
+      const metricMap = new Map(metrics.map(m => [m.name.toLowerCase(), m]));
+
+      let successRows = 0;
+      let failedRows = 0;
+      const errors: Array<{ line: number; reason: string }> = [];
+
+      const metricCol = parsed.headers.find(h => /^(metric|kpi|name|metric.?name)$/i.test(h)) || parsed.headers[0];
+      const valueCol = parsed.headers.find(h => /^(value|amount|number|actual)$/i.test(h)) || parsed.headers[1];
+
+      for (let i = 0; i < parsed.rows.length; i++) {
+        const row = parsed.rows[i];
+        const metricName = row[metricCol];
+        const rawValue = row[valueCol];
+
+        if (!metricName) {
+          failedRows++;
+          if (errors.length < 10) errors.push({ line: i + 2, reason: `Missing metric name in column "${metricCol}"` });
+          continue;
+        }
+        if (!rawValue || isNaN(parseFloat(rawValue))) {
+          failedRows++;
+          if (errors.length < 10) errors.push({ line: i + 2, reason: `Non-numeric value "${rawValue}"` });
+          continue;
+        }
+
+        const metric = metricMap.get(metricName.toLowerCase());
+        if (!metric) {
+          failedRows++;
+          if (errors.length < 10) errors.push({ line: i + 2, reason: `Metric "${metricName}" not found` });
+          continue;
+        }
+
+        try {
+          const existing = await storage.getMetricValueForPeriod(
+            metric.id, locationId,
+            new Date(periodStart), new Date(periodEnd)
+          );
+
+          if (existing) {
+            await storage.updateMetricValue(existing.id, { value: parseFloat(rawValue) });
+          } else {
+            await storage.createMetricValue({
+              metricDefinitionId: metric.id,
+              locationId,
+              period,
+              periodStart: new Date(periodStart),
+              periodEnd: new Date(periodEnd),
+              value: parseFloat(rawValue),
+            });
+          }
+          successRows++;
+        } catch (e: any) {
+          failedRows++;
+          if (errors.length < 10) errors.push({ line: i + 2, reason: e.message });
+        }
+      }
+
+      res.json(ok({
+        totalRows: parsed.rows.length,
+        successRows,
+        failedRows,
+        errors,
+        headers: parsed.headers,
+      }));
     } catch (error: any) {
       if (error instanceof ValidationError) return res.status(400).json(err("VALIDATION_ERROR", error.message));
       res.status(500).json(err("INTERNAL_ERROR", error.message));
