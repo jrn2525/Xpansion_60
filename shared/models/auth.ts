@@ -26,6 +26,7 @@ export const users = pgTable("users", {
   mustChangePassword: boolean("must_change_password").default(false),
   phone: varchar("phone"),
   jobTitle: varchar("job_title"),
+  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

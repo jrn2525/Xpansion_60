@@ -231,6 +231,7 @@ export function registerAuthRoutes(app: Express): void {
           }
           clearAttempts(clientIp, email);
           auditLog("LOGIN_SUCCESS", { userId: user.id, email, ip: clientIp, userAgent: req.headers["user-agent"] });
+          db.update(users).set({ lastLoginAt: new Date() }).where(eq(users.id, user.id)).catch((e: any) => console.error("[AUTH] Failed to update lastLoginAt:", e));
           res.json({ ok: true, data: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, isSuperAdmin: user.isSuperAdmin === "true", mustChangePassword: user.mustChangePassword === true } });
         });
       });
@@ -328,6 +329,85 @@ export function registerAuthRoutes(app: Express): void {
       }).from(users).orderBy(users.createdAt);
       res.json({ ok: true, data: allUsers });
     } catch (error: any) {
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+    }
+  });
+
+  app.get("/api/admin/clients", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
+    try {
+      const { ne } = await import("drizzle-orm");
+      const { onboardingProgress, tenants, tenantUsers } = await import("@shared/schema");
+
+      const clientUsers = await db.select({
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        phone: users.phone,
+        jobTitle: users.jobTitle,
+        mustChangePassword: users.mustChangePassword,
+        lastLoginAt: users.lastLoginAt,
+        createdAt: users.createdAt,
+      }).from(users).where(ne(users.isSuperAdmin, "true")).orderBy(users.createdAt);
+
+      const clientIds = clientUsers.map(u => u.id);
+
+      const allProgress = clientIds.length > 0
+        ? await db.select().from(onboardingProgress).where(
+            (await import("drizzle-orm")).inArray(onboardingProgress.userId, clientIds)
+          )
+        : [];
+
+      const allMemberships = clientIds.length > 0
+        ? await db.select({
+            userId: tenantUsers.userId,
+            tenantId: tenantUsers.tenantId,
+            role: tenantUsers.role,
+          }).from(tenantUsers).where(
+            (await import("drizzle-orm")).inArray(tenantUsers.userId, clientIds)
+          )
+        : [];
+
+      const tenantIds = [...new Set(allMemberships.map(m => m.tenantId))];
+      const allTenants = tenantIds.length > 0
+        ? await db.select({ id: tenants.id, name: tenants.name }).from(tenants).where(
+            (await import("drizzle-orm")).inArray(tenants.id, tenantIds)
+          )
+        : [];
+      const tenantMap = Object.fromEntries(allTenants.map(t => [t.id, t.name]));
+
+      const clients = clientUsers.map(u => {
+        const progress = allProgress.find(p => p.userId === u.id);
+        const memberships = allMemberships.filter(m => m.userId === u.id);
+        const primaryTenantId = memberships.length > 0 ? memberships[0].tenantId : null;
+
+        let status = "invited";
+        if (progress?.isComplete) status = "active";
+        else if (progress && progress.currentStep > 0) status = "onboarding";
+        else if (u.lastLoginAt) status = "logged_in";
+
+        const daysSinceLogin = u.lastLoginAt
+          ? Math.floor((Date.now() - new Date(u.lastLoginAt).getTime()) / (1000 * 60 * 60 * 24))
+          : null;
+        const needsAttention = (status === "onboarding" && daysSinceLogin !== null && daysSinceLogin > 3)
+          || (status === "invited" && !u.lastLoginAt);
+
+        return {
+          ...u,
+          status,
+          onboardingStep: progress?.currentStep || 0,
+          onboardingTotal: 5,
+          completedSteps: progress?.completedSteps || [],
+          businessName: tenantMap[primaryTenantId!] || null,
+          tenantId: primaryTenantId,
+          daysSinceLogin,
+          needsAttention,
+        };
+      });
+
+      res.json({ ok: true, data: clients });
+    } catch (error: any) {
+      console.error("[ADMIN] Clients list error:", error);
       res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
     }
   });

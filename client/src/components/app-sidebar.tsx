@@ -35,6 +35,10 @@ import {
   Star,
   Palette,
   Users,
+  Home,
+  Store,
+  Settings,
+  UserCheck,
 } from "lucide-react";
 import {
   Sidebar,
@@ -80,7 +84,23 @@ interface NavItem {
 
 type TenantWithRole = Tenant & { role?: string };
 
+const clientNavItems: NavItem[] = [
+  { title: "Home", url: "/", icon: Home, visibleTo: allRoles },
+  { title: "My Business", url: "/my-business", icon: Store, visibleTo: allRoles },
+  { title: "Locations", url: "/locations", icon: MapPin, visibleTo: allRoles },
+  { title: "Metrics", url: "/metrics", icon: BarChart3, visibleTo: allRoles },
+  { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck, visibleTo: allRoles },
+  { title: "Trends", url: "/trends", icon: TrendingUp, visibleTo: allRoles },
+];
+
+const clientOperationsItems: NavItem[] = [
+  { title: "Actions", url: "/actions", icon: ListChecks, visibleTo: allRoles },
+  { title: "Goals", url: "/goals", icon: Target, visibleTo: allRoles },
+  { title: "Settings", url: "/settings", icon: Settings, visibleTo: allRoles },
+];
+
 const navItems: NavItem[] = [
+  { title: "Clients", url: "/clients", icon: UserCheck, visibleTo: [], superadminOnly: true },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, visibleTo: allRoles },
   { title: "Command Center", url: "/command-center", icon: Crosshair, visibleTo: adminOwnerRoles },
   { title: "Portfolio", url: "/portfolio", icon: Briefcase, visibleTo: adminOwnerRoles },
@@ -118,9 +138,9 @@ const adminItems: NavItem[] = [
   { title: "Command Tower", url: "/superadmin/tower", icon: Radio, visibleTo: [], superadminOnly: true },
 ];
 
-const allItems: NavItem[] = [...navItems, ...operationsItems, ...adminItems];
+const allItems: NavItem[] = [...clientNavItems, ...clientOperationsItems, ...navItems, ...operationsItems, ...adminItems];
 
-export { navItems, operationsItems, adminItems, allItems };
+export { navItems, operationsItems, adminItems, clientNavItems, clientOperationsItems, allItems };
 export type { NavItem };
 
 function filterItemsByRole(items: NavItem[], role: TenantRole | null, isSuperAdmin: boolean): NavItem[] {
@@ -154,9 +174,17 @@ export function AppSidebar() {
   const activeRole = (activeTenant?.role as TenantRole) || null;
   const { logoUrl } = useTenantBranding();
 
-  const filteredNavItems = filterItemsByRole(navItems, activeRole, isSuperAdmin);
-  const filteredOperationsItems = filterItemsByRole(operationsItems, activeRole, isSuperAdmin);
-  const filteredAdminItems = filterItemsByRole(adminItems, activeRole, isSuperAdmin);
+  const isClient = !isSuperAdmin;
+
+  const filteredNavItems = isClient
+    ? clientNavItems
+    : filterItemsByRole(navItems, activeRole, isSuperAdmin);
+  const filteredOperationsItems = isClient
+    ? clientOperationsItems
+    : filterItemsByRole(operationsItems, activeRole, isSuperAdmin);
+  const filteredAdminItems = isClient
+    ? []
+    : filterItemsByRole(adminItems, activeRole, isSuperAdmin);
 
   const initials = user
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"
@@ -185,7 +213,7 @@ export function AppSidebar() {
 
         {tenantsLoading ? (
           <Skeleton className="h-9 w-full mt-3" />
-        ) : tenantsList && tenantsList.length > 0 ? (
+        ) : !isClient && tenantsList && tenantsList.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -258,7 +286,7 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {filteredNavItems.map((item) => {
-                  const isActive = location.startsWith(item.url);
+                  const isActive = item.url === "/" ? location === "/" : location.startsWith(item.url);
                   const pinned = isPinned(item.url);
                   return (
                     <SidebarMenuItem key={item.title} className="group/pin relative">
@@ -266,7 +294,7 @@ export function AppSidebar() {
                         asChild
                         isActive={isActive}
                       >
-                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase()}`}>
+                        <Link href={item.url} data-testid={`link-nav-${item.title.toLowerCase().replace(/\s+/g, "-")}`}>
                           <item.icon className="h-4 w-4" />
                           <span>{item.title}</span>
                         </Link>

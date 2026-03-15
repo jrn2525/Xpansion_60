@@ -51,6 +51,10 @@ const OnboardingPage = lazy(() => import("@/pages/onboarding"));
 const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
 const TenantBrandingPage = lazy(() => import("@/pages/tenant-branding"));
 const AdminUsersPage = lazy(() => import("@/pages/admin-users"));
+const ClientHomePage = lazy(() => import("@/pages/client-home"));
+const ConsultantClientsPage = lazy(() => import("@/pages/consultant-clients"));
+const MyBusinessPage = lazy(() => import("@/pages/my-business"));
+const ClientSettingsPage = lazy(() => import("@/pages/client-settings"));
 
 function LoadingSkeleton() {
   return (
@@ -64,7 +68,10 @@ function LoadingSkeleton() {
 }
 
 const routeTitles: Record<string, string> = {
-  "/": "Daily Brief | Xpansion Console",
+  "/": "Home | Xpansion Console",
+  "/clients": "Clients | Xpansion Console",
+  "/my-business": "My Business | Xpansion Console",
+  "/settings": "Settings | Xpansion Console",
   "/dashboard": "Dashboard | Xpansion Console",
   "/command-center": "Command Center | Xpansion Console",
   "/portfolio": "Portfolio | Xpansion Console",
@@ -103,10 +110,30 @@ function RouteTitle() {
   return null;
 }
 
+function RoleBasedHome() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.isSuperAdmin === "true";
+  return isSuperAdmin ? <ConsultantClientsPage /> : <ClientHomePage />;
+}
+
+function SuperAdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  const isSuperAdmin = user?.isSuperAdmin === "true";
+  useEffect(() => {
+    if (!isSuperAdmin) setLocation("/");
+  }, [isSuperAdmin, setLocation]);
+  if (!isSuperAdmin) return null;
+  return <Component />;
+}
+
 function AuthenticatedRouter() {
   return (
     <Switch>
-      <Route path="/" component={DailyBriefPage} />
+      <Route path="/" component={RoleBasedHome} />
+      <Route path="/clients">{() => <SuperAdminRoute component={ConsultantClientsPage} />}</Route>
+      <Route path="/my-business" component={MyBusinessPage} />
+      <Route path="/settings" component={ClientSettingsPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/command-center" component={CommandCenterPage} />
       <Route path="/portfolio" component={PortfolioPage} />
