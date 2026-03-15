@@ -190,7 +190,7 @@ export default function DailyBriefPage() {
         <Card>
           <CardContent className="p-8 text-center space-y-3">
             <Shield className="h-10 w-10 mx-auto text-muted-foreground" />
-            <p className="text-muted-foreground">Select a tenant to view your daily brief.</p>
+            <p className="text-muted-foreground">Select a client to view your daily brief.</p>
           </CardContent>
         </Card>
       </div>

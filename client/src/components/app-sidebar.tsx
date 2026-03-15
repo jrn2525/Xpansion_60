@@ -112,7 +112,7 @@ const navItems: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, visibleTo: allRoles },
   { title: "Command Center", url: "/command-center", icon: Crosshair, visibleTo: adminOwnerRoles },
   { title: "Portfolio", url: "/portfolio", icon: Briefcase, visibleTo: adminOwnerRoles },
-  { title: "Tenants", url: "/tenants", icon: Building2, visibleTo: adminOwnerRoles },
+  { title: "Businesses", url: "/tenants", icon: Building2, visibleTo: adminOwnerRoles },
   { title: "Locations", url: "/locations", icon: MapPin, visibleTo: allRoles },
   { title: "Metrics", url: "/metrics", icon: BarChart3, visibleTo: allRoles },
   { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck, visibleTo: allRoles },
@@ -230,7 +230,7 @@ export function AppSidebar() {
                 data-testid="button-tenant-selector"
               >
                 <span className="truncate font-medium">
-                  {activeTenant?.name || "Select Tenant"}
+                  {activeTenant?.name || "Select Client"}
                 </span>
                 <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
               </button>

@@ -234,7 +234,7 @@ export default function InboxPage() {
   if (!activeTenantId) {
     return (
       <div className="p-6">
-        <p className="text-muted-foreground" data-testid="text-no-tenant">Select a tenant to view your inbox.</p>
+        <p className="text-muted-foreground" data-testid="text-no-tenant">Select a client to view your inbox.</p>
       </div>
     );
   }

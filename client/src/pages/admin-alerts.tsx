@@ -256,7 +256,7 @@ export default function AdminAlertsPage() {
   const events = eventsResponse?.data || eventsResponse || [];
   const metrics = metricsData || [];
   if (!activeTenantId) {
-    return <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">Select a tenant to manage alerts</div>;
+    return <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">Select a client to manage alerts</div>;
   }
 
   return (

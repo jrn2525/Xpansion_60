@@ -159,7 +159,7 @@ export default function AdminDataQualityPage() {
   if (!activeTenantId) {
     return (
       <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">
-        Select a tenant to manage data quality
+        Select a client to manage data quality
       </div>
     );
   }

@@ -51,7 +51,7 @@ const allPages = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Command Center", url: "/command-center", icon: Crosshair },
   { title: "Portfolio", url: "/portfolio", icon: Briefcase },
-  { title: "Tenants", url: "/tenants", icon: Building2 },
+  { title: "Businesses", url: "/tenants", icon: Building2 },
   { title: "Locations", url: "/locations", icon: MapPin },
   { title: "Metrics", url: "/metrics", icon: BarChart3 },
   { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck },
@@ -127,7 +127,7 @@ export function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search pages, tenants, locations, actions..." data-testid="input-command-search" />
+      <CommandInput placeholder="Search pages, businesses, locations, actions..." data-testid="input-command-search" />
       <CommandList>
         <CommandEmpty data-testid="text-command-empty">No results found.</CommandEmpty>
 
@@ -149,7 +149,7 @@ export function CommandPalette() {
 
         {tenantsList && tenantsList.length > 0 && (
           <>
-            <CommandGroup heading="Tenants">
+            <CommandGroup heading="Businesses">
               {tenantsList.map((tenant) => (
                 <CommandItem
                   key={tenant.id}

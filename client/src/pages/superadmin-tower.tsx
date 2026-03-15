@@ -213,7 +213,7 @@ export default function SuperadminTowerPage() {
           <Radio className="h-6 w-6" />
           Command Tower
         </h1>
-        <p className="text-muted-foreground text-sm">Cross-tenant oversight and intervention management</p>
+        <p className="text-muted-foreground text-sm">Cross-client oversight and intervention management</p>
       </div>
 
       {overview && (
@@ -222,7 +222,7 @@ export default function SuperadminTowerPage() {
             <CardContent className="p-4 text-center">
               <Building2 className="h-5 w-5 mx-auto text-muted-foreground mb-1" />
               <p className="text-2xl font-bold" data-testid="text-total-tenants">{overview.totalTenants}</p>
-              <p className="text-xs text-muted-foreground">Tenants</p>
+              <p className="text-xs text-muted-foreground">Clients</p>
             </CardContent>
           </Card>
           <Card>
@@ -310,7 +310,7 @@ export default function SuperadminTowerPage() {
                         size="sm"
                         onClick={() => quickSwitch(client.tenantId)}
                         data-testid={`button-switch-${client.tenantId}`}
-                        title="Switch to this tenant"
+                        title="Switch to this client"
                       >
                         <ExternalLink className="h-4 w-4" />
                       </Button>
@@ -344,7 +344,7 @@ export default function SuperadminTowerPage() {
       <Card>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <CardTitle className="text-base">Tenant Leaderboard</CardTitle>
+            <CardTitle className="text-base">Client Leaderboard</CardTitle>
             <div className="flex items-center gap-2 flex-wrap">
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-36" data-testid="select-sort-by">
@@ -378,13 +378,13 @@ export default function SuperadminTowerPage() {
               {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12" />)}
             </div>
           ) : tenants.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4" data-testid="text-no-tenants">No tenants found matching filters.</p>
+            <p className="text-muted-foreground text-center py-4" data-testid="text-no-tenants">No clients found matching filters.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tenant</TableHead>
+                    <TableHead>Client</TableHead>
                     <TableHead>Locations</TableHead>
                     <TableHead>Avg Risk</TableHead>
                     <TableHead>Risk Level</TableHead>

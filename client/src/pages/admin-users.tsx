@@ -268,13 +268,13 @@ export default function AdminUsersPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="newTenant">Assign to Tenant</Label>
+              <Label htmlFor="newTenant">Assign to Business</Label>
               <Select value={newTenantId} onValueChange={setNewTenantId}>
                 <SelectTrigger data-testid="select-new-tenant">
-                  <SelectValue placeholder="Select a tenant (optional)" />
+                  <SelectValue placeholder="Select a business (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">No tenant assignment</SelectItem>
+                  <SelectItem value="none">No business assignment</SelectItem>
                   {tenants?.map((t) => (
                     <SelectItem key={t.id} value={String(t.id)}>
                       {t.name}
@@ -286,7 +286,7 @@ export default function AdminUsersPage() {
 
             {newTenantId && newTenantId !== "none" && (
               <div className="space-y-2">
-                <Label htmlFor="newRole">Tenant Role</Label>
+                <Label htmlFor="newRole">Business Role</Label>
                 <Select value={newRole} onValueChange={setNewRole}>
                   <SelectTrigger data-testid="select-new-role">
                     <SelectValue />

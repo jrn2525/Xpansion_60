@@ -232,7 +232,7 @@ export default function AdminImportsPage() {
   const templates = templatesResponse?.data || templatesResponse || [];
 
   if (!activeTenantId) {
-    return <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">Select a tenant to manage imports</div>;
+    return <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">Select a client to manage imports</div>;
   }
 
   return (

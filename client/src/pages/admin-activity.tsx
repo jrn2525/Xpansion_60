@@ -102,7 +102,7 @@ function TenantActivityTab() {
   const logs = logsResponse?.data || logsResponse || [];
 
   if (!activeTenantId) {
-    return <div className="py-8 text-center text-muted-foreground" data-testid="text-no-tenant">Select a tenant to view activity</div>;
+    return <div className="py-8 text-center text-muted-foreground" data-testid="text-no-tenant">Select a client to view activity</div>;
   }
 
   return (
@@ -112,7 +112,7 @@ function TenantActivityTab() {
           <SelectTrigger className="w-48" data-testid="filter-tenant-entity-type"><SelectValue placeholder="All entity types" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All entity types</SelectItem>
-            <SelectItem value="tenant">Tenant</SelectItem>
+            <SelectItem value="tenant">Business</SelectItem>
             <SelectItem value="location">Location</SelectItem>
             <SelectItem value="metric_definition">Metric</SelectItem>
             <SelectItem value="metric_threshold">Threshold</SelectItem>
@@ -237,7 +237,7 @@ function SystemActivityTab() {
                 <SelectTrigger data-testid="filter-entity-type"><SelectValue placeholder="All types" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All types</SelectItem>
-                  <SelectItem value="tenant">Tenant</SelectItem>
+                  <SelectItem value="tenant">Business</SelectItem>
                   <SelectItem value="location">Location</SelectItem>
                   <SelectItem value="metric_definition">Metric</SelectItem>
                   <SelectItem value="metric_threshold">Threshold</SelectItem>
@@ -336,7 +336,7 @@ function SystemActivityTab() {
                     <TableHead>Action</TableHead>
                     <TableHead>Entity Type</TableHead>
                     <TableHead>Entity ID</TableHead>
-                    <TableHead>Tenant</TableHead>
+                    <TableHead>Business</TableHead>
                     <TableHead>Details</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -437,7 +437,7 @@ export default function AdminActivityPage() {
         <TabsList data-testid="tabs-activity">
           <TabsTrigger value="tenant" data-testid="tab-tenant-activity">
             <History className="h-4 w-4 mr-1.5" />
-            Tenant Activity
+            Business Activity
           </TabsTrigger>
           <TabsTrigger value="system" data-testid="tab-system-activity">
             <Activity className="h-4 w-4 mr-1.5" />

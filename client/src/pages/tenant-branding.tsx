@@ -66,7 +66,7 @@ export default function TenantBrandingPage() {
   if (!activeTenantId) {
     return (
       <div className="p-6" data-testid="branding-no-tenant">
-        <p className="text-muted-foreground">Select a tenant to manage branding.</p>
+        <p className="text-muted-foreground">Select a client to manage branding.</p>
       </div>
     );
   }

@@ -82,7 +82,7 @@ const routeTitles: Record<string, string> = {
   "/dashboard": "Dashboard | Xpansion Console",
   "/command-center": "Command Center | Xpansion Console",
   "/portfolio": "Portfolio | Xpansion Console",
-  "/tenants": "Tenants | Xpansion Console",
+  "/tenants": "Businesses | Xpansion Console",
   "/locations": "Locations | Xpansion Console",
   "/metrics": "Metrics | Xpansion Console",
   "/scorecards": "Scorecards | Xpansion Console",

@@ -234,7 +234,7 @@ export default function CommandCenterPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold mb-2" data-testid="text-command-center-title">Command Center</h1>
-        <p className="text-muted-foreground">Select a tenant to view your weekly command center.</p>
+        <p className="text-muted-foreground">Select a client to view your weekly command center.</p>
       </div>
     );
   }

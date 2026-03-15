@@ -114,9 +114,9 @@ export default function PortfolioPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
         <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold mb-2" data-testid="text-no-tenant-title">No Tenant Selected</h2>
+        <h2 className="text-xl font-semibold mb-2" data-testid="text-no-tenant-title">No Client Selected</h2>
         <p className="text-muted-foreground max-w-md" data-testid="text-no-tenant">
-          Select a tenant from the sidebar to view the portfolio dashboard.
+          Select a client from the sidebar to view the portfolio dashboard.
         </p>
       </div>
     );

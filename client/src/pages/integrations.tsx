@@ -74,7 +74,7 @@ export default function IntegrationsPage() {
   if (!activeTenantId) {
     return (
       <div className="p-6 text-center text-muted-foreground" data-testid="no-tenant">
-        Select a tenant to manage integrations.
+        Select a client to manage integrations.
       </div>
     );
   }

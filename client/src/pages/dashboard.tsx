@@ -86,9 +86,9 @@ export default function DashboardPage() {
         <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 mb-4">
           <Building2 className="h-6 w-6 text-primary" />
         </div>
-        <h2 className="text-xl font-semibold mb-2">No Tenant Selected</h2>
+        <h2 className="text-xl font-semibold mb-2">No Client Selected</h2>
         <p className="text-muted-foreground max-w-md">
-          Select a tenant from the sidebar or create one to get started.
+          Select a client from the sidebar or create one to get started.
         </p>
       </div>
     );
@@ -160,7 +160,7 @@ export default function DashboardPage() {
             testId="text-stat-scorecards"
           />
           <StatCard
-            title="Tenant Type"
+            title="Business Type"
             value={
               tenant?.type === "multi_location" ? "Multi" : "Single"
             }

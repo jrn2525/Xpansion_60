@@ -399,9 +399,9 @@ export default function MetricsPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-8">
         <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold mb-2">No Tenant Selected</h2>
+        <h2 className="text-xl font-semibold mb-2">No Client Selected</h2>
         <p className="text-muted-foreground">
-          Select a tenant from the sidebar to manage metrics.
+          Select a client from the sidebar to manage metrics.
         </p>
       </div>
     );

@@ -214,7 +214,7 @@ export default function AdminOpsPage() {
                     <TableHead>Job Key</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Duration</TableHead>
-                    <TableHead>Tenant</TableHead>
+                    <TableHead>Business</TableHead>
                     <TableHead>Started</TableHead>
                     <TableHead>Completed</TableHead>
                     <TableHead>Error</TableHead>

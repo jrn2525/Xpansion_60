@@ -156,7 +156,7 @@ export default function WeeklyPlansPage() {
   }
 
   if (!activeTenantId) {
-    return <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">Select a tenant to manage weekly plans</div>;
+    return <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">Select a client to manage weekly plans</div>;
   }
 
   if (isClient) {

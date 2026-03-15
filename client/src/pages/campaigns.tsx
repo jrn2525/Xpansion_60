@@ -415,7 +415,7 @@ export default function CampaignsPage() {
   if (!currentTenantId) {
     return (
       <div className="p-6">
-        <p className="text-muted-foreground" data-testid="text-no-tenant">Select a tenant to view campaigns.</p>
+        <p className="text-muted-foreground" data-testid="text-no-tenant">Select a client to view campaigns.</p>
       </div>
     );
   }

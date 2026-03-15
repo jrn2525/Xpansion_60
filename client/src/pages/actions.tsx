@@ -232,7 +232,7 @@ export default function ActionsPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold" data-testid="text-actions-title">Actions</h1>
-        <p className="text-muted-foreground mt-1">Select a tenant to manage actions.</p>
+        <p className="text-muted-foreground mt-1">Select a client to manage actions.</p>
       </div>
     );
   }

@@ -134,7 +134,7 @@ export default function AdminNotificationsPage() {
   if (!activeTenantId) {
     return (
       <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">
-        Select a tenant to manage notification settings
+        Select a client to manage notification settings
       </div>
     );
   }

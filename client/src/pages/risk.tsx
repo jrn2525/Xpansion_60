@@ -118,7 +118,7 @@ export default function RiskDashboardPage() {
   if (!activeTenantId) {
     return (
       <div className="p-6 text-center text-muted-foreground" data-testid="text-no-tenant">
-        Select a tenant to view risk dashboard
+        Select a client to view risk dashboard
       </div>
     );
   }

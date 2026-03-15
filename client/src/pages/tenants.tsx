@@ -72,7 +72,7 @@ export default function TenantsPage() {
       setActiveTenantId(tenant.id);
       setDialogOpen(false);
       resetForm();
-      toast({ title: "Tenant created successfully" });
+      toast({ title: "Business created successfully" });
     },
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
@@ -93,7 +93,7 @@ export default function TenantsPage() {
       setDialogOpen(false);
       setEditingTenant(null);
       resetForm();
-      toast({ title: "Tenant updated successfully" });
+      toast({ title: "Business updated successfully" });
     },
     onError: (error: Error) => {
       if (isUnauthorizedError(error)) {
@@ -110,7 +110,7 @@ export default function TenantsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/tenants"] });
-      toast({ title: "Tenant deleted" });
+      toast({ title: "Business deleted" });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -154,7 +154,7 @@ export default function TenantsPage() {
       <div className="flex items-center justify-between gap-1">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-tenants-title">
-            Tenants
+            Businesses
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
             Manage franchise brands and organizations
@@ -164,13 +164,13 @@ export default function TenantsPage() {
           <DialogTrigger asChild>
             <Button onClick={openCreate} data-testid="button-create-tenant">
               <Plus className="h-4 w-4 mr-2" />
-              New Tenant
+              New Business
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                {editingTenant ? "Edit Tenant" : "Create Tenant"}
+                {editingTenant ? "Edit Business" : "Create Business"}
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -243,8 +243,8 @@ export default function TenantsPage() {
                 {isPending
                   ? "Saving..."
                   : editingTenant
-                    ? "Update Tenant"
-                    : "Create Tenant"}
+                    ? "Update Business"
+                    : "Create Business"}
               </Button>
             </form>
           </DialogContent>
@@ -266,13 +266,13 @@ export default function TenantsPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="font-semibold text-lg mb-1">No tenants yet</h3>
+            <h3 className="font-semibold text-lg mb-1">No businesses yet</h3>
             <p className="text-muted-foreground text-sm mb-4">
-              Create your first tenant to get started
+              Create your first business to get started
             </p>
             <Button onClick={openCreate}>
               <Plus className="h-4 w-4 mr-2" />
-              Create Tenant
+              Create Business
             </Button>
           </CardContent>
         </Card>
@@ -323,7 +323,7 @@ export default function TenantsPage() {
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Tenant</AlertDialogTitle>
+                        <AlertDialogTitle>Delete Business</AlertDialogTitle>
                         <AlertDialogDescription>
                           This will permanently delete "{tenant.name}" and all
                           associated data. This action cannot be undone.

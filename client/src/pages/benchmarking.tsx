@@ -152,7 +152,7 @@ export default function BenchmarkingPage() {
     return (
       <div className="p-6">
         <h1 className="text-2xl font-bold" data-testid="text-benchmarking-title">Benchmarking</h1>
-        <p className="text-muted-foreground mt-1">Select a tenant to view location rankings.</p>
+        <p className="text-muted-foreground mt-1">Select a client to view location rankings.</p>
       </div>
     );
   }

@@ -179,7 +179,7 @@ export default function ApiWizardPage() {
   if (!activeTenantId) {
     return (
       <div className="p-6 text-center text-muted-foreground" data-testid="no-tenant">
-        Select a tenant to create an integration.
+        Select a client to create an integration.
       </div>
     );
   }

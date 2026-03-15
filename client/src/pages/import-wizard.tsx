@@ -199,7 +199,7 @@ export default function ImportWizardPage() {
   if (!activeTenantId) {
     return (
       <div className="p-6 text-center text-muted-foreground" data-testid="no-tenant">
-        Select a tenant to start importing.
+        Select a client to start importing.
       </div>
     );
   }
