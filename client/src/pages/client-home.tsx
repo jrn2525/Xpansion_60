@@ -22,7 +22,6 @@ import {
   ListChecks,
   BookOpen,
   AlertCircle,
-  Newspaper,
 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import type { Location, MetricDefinition, MetricValue, ScorecardTemplate, Action, Goal } from "@shared/schema";

@@ -93,7 +93,12 @@ function getQuickDatePresets(): { label: string; value: string }[] {
   const daysUntilFriday = dayOfWeek <= 5 ? 5 - dayOfWeek : 6;
   endOfWeek.setDate(endOfWeek.getDate() + daysUntilFriday);
 
-  const fmt = (d: Date) => d.toISOString().split("T")[0];
+  const fmt = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
   return [
     { label: "Today", value: fmt(today) },
     { label: "+3 days", value: fmt(plus3) },

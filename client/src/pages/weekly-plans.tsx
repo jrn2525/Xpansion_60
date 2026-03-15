@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Calendar, Plus, CheckCircle, XCircle, ArrowRight, Sparkles, User, Clock, Circle, ListChecks } from "lucide-react";
+import { Calendar, CheckCircle, XCircle, ArrowRight, Sparkles, User, Clock, Circle, ListChecks } from "lucide-react";
 import { useTenantStore } from "@/lib/tenant-store";
 import { useAuth } from "@/hooks/use-auth";
 import { severityColors, statusColors } from "@/lib/semantic-colors";
