@@ -12,6 +12,7 @@ import {
   Settings,
   UserCheck,
   BookOpen,
+  ClipboardList,
 } from "lucide-react";
 import {
   Sidebar,
@@ -63,6 +64,7 @@ const operationsItems: NavItem[] = [];
 
 const adminItems: NavItem[] = [
   { title: "Programs", url: "/admin/programs", icon: BookOpen, visibleTo: [], superadminOnly: true },
+  { title: "Enrollments", url: "/admin/enrollments", icon: ClipboardList, visibleTo: [], superadminOnly: true },
   { title: "Users", url: "/admin/users", icon: Users, visibleTo: [], superadminOnly: true },
   { title: "Notifications", url: "/admin/notifications", icon: Mail, visibleTo: adminOwnerRoles },
   { title: "Activity", url: "/admin/activity", icon: Activity, visibleTo: adminOwnerRoles },
