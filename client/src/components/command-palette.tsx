@@ -33,21 +33,13 @@ const allPages = [
   { title: "Onboarding", url: "/onboarding", icon: Building2 },
 ];
 
-const quickActions: { title: string; url: string; icon: typeof Search }[] = [];
-
 export function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [, setLocation] = useLocation();
   const { setActiveTenantId } = useTenantStore();
-  const activeTenantId = useTenantStore().activeTenantId;
 
   const { data: tenantsList } = useQuery<Tenant[]>({
     queryKey: ["/api/tenants"],
-  });
-
-  const { data: locationsData } = useQuery<any[]>({
-    queryKey: [`/api/tenants/${activeTenantId}/locations`],
-    enabled: !!activeTenantId,
   });
 
   useEffect(() => {
@@ -79,7 +71,7 @@ export function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Search pages, businesses, locations, actions..." data-testid="input-command-search" />
+      <CommandInput placeholder="Search pages, businesses..." data-testid="input-command-search" />
       <CommandList>
         <CommandEmpty data-testid="text-command-empty">No results found.</CommandEmpty>
 
@@ -97,10 +89,9 @@ export function CommandPalette() {
           ))}
         </CommandGroup>
 
-        <CommandSeparator />
-
         {tenantsList && tenantsList.length > 0 && (
           <>
+            <CommandSeparator />
             <CommandGroup heading="Businesses">
               {tenantsList.map((tenant) => (
                 <CommandItem
@@ -114,42 +105,8 @@ export function CommandPalette() {
                 </CommandItem>
               ))}
             </CommandGroup>
-            <CommandSeparator />
           </>
         )}
-
-        {locationsData && locationsData.length > 0 && (
-          <>
-            <CommandGroup heading="Locations">
-              {locationsData.map((loc: any) => (
-                <CommandItem
-                  key={loc.id}
-                  value={`location ${loc.name}`}
-                  onSelect={() => navigateTo("/locations")}
-                  data-testid={`command-item-location-${loc.id}`}
-                >
-                  <MapPin className="h-4 w-4" />
-                  <span>{loc.name}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-            <CommandSeparator />
-          </>
-        )}
-
-        <CommandGroup heading="Quick Actions">
-          {quickActions.map((action) => (
-            <CommandItem
-              key={action.title}
-              value={action.title}
-              onSelect={() => navigateTo(action.url)}
-              data-testid={`command-item-action-${action.title.toLowerCase().replace(/\s+/g, "-")}`}
-            >
-              <action.icon className="h-4 w-4" />
-              <span>{action.title}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
       </CommandList>
     </CommandDialog>
   );
