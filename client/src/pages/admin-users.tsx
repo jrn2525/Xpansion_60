@@ -17,6 +17,13 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertDialog,
   AlertDialogContent,
   AlertDialogHeader,
@@ -54,6 +61,8 @@ import {
   Trash2,
 } from "lucide-react";
 
+type UserType = "admin" | "coach" | "client";
+
 interface AppUser {
   id: string;
   email: string | null;
@@ -62,10 +71,22 @@ interface AppUser {
   phone: string | null;
   businessName: string | null;
   isSuperAdmin: string | null;
+  userType: UserType | null;
   suspendedAt: string | null;
   lastLoginAt: string | null;
   createdAt: string | null;
 }
+
+function effectiveType(u: AppUser): UserType {
+  if (u.userType) return u.userType;
+  return u.isSuperAdmin === "true" ? "admin" : "client";
+}
+
+const USER_TYPE_LABELS: Record<UserType, string> = {
+  admin: "Admin",
+  coach: "Coach",
+  client: "Client",
+};
 
 function displayName(u: AppUser): string {
   const name = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
@@ -82,6 +103,7 @@ export default function AdminUsersPage() {
   const [newPhone, setNewPhone] = useState("");
   const [newBusinessName, setNewBusinessName] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [newUserType, setNewUserType] = useState<UserType>("client");
 
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
   const [editFirstName, setEditFirstName] = useState("");
@@ -90,6 +112,7 @@ export default function AdminUsersPage() {
   const [editPhone, setEditPhone] = useState("");
   const [editBusinessName, setEditBusinessName] = useState("");
   const [editPassword, setEditPassword] = useState("");
+  const [editUserType, setEditUserType] = useState<UserType>("client");
 
   const [deletingUser, setDeletingUser] = useState<AppUser | null>(null);
 
@@ -106,6 +129,7 @@ export default function AdminUsersPage() {
         phone: newPhone,
         businessName: newBusinessName,
         password: newPassword,
+        userType: newUserType,
       });
       return res.json();
     },
@@ -135,6 +159,7 @@ export default function AdminUsersPage() {
         email: editEmail,
         phone: editPhone,
         businessName: editBusinessName,
+        userType: editUserType,
       };
       if (editPassword) payload.password = editPassword;
       const res = await apiRequest("PUT", `/api/admin/users/${editingUser.id}`, payload);
@@ -202,6 +227,7 @@ export default function AdminUsersPage() {
     setNewPhone("");
     setNewBusinessName("");
     setNewPassword("");
+    setNewUserType("client");
   }
 
   function openEdit(u: AppUser) {
@@ -211,6 +237,7 @@ export default function AdminUsersPage() {
     setEditEmail(u.email ?? "");
     setEditPhone(u.phone ?? "");
     setEditBusinessName(u.businessName ?? "");
+    setEditUserType(effectiveType(u));
     setEditPassword("");
   }
 
@@ -266,6 +293,7 @@ export default function AdminUsersPage() {
                     <TableHead>Email</TableHead>
                     <TableHead>Phone</TableHead>
                     <TableHead>Business</TableHead>
+                    <TableHead>User Type</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Last login</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
@@ -274,7 +302,8 @@ export default function AdminUsersPage() {
                 <TableBody>
                   {list.map((u) => {
                     const suspended = !!u.suspendedAt;
-                    const isAdmin = u.isSuperAdmin === "true";
+                    const type = effectiveType(u);
+                    const isAdmin = type === "admin";
                     return (
                       <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
                         <TableCell className="font-medium">{displayName(u)}</TableCell>
@@ -289,9 +318,14 @@ export default function AdminUsersPage() {
                           {isAdmin ? (
                             <Badge className="bg-primary/15 text-primary">
                               <Shield className="h-3 w-3 mr-1" />
-                              Admin
+                              {USER_TYPE_LABELS[type]}
                             </Badge>
-                          ) : suspended ? (
+                          ) : (
+                            <Badge variant="outline">{USER_TYPE_LABELS[type]}</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {suspended ? (
                             <Badge variant="outline" className="border-amber-500 text-amber-600">
                               Suspended
                             </Badge>
@@ -449,6 +483,29 @@ export default function AdminUsersPage() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="newUserType">User Type</Label>
+              <Select
+                value={newUserType}
+                onValueChange={(v) => setNewUserType(v as UserType)}
+              >
+                <SelectTrigger id="newUserType" data-testid="select-new-user-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="client">
+                    Client — enrolled in coaching programs
+                  </SelectItem>
+                  <SelectItem value="coach">
+                    Coach — assistant; same access as Client for now
+                  </SelectItem>
+                  <SelectItem value="admin">
+                    Admin — full system access
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="newPassword">Password</Label>
               <Input
                 id="newPassword"
@@ -577,6 +634,29 @@ export default function AdminUsersPage() {
                   onChange={(e) => setEditBusinessName(e.target.value)}
                   data-testid="input-edit-business-name"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="editUserType">User Type</Label>
+                <Select
+                  value={editUserType}
+                  onValueChange={(v) => setEditUserType(v as UserType)}
+                >
+                  <SelectTrigger id="editUserType" data-testid="select-edit-user-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client">Client</SelectItem>
+                    <SelectItem value="coach">Coach</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+                {effectiveType(editingUser) === "admin" && editUserType !== "admin" && (
+                  <p className="text-xs text-amber-600">
+                    Demoting an admin will remove their access to user management and
+                    other admin pages.
+                  </p>
+                )}
               </div>
 
               <div className="space-y-2">

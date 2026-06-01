@@ -27,6 +27,7 @@ export const users = pgTable("users", {
   phone: varchar("phone"),
   jobTitle: varchar("job_title"),
   businessName: varchar("business_name"),
+  userType: varchar("user_type"),
   suspendedAt: timestamp("suspended_at"),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),

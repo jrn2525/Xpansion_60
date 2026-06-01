@@ -5,7 +5,13 @@ import { storage } from "../../storage";
 import bcrypt from "bcryptjs";
 import { db } from "../../db";
 import { users } from "@shared/models/auth";
-import { eq } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
+
+const USER_TYPES = ["admin", "coach", "client"] as const;
+type UserType = (typeof USER_TYPES)[number];
+function isUserType(value: unknown): value is UserType {
+  return typeof value === "string" && (USER_TYPES as readonly string[]).includes(value);
+}
 import { randomUUID } from "crypto";
 import { sendEmail } from "../../services/notifications";
 
@@ -133,6 +139,18 @@ export async function seedSuperAdmin(): Promise<void> {
     return;
   }
 
+  // Backfill userType for any legacy rows missing it. Existing super admins
+  // become 'admin'; everyone else becomes 'client'. Idempotent.
+  try {
+    await db
+      .update(users)
+      .set({ userType: "admin" })
+      .where(and(isNull(users.userType), eq(users.isSuperAdmin, "true")));
+    await db.update(users).set({ userType: "client" }).where(isNull(users.userType));
+  } catch (e) {
+    console.error("[SEED] userType backfill failed:", e);
+  }
+
   const [existing] = await db.select().from(users).where(eq(users.email, email));
   if (existing) {
     const updates: any = {};
@@ -146,6 +164,9 @@ export async function seedSuperAdmin(): Promise<void> {
     }
     if (existing.isSuperAdmin !== "true") {
       updates.isSuperAdmin = "true";
+    }
+    if ((existing as any).userType !== "admin") {
+      updates.userType = "admin";
     }
     if (Object.keys(updates).length > 0) {
       updates.updatedAt = new Date();
@@ -166,6 +187,7 @@ export async function seedSuperAdmin(): Promise<void> {
     lastName: "User",
     passwordHash: hash,
     isSuperAdmin: "true",
+    userType: "admin",
   });
 
   const allTenants = await storage.getTenants();
@@ -332,6 +354,7 @@ export function registerAuthRoutes(app: Express): void {
         phone: users.phone,
         businessName: users.businessName,
         isSuperAdmin: users.isSuperAdmin,
+        userType: users.userType,
         suspendedAt: users.suspendedAt,
         lastLoginAt: users.lastLoginAt,
         createdAt: users.createdAt,
@@ -423,12 +446,15 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/admin/users", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
     try {
-      const { email, firstName, lastName, phone, businessName, password } = req.body;
+      const { email, firstName, lastName, phone, businessName, password, userType } = req.body;
       if (!email || !password) {
         return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Email and password are required" } });
       }
       if (password.length < 8) {
         return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Password must be at least 8 characters" } });
+      }
+      if (userType !== undefined && !isUserType(userType)) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: `userType must be one of: ${USER_TYPES.join(", ")}` } });
       }
 
       const [existing] = await db.select().from(users).where(eq(users.email, email));
@@ -441,6 +467,7 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid email format" } });
       }
 
+      const effectiveType: UserType = (userType as UserType | undefined) ?? "client";
       const passwordHash = await bcrypt.hash(password, 10);
       const userId = `user-${randomUUID()}`;
       const [newUser] = await db.insert(users).values({
@@ -451,7 +478,8 @@ export function registerAuthRoutes(app: Express): void {
         phone: phone || null,
         businessName: businessName || null,
         passwordHash,
-        isSuperAdmin: "false",
+        isSuperAdmin: effectiveType === "admin" ? "true" : "false",
+        userType: effectiveType,
         mustChangePassword: true,
       }).returning();
 
@@ -460,6 +488,7 @@ export function registerAuthRoutes(app: Express): void {
         newUserId: userId,
         email,
         businessName: businessName || null,
+        userType: effectiveType,
       });
 
       const appUrl = process.env.APP_URL || `https://${req.get("host")}`;
@@ -485,7 +514,7 @@ export function registerAuthRoutes(app: Express): void {
   app.put("/api/admin/users/:id", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
     try {
       const userId = req.params.id;
-      const { email, firstName, lastName, phone, businessName, password } = req.body;
+      const { email, firstName, lastName, phone, businessName, password, userType } = req.body;
 
       const [target] = await db.select().from(users).where(eq(users.id, userId));
       if (!target) {
@@ -510,6 +539,16 @@ export function registerAuthRoutes(app: Express): void {
       if (lastName !== undefined) updates.lastName = lastName || null;
       if (phone !== undefined) updates.phone = phone || null;
       if (businessName !== undefined) updates.businessName = businessName || null;
+      if (userType !== undefined) {
+        if (!isUserType(userType)) {
+          return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: `userType must be one of: ${USER_TYPES.join(", ")}` } });
+        }
+        if (userId === req.user.claims.sub && userType !== "admin") {
+          return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "You can't change your own user type away from admin" } });
+        }
+        updates.userType = userType;
+        updates.isSuperAdmin = userType === "admin" ? "true" : "false";
+      }
       if (password) {
         if (password.length < 8) {
           return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Password must be at least 8 characters" } });
