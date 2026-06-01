@@ -1,9 +1,7 @@
 import { useLocation, Link } from "wouter";
 import { Logo } from "@/components/logo";
 import {
-  Building2,
   LogOut,
-  ChevronDown,
   Mail,
   Sun,
   Moon,
@@ -26,21 +24,13 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/components/theme-provider";
 import { useQuery } from "@tanstack/react-query";
 import type { Tenant } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
 import { usePreferences } from "@/hooks/use-preferences";
-import { useTenantBranding } from "@/hooks/use-tenant-branding";
 import type { LucideIcon } from "lucide-react";
 
 type TenantRole = "viewer" | "manager" | "admin" | "owner";
@@ -55,8 +45,6 @@ interface NavItem {
   visibleTo: TenantRole[];
   superadminOnly?: boolean;
 }
-
-type TenantWithRole = Tenant & { role?: string };
 
 const clientNavItems: NavItem[] = [
   { title: "Home", url: "/", icon: Home, visibleTo: allRoles },
@@ -96,35 +84,30 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { pinnedPages, isPinned, togglePin, isLoading: prefsLoading } = usePreferences();
+  const { pinnedPages, isPinned, togglePin } = usePreferences();
 
-  const { data: tenantsList, isLoading: tenantsLoading } = useQuery<TenantWithRole[]>({
+  const { data: tenantsList } = useQuery<Tenant[]>({
     queryKey: ["/api/tenants"],
   });
 
   const { activeTenantId, setActiveTenantId } = useTenantStore();
-
-  const activeTenant = tenantsList?.find((t) => t.id === activeTenantId);
 
   if (tenantsList && tenantsList.length > 0 && !activeTenantId) {
     setActiveTenantId(tenantsList[0].id);
   }
 
   const isSuperAdmin = user?.isSuperAdmin === "true";
-  const activeRole = (activeTenant?.role as TenantRole) || null;
-  const { logoUrl } = useTenantBranding();
-
   const isClient = !isSuperAdmin;
 
   const filteredNavItems = isClient
     ? clientNavItems
-    : filterItemsByRole(navItems, activeRole, isSuperAdmin);
+    : filterItemsByRole(navItems, null, isSuperAdmin);
   const filteredOperationsItems = isClient
     ? clientOperationsItems
-    : filterItemsByRole(operationsItems, activeRole, isSuperAdmin);
+    : filterItemsByRole(operationsItems, null, isSuperAdmin);
   const filteredAdminItems = isClient
     ? []
-    : filterItemsByRole(adminItems, activeRole, isSuperAdmin);
+    : filterItemsByRole(adminItems, null, isSuperAdmin);
 
   const initials = user
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"
@@ -135,51 +118,15 @@ export function AppSidebar() {
     .filter((item): item is NavItem => {
       if (!item) return false;
       if (item.superadminOnly) return isSuperAdmin;
-      if (isSuperAdmin) return true;
-      if (!activeRole) return false;
-      return item.visibleTo.includes(activeRole);
+      return true;
     });
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2" data-testid="text-app-title">
-          {logoUrl ? (
-            <img src={logoUrl} alt={activeTenant?.name || "Logo"} className="h-8 w-auto max-w-[160px] object-contain" data-testid="tenant-logo" />
-          ) : (
-            <Logo className="h-8 w-auto" />
-          )}
+          <Logo className="h-8 w-auto" />
         </div>
-
-        {tenantsLoading ? (
-          <Skeleton className="h-9 w-full mt-3" />
-        ) : !isClient && tenantsList && tenantsList.length > 0 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                className="flex items-center justify-between gap-1 w-full mt-3 px-3 py-2 rounded-md bg-sidebar-accent text-sm text-sidebar-accent-foreground hover-elevate"
-                data-testid="button-tenant-selector"
-              >
-                <span className="truncate font-medium">
-                  {activeTenant?.name || "Select Client"}
-                </span>
-                <ChevronDown className="h-4 w-4 shrink-0 opacity-60" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              {tenantsList.map((t) => (
-                <DropdownMenuItem
-                  key={t.id}
-                  onClick={() => setActiveTenantId(t.id)}
-                  data-testid={`menu-item-tenant-${t.id}`}
-                >
-                  <Building2 className="mr-2 h-4 w-4" />
-                  {t.name}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : null}
       </SidebarHeader>
 
       <SidebarContent>
