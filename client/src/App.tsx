@@ -21,45 +21,14 @@ import { ShortcutsDialog } from "@/components/shortcuts-dialog";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const LandingPage = lazy(() => import("@/pages/landing"));
-const DashboardPage = lazy(() => import("@/pages/dashboard"));
-const TenantsPage = lazy(() => import("@/pages/tenants"));
-const LocationsPage = lazy(() => import("@/pages/locations"));
-const MetricsPage = lazy(() => import("@/pages/metrics"));
-const ScorecardsPage = lazy(() => import("@/pages/scorecards"));
-const TrendsPage = lazy(() => import("@/pages/trends"));
-const AdminImportsPage = lazy(() => import("@/pages/admin-imports"));
-const AdminAlertsPage = lazy(() => import("@/pages/admin-alerts"));
-const AdminReportsPage = lazy(() => import("@/pages/admin-reports"));
 const AdminNotificationsPage = lazy(() => import("@/pages/admin-notifications"));
-const AdminDataQualityPage = lazy(() => import("@/pages/admin-data-quality"));
-const PortfolioPage = lazy(() => import("@/pages/portfolio"));
-const CommandCenterPage = lazy(() => import("@/pages/command-center"));
-const ActionsPage = lazy(() => import("@/pages/actions"));
-const GoalsPage = lazy(() => import("@/pages/goals"));
-const BenchmarkingPage = lazy(() => import("@/pages/benchmarking"));
-const PlaybooksPage = lazy(() => import("@/pages/playbooks"));
-const AdminDigestsPage = lazy(() => import("@/pages/admin-digests"));
-const AdminSecurityPage = lazy(() => import("@/pages/admin-security"));
 const AdminActivityPage = lazy(() => import("@/pages/admin-activity"));
-const AdminOpsPage = lazy(() => import("@/pages/admin-ops"));
-const RiskPage = lazy(() => import("@/pages/risk"));
-const WeeklyPlansPage = lazy(() => import("@/pages/weekly-plans"));
 const SuperadminTowerPage = lazy(() => import("@/pages/superadmin-tower"));
-const CampaignsPage = lazy(() => import("@/pages/campaigns"));
-const InboxPage = lazy(() => import("@/pages/inbox"));
 const OnboardingPage = lazy(() => import("@/pages/onboarding"));
-const DailyBriefPage = lazy(() => import("@/pages/daily-brief"));
-const TenantBrandingPage = lazy(() => import("@/pages/tenant-branding"));
 const AdminUsersPage = lazy(() => import("@/pages/admin-users"));
 const ClientHomePage = lazy(() => import("@/pages/client-home"));
 const ConsultantClientsPage = lazy(() => import("@/pages/consultant-clients"));
-const MyBusinessPage = lazy(() => import("@/pages/my-business"));
 const ClientSettingsPage = lazy(() => import("@/pages/client-settings"));
-const EnterDataPage = lazy(() => import("@/pages/enter-data"));
-const MyScorecardPage = lazy(() => import("@/pages/my-scorecard"));
-const IntegrationsPage = lazy(() => import("@/pages/integrations"));
-const ImportWizardPage = lazy(() => import("@/pages/import-wizard"));
-const ApiWizardPage = lazy(() => import("@/pages/api-wizard"));
 
 function LoadingSkeleton() {
   return (
@@ -73,43 +42,14 @@ function LoadingSkeleton() {
 }
 
 const routeTitles: Record<string, string> = {
-  "/": "Home | Xpansion Console",
-  "/clients": "Clients | Xpansion Console",
-  "/my-business": "My Business | Xpansion Console",
-  "/enter-data": "Enter Data | Xpansion Console",
-  "/my-scorecard": "My Scorecard | Xpansion Console",
-  "/settings": "Settings | Xpansion Console",
-  "/dashboard": "Dashboard | Xpansion Console",
-  "/command-center": "Command Center | Xpansion Console",
-  "/portfolio": "Portfolio | Xpansion Console",
-  "/tenants": "Businesses | Xpansion Console",
-  "/locations": "Locations | Xpansion Console",
-  "/metrics": "Metrics | Xpansion Console",
-  "/scorecards": "Scorecards | Xpansion Console",
-  "/trends": "Trends | Xpansion Console",
-  "/actions": "Actions | Xpansion Console",
-  "/goals": "Goals | Xpansion Console",
-  "/benchmarking": "Benchmarking | Xpansion Console",
-  "/playbooks": "Playbooks | Xpansion Console",
-  "/admin/imports": "Data Imports | Xpansion Console",
-  "/admin/alerts": "Alert Rules | Xpansion Console",
-  "/admin/reports": "Reports | Xpansion Console",
-  "/admin/notifications": "Notifications | Xpansion Console",
-  "/admin/data-quality": "Data Quality | Xpansion Console",
-  "/admin/digests": "Weekly Digests | Xpansion Console",
-  "/admin/security": "Security | Xpansion Console",
-  "/admin/activity": "Activity Center | Xpansion Console",
-  "/admin/ops": "Ops Health | Xpansion Console",
-  "/risk": "Risk Dashboard | Xpansion Console",
-  "/weekly-plans": "Weekly Plans | Xpansion Console",
-  "/integrations": "Integrations | Xpansion Console",
-  "/integrations/import": "Import Wizard | Xpansion Console",
-  "/integrations/api": "API Integration | Xpansion Console",
-  "/campaigns": "Campaigns | Xpansion Console",
-  "/brief": "Daily Brief | Xpansion Console",
-  "/inbox": "Command Inbox | Xpansion Console",
-  "/superadmin/tower": "Command Tower | Xpansion Console",
-  "/onboarding": "Onboarding | Xpansion Console",
+  "/": "Home | Xpansion 60",
+  "/clients": "Clients | Xpansion 60",
+  "/settings": "Settings | Xpansion 60",
+  "/admin/users": "Users | Xpansion 60",
+  "/admin/notifications": "Notifications | Xpansion 60",
+  "/admin/activity": "Activity | Xpansion 60",
+  "/superadmin/tower": "Command Tower | Xpansion 60",
+  "/onboarding": "Onboarding | Xpansion 60",
 };
 
 function RouteTitle() {
@@ -142,42 +82,11 @@ function AuthenticatedRouter() {
     <Switch>
       <Route path="/" component={RoleBasedHome} />
       <Route path="/clients">{() => <SuperAdminRoute component={ConsultantClientsPage} />}</Route>
-      <Route path="/my-business" component={MyBusinessPage} />
-      <Route path="/enter-data" component={EnterDataPage} />
-      <Route path="/my-scorecard" component={MyScorecardPage} />
       <Route path="/settings" component={ClientSettingsPage} />
-      <Route path="/dashboard" component={DashboardPage} />
-      <Route path="/command-center" component={CommandCenterPage} />
-      <Route path="/portfolio" component={PortfolioPage} />
-      <Route path="/tenants" component={TenantsPage} />
-      <Route path="/locations" component={LocationsPage} />
-      <Route path="/metrics" component={MetricsPage} />
-      <Route path="/scorecards" component={ScorecardsPage} />
-      <Route path="/trends" component={TrendsPage} />
-      <Route path="/actions" component={ActionsPage} />
-      <Route path="/goals" component={GoalsPage} />
-      <Route path="/benchmarking" component={BenchmarkingPage} />
-      <Route path="/playbooks" component={PlaybooksPage} />
-      <Route path="/admin/imports" component={AdminImportsPage} />
-      <Route path="/admin/alerts" component={AdminAlertsPage} />
-      <Route path="/admin/reports" component={AdminReportsPage} />
-      <Route path="/admin/notifications" component={AdminNotificationsPage} />
-      <Route path="/admin/data-quality" component={AdminDataQualityPage} />
-      <Route path="/admin/digests" component={AdminDigestsPage} />
-      <Route path="/admin/security" component={AdminSecurityPage} />
-      <Route path="/admin/activity" component={AdminActivityPage} />
-      <Route path="/admin/ops" component={AdminOpsPage} />
-      <Route path="/risk" component={RiskPage} />
-      <Route path="/weekly-plans" component={WeeklyPlansPage} />
-      <Route path="/campaigns" component={CampaignsPage} />
-      <Route path="/brief" component={DailyBriefPage} />
-      <Route path="/inbox" component={InboxPage} />
-      <Route path="/admin/branding" component={TenantBrandingPage} />
       <Route path="/admin/users" component={AdminUsersPage} />
+      <Route path="/admin/notifications" component={AdminNotificationsPage} />
+      <Route path="/admin/activity" component={AdminActivityPage} />
       <Route path="/superadmin/tower" component={SuperadminTowerPage} />
-      <Route path="/integrations" component={IntegrationsPage} />
-      <Route path="/integrations/import" component={ImportWizardPage} />
-      <Route path="/integrations/api" component={ApiWizardPage} />
       <Route path="/onboarding" component={OnboardingPage} />
       <Route component={NotFound} />
     </Switch>

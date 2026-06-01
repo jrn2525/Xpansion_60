@@ -1,46 +1,18 @@
 import { useLocation, Link } from "wouter";
 import { Logo } from "@/components/logo";
 import {
-  LayoutDashboard,
   Building2,
-  MapPin,
-  BarChart3,
-  ClipboardCheck,
-  TrendingUp,
   LogOut,
   ChevronDown,
-  Upload,
-  Bell,
-  FileBarChart,
-  Briefcase,
   Mail,
-  ShieldCheck,
   Sun,
   Moon,
-  Crosshair,
-  ListChecks,
-  Target,
-  Trophy,
-  BookOpen,
-  FileText,
-  Shield,
   Activity,
-  Server,
-  AlertTriangle,
-  Calendar,
-  Radio,
-  Megaphone,
-  Inbox,
-  Newspaper,
   Star,
-  Palette,
   Users,
   Home,
-  Store,
   Settings,
   UserCheck,
-  ClipboardEdit,
-  PlugZap,
 } from "lucide-react";
 import {
   Sidebar,
@@ -88,63 +60,22 @@ type TenantWithRole = Tenant & { role?: string };
 
 const clientNavItems: NavItem[] = [
   { title: "Home", url: "/", icon: Home, visibleTo: allRoles },
-  { title: "My Business", url: "/my-business", icon: Store, visibleTo: allRoles },
-  { title: "Enter Data", url: "/enter-data", icon: ClipboardEdit, visibleTo: allRoles },
-  { title: "My Scorecard", url: "/my-scorecard", icon: Trophy, visibleTo: allRoles },
-  { title: "Locations", url: "/locations", icon: MapPin, visibleTo: allRoles },
-  { title: "Metrics", url: "/metrics", icon: BarChart3, visibleTo: allRoles },
-  { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck, visibleTo: allRoles },
-  { title: "Trends", url: "/trends", icon: TrendingUp, visibleTo: allRoles },
 ];
 
 const clientOperationsItems: NavItem[] = [
-  { title: "Daily Brief", url: "/brief", icon: Newspaper, visibleTo: allRoles },
-  { title: "Actions", url: "/actions", icon: ListChecks, visibleTo: allRoles },
-  { title: "Goals", url: "/goals", icon: Target, visibleTo: allRoles },
-  { title: "Playbooks", url: "/playbooks", icon: BookOpen, visibleTo: allRoles },
-  { title: "Weekly Plans", url: "/weekly-plans", icon: Calendar, visibleTo: allRoles },
-  { title: "Integrations", url: "/integrations", icon: PlugZap, visibleTo: allRoles },
   { title: "Settings", url: "/settings", icon: Settings, visibleTo: allRoles },
 ];
 
 const navItems: NavItem[] = [
   { title: "Clients", url: "/clients", icon: UserCheck, visibleTo: [], superadminOnly: true },
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, visibleTo: allRoles },
-  { title: "Command Center", url: "/command-center", icon: Crosshair, visibleTo: adminOwnerRoles },
-  { title: "Portfolio", url: "/portfolio", icon: Briefcase, visibleTo: adminOwnerRoles },
-  { title: "Businesses", url: "/tenants", icon: Building2, visibleTo: adminOwnerRoles },
-  { title: "Locations", url: "/locations", icon: MapPin, visibleTo: allRoles },
-  { title: "Metrics", url: "/metrics", icon: BarChart3, visibleTo: allRoles },
-  { title: "Scorecards", url: "/scorecards", icon: ClipboardCheck, visibleTo: allRoles },
-  { title: "Trends", url: "/trends", icon: TrendingUp, visibleTo: allRoles },
 ];
 
-const operationsItems: NavItem[] = [
-  { title: "Daily Brief", url: "/brief", icon: Newspaper, visibleTo: allRoles },
-  { title: "Inbox", url: "/inbox", icon: Inbox, visibleTo: allRoles },
-  { title: "Actions", url: "/actions", icon: ListChecks, visibleTo: allRoles },
-  { title: "Goals", url: "/goals", icon: Target, visibleTo: allRoles },
-  { title: "Benchmarking", url: "/benchmarking", icon: Trophy, visibleTo: allRoles },
-  { title: "Playbooks", url: "/playbooks", icon: BookOpen, visibleTo: allRoles },
-  { title: "Risk", url: "/risk", icon: AlertTriangle, visibleTo: allRoles },
-  { title: "Weekly Plans", url: "/weekly-plans", icon: Calendar, visibleTo: allRoles },
-  { title: "Campaigns", url: "/campaigns", icon: Megaphone, visibleTo: allRoles },
-  { title: "Integrations", url: "/integrations", icon: PlugZap, visibleTo: allRoles },
-];
+const operationsItems: NavItem[] = [];
 
 const adminItems: NavItem[] = [
-  { title: "Imports", url: "/admin/imports", icon: Upload, visibleTo: adminOwnerRoles },
-  { title: "Alerts", url: "/admin/alerts", icon: Bell, visibleTo: adminOwnerRoles },
-  { title: "Reports", url: "/admin/reports", icon: FileBarChart, visibleTo: adminOwnerRoles },
-  { title: "Digests", url: "/admin/digests", icon: FileText, visibleTo: adminOwnerRoles },
-  { title: "Notifications", url: "/admin/notifications", icon: Mail, visibleTo: adminOwnerRoles },
-  { title: "Data Quality", url: "/admin/data-quality", icon: ShieldCheck, visibleTo: adminOwnerRoles },
-  { title: "Security", url: "/admin/security", icon: Shield, visibleTo: adminOwnerRoles },
-  { title: "Activity", url: "/admin/activity", icon: Activity, visibleTo: adminOwnerRoles },
-  { title: "Branding", url: "/admin/branding", icon: Palette, visibleTo: adminOwnerRoles },
-  { title: "Ops Health", url: "/admin/ops", icon: Server, visibleTo: adminOwnerRoles },
   { title: "Users", url: "/admin/users", icon: Users, visibleTo: [], superadminOnly: true },
-  { title: "Command Tower", url: "/superadmin/tower", icon: Radio, visibleTo: [], superadminOnly: true },
+  { title: "Notifications", url: "/admin/notifications", icon: Mail, visibleTo: adminOwnerRoles },
+  { title: "Activity", url: "/admin/activity", icon: Activity, visibleTo: adminOwnerRoles },
 ];
 
 const allItems: NavItem[] = [...clientNavItems, ...clientOperationsItems, ...navItems, ...operationsItems, ...adminItems];
