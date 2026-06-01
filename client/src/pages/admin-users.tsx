@@ -14,14 +14,25 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -30,104 +41,194 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Users, Plus, UserPlus, Loader2, Shield } from "lucide-react";
+import {
+  Users,
+  Plus,
+  UserPlus,
+  Loader2,
+  Shield,
+  Pencil,
+  MoreHorizontal,
+  PauseCircle,
+  PlayCircle,
+  Trash2,
+} from "lucide-react";
 
 interface AppUser {
   id: string;
   email: string | null;
   firstName: string | null;
   lastName: string | null;
+  phone: string | null;
+  businessName: string | null;
   isSuperAdmin: string | null;
+  suspendedAt: string | null;
+  lastLoginAt: string | null;
   createdAt: string | null;
 }
 
-interface TenantOption {
-  id: number;
-  name: string;
+function displayName(u: AppUser): string {
+  const name = `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
+  return name || u.email || "—";
 }
 
 export default function AdminUsersPage() {
   const { toast } = useToast();
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [newEmail, setNewEmail] = useState("");
+
+  const [showCreate, setShowCreate] = useState(false);
   const [newFirstName, setNewFirstName] = useState("");
   const [newLastName, setNewLastName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newBusinessName, setNewBusinessName] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newTenantId, setNewTenantId] = useState("");
-  const [newRole, setNewRole] = useState("viewer");
 
-  const { data: usersData, isLoading: usersLoading, error: usersError } = useQuery<AppUser[]>({
+  const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editBusinessName, setEditBusinessName] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+
+  const [deletingUser, setDeletingUser] = useState<AppUser | null>(null);
+
+  const { data: users, isLoading, error } = useQuery<AppUser[]>({
     queryKey: ["/api/admin/users"],
   });
 
-  const { data: tenants } = useQuery<TenantOption[]>({
-    queryKey: ["/api/tenants"],
-  });
-
-  const createUserMutation = useMutation({
-    mutationFn: async (data: {
-      email: string;
-      firstName: string;
-      lastName: string;
-      password: string;
-      tenantId?: string;
-      role?: string;
-    }) => {
-      const res = await apiRequest("POST", "/api/admin/users", data);
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/users", {
+        email: newEmail,
+        firstName: newFirstName,
+        lastName: newLastName,
+        phone: newPhone,
+        businessName: newBusinessName,
+        password: newPassword,
+      });
       return res.json();
     },
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      setShowCreateDialog(false);
-      resetForm();
+      setShowCreate(false);
+      resetCreate();
       toast({
         title: "User created",
-        description: `Account created for ${result?.data?.email || "user"}`,
+        description: `Account created for ${result?.data?.email ?? "user"}`,
       });
     },
-    onError: (error: any) => {
+    onError: (e: any) =>
       toast({
         title: "Failed to create user",
-        description: error.message,
+        description: e?.message ?? "Unknown error",
         variant: "destructive",
-      });
-    },
+      }),
   });
 
-  function resetForm() {
-    setNewEmail("");
+  const editMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingUser) return;
+      const payload: Record<string, unknown> = {
+        firstName: editFirstName,
+        lastName: editLastName,
+        email: editEmail,
+        phone: editPhone,
+        businessName: editBusinessName,
+      };
+      if (editPassword) payload.password = editPassword;
+      const res = await apiRequest("PUT", `/api/admin/users/${editingUser.id}`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "User updated" });
+      setEditingUser(null);
+      setEditPassword("");
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Update failed",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      }),
+  });
+
+  const suspendMutation = useMutation({
+    mutationFn: async ({ id, suspended }: { id: string; suspended: boolean }) => {
+      const path = suspended ? "unsuspend" : "suspend";
+      const res = await apiRequest("POST", `/api/admin/users/${id}/${path}`);
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: variables.suspended ? "User restored" : "User suspended",
+        description: variables.suspended
+          ? "They can log in again."
+          : "They can no longer log in.",
+      });
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Action failed",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/users/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "User deleted" });
+      setDeletingUser(null);
+    },
+    onError: (e: any) =>
+      toast({
+        title: "Delete failed",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      }),
+  });
+
+  function resetCreate() {
     setNewFirstName("");
     setNewLastName("");
+    setNewEmail("");
+    setNewPhone("");
+    setNewBusinessName("");
     setNewPassword("");
-    setNewTenantId("");
-    setNewRole("viewer");
   }
 
-  function handleCreateUser(e: React.FormEvent) {
-    e.preventDefault();
-    createUserMutation.mutate({
-      email: newEmail,
-      firstName: newFirstName,
-      lastName: newLastName,
-      password: newPassword,
-      tenantId: newTenantId || undefined,
-      role: newTenantId ? newRole : undefined,
-    });
+  function openEdit(u: AppUser) {
+    setEditingUser(u);
+    setEditFirstName(u.firstName ?? "");
+    setEditLastName(u.lastName ?? "");
+    setEditEmail(u.email ?? "");
+    setEditPhone(u.phone ?? "");
+    setEditBusinessName(u.businessName ?? "");
+    setEditPassword("");
   }
 
-  const usersList = usersData || [];
+  const list = users ?? [];
 
   return (
-    <div className="p-6 max-w-5xl space-y-6" data-testid="page-admin-users">
+    <div className="p-6 max-w-6xl space-y-6" data-testid="page-admin-users">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
+          <h1 className="text-2xl font-bold flex items-center gap-2">
             <Users className="h-6 w-6" />
             User Management
           </h1>
-          <p className="text-muted-foreground text-sm">Create and manage user accounts for your clients</p>
+          <p className="text-muted-foreground text-sm">
+            Create and manage user accounts for your clients
+          </p>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)} data-testid="button-create-user">
+        <Button onClick={() => setShowCreate(true)} data-testid="button-create-user">
           <UserPlus className="h-4 w-4 mr-2" />
           Create User
         </Button>
@@ -138,20 +239,22 @@ export default function AdminUsersPage() {
           <CardTitle className="text-base">All Users</CardTitle>
         </CardHeader>
         <CardContent>
-          {usersLoading ? (
+          {isLoading ? (
             <div className="space-y-2">
-              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12" />)}
+              {[...Array(4)].map((_, i) => (
+                <Skeleton key={i} className="h-12" />
+              ))}
             </div>
-          ) : usersError ? (
-            <div className="text-center py-8" data-testid="text-users-error">
+          ) : error ? (
+            <div className="text-center py-8">
               <p className="text-destructive font-medium">
-                {(usersError as any)?.message?.includes("403")
+                {(error as any)?.message?.includes("403")
                   ? "Access denied. Superadmin privileges required."
                   : "Failed to load users. Please try again."}
               </p>
             </div>
-          ) : usersList.length === 0 ? (
-            <p className="text-muted-foreground text-center py-8" data-testid="text-no-users">
+          ) : list.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">
               No users yet. Create your first user account.
             </p>
           ) : (
@@ -161,42 +264,104 @@ export default function AdminUsersPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead>Phone</TableHead>
+                    <TableHead>Business</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Last login</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {usersList.map((u) => (
-                    <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
-                      <TableCell>
-                        <div className="font-medium" data-testid={`text-user-name-${u.id}`}>
-                          {u.firstName || u.lastName
-                            ? `${u.firstName || ""} ${u.lastName || ""}`.trim()
-                            : "—"}
-                        </div>
-                      </TableCell>
-                      <TableCell data-testid={`text-user-email-${u.id}`}>
-                        {u.email || "—"}
-                      </TableCell>
-                      <TableCell>
-                        {u.isSuperAdmin === "true" ? (
-                          <Badge className="bg-primary/15 text-primary" data-testid={`badge-role-${u.id}`}>
-                            <Shield className="h-3 w-3 mr-1" />
-                            Superadmin
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" data-testid={`badge-role-${u.id}`}>
-                            User
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {u.createdAt
-                          ? new Date(u.createdAt).toLocaleDateString()
-                          : "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {list.map((u) => {
+                    const suspended = !!u.suspendedAt;
+                    const isAdmin = u.isSuperAdmin === "true";
+                    return (
+                      <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
+                        <TableCell className="font-medium">{displayName(u)}</TableCell>
+                        <TableCell>{u.email ?? "—"}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {u.phone ?? "—"}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {u.businessName ?? "—"}
+                        </TableCell>
+                        <TableCell>
+                          {isAdmin ? (
+                            <Badge className="bg-primary/15 text-primary">
+                              <Shield className="h-3 w-3 mr-1" />
+                              Admin
+                            </Badge>
+                          ) : suspended ? (
+                            <Badge variant="outline" className="border-amber-500 text-amber-600">
+                              Suspended
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">Active</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {u.lastLoginAt
+                            ? new Date(u.lastLoginAt).toLocaleDateString()
+                            : "Never"}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                data-testid={`button-actions-${u.id}`}
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => openEdit(u)}
+                                data-testid={`menu-edit-${u.id}`}
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              {!isAdmin && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    suspendMutation.mutate({ id: u.id, suspended })
+                                  }
+                                  data-testid={`menu-suspend-${u.id}`}
+                                >
+                                  {suspended ? (
+                                    <>
+                                      <PlayCircle className="h-4 w-4 mr-2" />
+                                      Restore access
+                                    </>
+                                  ) : (
+                                    <>
+                                      <PauseCircle className="h-4 w-4 mr-2" />
+                                      Suspend
+                                    </>
+                                  )}
+                                </DropdownMenuItem>
+                              )}
+                              {!isAdmin && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onClick={() => setDeletingUser(u)}
+                                    className="text-destructive focus:text-destructive"
+                                    data-testid={`menu-delete-${u.id}`}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
@@ -204,7 +369,8 @@ export default function AdminUsersPage() {
         </CardContent>
       </Card>
 
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+      {/* Create dialog */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -212,10 +378,17 @@ export default function AdminUsersPage() {
               Create New User
             </DialogTitle>
             <DialogDescription>
-              Create a login account for a client. They'll use their email and password to sign in.
+              Create a login account for a client. They'll sign in with this
+              email and password.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreateUser} className="space-y-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              createMutation.mutate();
+            }}
+            className="space-y-4"
+          >
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="firstName">First Name</Label>
@@ -253,6 +426,29 @@ export default function AdminUsersPage() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="newPhone">Phone Number</Label>
+              <Input
+                id="newPhone"
+                type="tel"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                placeholder="555-123-4567"
+                data-testid="input-new-phone"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="newBusinessName">Business Name</Label>
+              <Input
+                id="newBusinessName"
+                value={newBusinessName}
+                onChange={(e) => setNewBusinessName(e.target.value)}
+                placeholder="Sunrise Burgers, LLC"
+                data-testid="input-new-business-name"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="newPassword">Password</Label>
               <Input
                 id="newPassword"
@@ -264,52 +460,32 @@ export default function AdminUsersPage() {
                 minLength={8}
                 data-testid="input-new-password"
               />
-              <p className="text-xs text-muted-foreground">Share this password with your client. They can use it to sign in.</p>
+              <p className="text-xs text-muted-foreground">
+                Share this with your client. They'll be asked to change it on
+                first sign-in.
+              </p>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="newTenant">Assign to Business</Label>
-              <Select value={newTenantId} onValueChange={setNewTenantId}>
-                <SelectTrigger data-testid="select-new-tenant">
-                  <SelectValue placeholder="Select a business (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No business assignment</SelectItem>
-                  {tenants?.map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>
-                      {t.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {newTenantId && newTenantId !== "none" && (
-              <div className="space-y-2">
-                <Label htmlFor="newRole">Business Role</Label>
-                <Select value={newRole} onValueChange={setNewRole}>
-                  <SelectTrigger data-testid="select-new-role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="viewer">Viewer</SelectItem>
-                    <SelectItem value="manager">Manager</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="owner">Owner</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3 pt-2">
-              <Button type="button" variant="outline" onClick={() => { setShowCreateDialog(false); resetForm(); }} data-testid="button-cancel-create">
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowCreate(false);
+                  resetCreate();
+                }}
+              >
                 Cancel
               </Button>
-              <Button type="submit" disabled={createUserMutation.isPending} data-testid="button-submit-create">
-                {createUserMutation.isPending ? (
+              <Button
+                type="submit"
+                disabled={createMutation.isPending}
+                data-testid="button-submit-create"
+              >
+                {createMutation.isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Creating...
+                    Creating…
                   </>
                 ) : (
                   <>
@@ -318,10 +494,170 @@ export default function AdminUsersPage() {
                   </>
                 )}
               </Button>
-            </div>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Edit dialog */}
+      <Dialog
+        open={!!editingUser}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingUser(null);
+            setEditPassword("");
+          }
+        }}
+      >
+        {editingUser && (
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="h-5 w-5" />
+                Edit User
+              </DialogTitle>
+              <DialogDescription>{editingUser.email}</DialogDescription>
+            </DialogHeader>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                editMutation.mutate();
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="editFirstName">First Name</Label>
+                  <Input
+                    id="editFirstName"
+                    value={editFirstName}
+                    onChange={(e) => setEditFirstName(e.target.value)}
+                    data-testid="input-edit-first-name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editLastName">Last Name</Label>
+                  <Input
+                    id="editLastName"
+                    value={editLastName}
+                    onChange={(e) => setEditLastName(e.target.value)}
+                    data-testid="input-edit-last-name"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="editEmail">Email</Label>
+                <Input
+                  id="editEmail"
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  required
+                  data-testid="input-edit-email"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="editPhone">Phone Number</Label>
+                <Input
+                  id="editPhone"
+                  type="tel"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  data-testid="input-edit-phone"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="editBusinessName">Business Name</Label>
+                <Input
+                  id="editBusinessName"
+                  value={editBusinessName}
+                  onChange={(e) => setEditBusinessName(e.target.value)}
+                  data-testid="input-edit-business-name"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="editPassword">Reset password (optional)</Label>
+                <Input
+                  id="editPassword"
+                  type="text"
+                  value={editPassword}
+                  onChange={(e) => setEditPassword(e.target.value)}
+                  placeholder="Leave blank to keep current password"
+                  minLength={8}
+                  data-testid="input-edit-password"
+                />
+                <p className="text-xs text-muted-foreground">
+                  If set, the user must change it on their next sign-in.
+                </p>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingUser(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={editMutation.isPending}
+                  data-testid="button-submit-edit"
+                >
+                  {editMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save changes"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        )}
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog
+        open={!!deletingUser}
+        onOpenChange={(open) => !open && setDeletingUser(null)}
+      >
+        {deletingUser && (
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this user?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes <strong>{displayName(deletingUser)}</strong>{" "}
+                ({deletingUser.email}). Their enrollments, feedback, and reflections
+                are removed. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deleteMutation.mutate(deletingUser.id)}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                data-testid="button-confirm-delete"
+              >
+                {deleteMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Deleting…
+                  </>
+                ) : (
+                  "Delete user"
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        )}
+      </AlertDialog>
     </div>
   );
 }

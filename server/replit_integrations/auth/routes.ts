@@ -209,6 +209,11 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(401).json({ ok: false, error: { code: "UNAUTHORIZED", message: "Invalid email or password" } });
       }
 
+      if ((user as any).suspendedAt) {
+        auditLog("LOGIN_BLOCKED_SUSPENDED", { email, userId: user.id, ip: clientIp });
+        return res.status(403).json({ ok: false, error: { code: "ACCOUNT_SUSPENDED", message: "This account is suspended. Contact your coach." } });
+      }
+
       const sessionUser = {
         authType: "local",
         claims: {
@@ -324,7 +329,11 @@ export function registerAuthRoutes(app: Express): void {
         email: users.email,
         firstName: users.firstName,
         lastName: users.lastName,
+        phone: users.phone,
+        businessName: users.businessName,
         isSuperAdmin: users.isSuperAdmin,
+        suspendedAt: users.suspendedAt,
+        lastLoginAt: users.lastLoginAt,
         createdAt: users.createdAt,
       }).from(users).orderBy(users.createdAt);
       res.json({ ok: true, data: allUsers });
@@ -414,7 +423,7 @@ export function registerAuthRoutes(app: Express): void {
 
   app.post("/api/admin/users", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
     try {
-      const { email, firstName, lastName, password, tenantId, role } = req.body;
+      const { email, firstName, lastName, phone, businessName, password } = req.body;
       if (!email || !password) {
         return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Email and password are required" } });
       }
@@ -425,11 +434,6 @@ export function registerAuthRoutes(app: Express): void {
       const [existing] = await db.select().from(users).where(eq(users.email, email));
       if (existing) {
         return res.status(409).json({ ok: false, error: { code: "CONFLICT", message: "A user with this email already exists" } });
-      }
-
-      const validRoles = ["viewer", "manager", "admin", "owner"];
-      if (role && !validRoles.includes(role)) {
-        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid role. Must be one of: " + validRoles.join(", ") } });
       }
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -444,24 +448,18 @@ export function registerAuthRoutes(app: Express): void {
         email,
         firstName: firstName || null,
         lastName: lastName || null,
+        phone: phone || null,
+        businessName: businessName || null,
         passwordHash,
         isSuperAdmin: "false",
         mustChangePassword: true,
       }).returning();
 
-      if (tenantId) {
-        const tid = parseInt(tenantId);
-        if (!isNaN(tid)) {
-          await storage.createTenantUser({ tenantId: tid, userId, role: role || "owner" });
-        }
-      }
-
       auditLog("USER_CREATED", {
         createdBy: req.user.claims.sub,
         newUserId: userId,
         email,
-        tenantId: tenantId || null,
-        role: role || null,
+        businessName: businessName || null,
       });
 
       const appUrl = process.env.APP_URL || `https://${req.get("host")}`;
@@ -469,7 +467,7 @@ export function registerAuthRoutes(app: Express): void {
       try {
         await sendEmail(
           email,
-          "Welcome to Xpansion Console — Your Account is Ready",
+          "Welcome to Xpansion 60 — Your Account is Ready",
           buildWelcomeEmail(clientName, email, password, appUrl)
         );
       } catch (emailErr: any) {
@@ -480,6 +478,104 @@ export function registerAuthRoutes(app: Express): void {
       res.status(201).json({ ok: true, data: safeUser });
     } catch (error: any) {
       console.error("[AUTH] Create user error:", error);
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+    }
+  });
+
+  app.put("/api/admin/users/:id", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
+    try {
+      const userId = req.params.id;
+      const { email, firstName, lastName, phone, businessName, password } = req.body;
+
+      const [target] = await db.select().from(users).where(eq(users.id, userId));
+      if (!target) {
+        return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "User not found" } });
+      }
+
+      const updates: any = { updatedAt: new Date() };
+      if (email !== undefined) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid email format" } });
+        }
+        if (email !== target.email) {
+          const [dup] = await db.select().from(users).where(eq(users.email, email));
+          if (dup && dup.id !== userId) {
+            return res.status(409).json({ ok: false, error: { code: "CONFLICT", message: "Another user already has this email" } });
+          }
+          updates.email = email;
+        }
+      }
+      if (firstName !== undefined) updates.firstName = firstName || null;
+      if (lastName !== undefined) updates.lastName = lastName || null;
+      if (phone !== undefined) updates.phone = phone || null;
+      if (businessName !== undefined) updates.businessName = businessName || null;
+      if (password) {
+        if (password.length < 8) {
+          return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Password must be at least 8 characters" } });
+        }
+        updates.passwordHash = await bcrypt.hash(password, 10);
+        updates.mustChangePassword = true;
+      }
+
+      const [updated] = await db.update(users).set(updates).where(eq(users.id, userId)).returning();
+      auditLog("USER_UPDATED", { updatedBy: req.user.claims.sub, targetUserId: userId, fields: Object.keys(updates) });
+      const { passwordHash: _, ...safeUser } = updated as any;
+      res.json({ ok: true, data: safeUser });
+    } catch (error: any) {
+      console.error("[AUTH] Update user error:", error);
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+    }
+  });
+
+  app.post("/api/admin/users/:id/suspend", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
+    try {
+      const userId = req.params.id;
+      if (userId === req.user.claims.sub) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "You can't suspend yourself" } });
+      }
+      const [updated] = await db.update(users).set({ suspendedAt: new Date(), updatedAt: new Date() }).where(eq(users.id, userId)).returning();
+      if (!updated) {
+        return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "User not found" } });
+      }
+      await storage.deleteSessionsByUserId(userId).catch(() => {});
+      auditLog("USER_SUSPENDED", { suspendedBy: req.user.claims.sub, targetUserId: userId });
+      res.json({ ok: true, data: { suspended: true } });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+    }
+  });
+
+  app.post("/api/admin/users/:id/unsuspend", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
+    try {
+      const userId = req.params.id;
+      const [updated] = await db.update(users).set({ suspendedAt: null, updatedAt: new Date() }).where(eq(users.id, userId)).returning();
+      if (!updated) {
+        return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "User not found" } });
+      }
+      auditLog("USER_UNSUSPENDED", { unsuspendedBy: req.user.claims.sub, targetUserId: userId });
+      res.json({ ok: true, data: { suspended: false } });
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", isAuthenticated, isSuperAdminGuard, async (req: any, res) => {
+    try {
+      const userId = req.params.id;
+      if (userId === req.user.claims.sub) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "You can't delete yourself" } });
+      }
+      const [target] = await db.select().from(users).where(eq(users.id, userId));
+      if (!target) {
+        return res.status(404).json({ ok: false, error: { code: "NOT_FOUND", message: "User not found" } });
+      }
+      await storage.deleteSessionsByUserId(userId).catch(() => {});
+      await db.delete(users).where(eq(users.id, userId));
+      auditLog("USER_DELETED", { deletedBy: req.user.claims.sub, targetUserId: userId, email: target.email });
+      res.json({ ok: true, data: { deleted: true } });
+    } catch (error: any) {
+      console.error("[AUTH] Delete user error:", error);
       res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: error.message } });
     }
   });
