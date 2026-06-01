@@ -16,20 +16,10 @@ import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { seed } from "./seed";
 import { adminRouter } from "./admin-routes";
-import { phase5Router } from "./phase5-routes";
 import { securityRouter } from "./security-routes";
-import { intelligenceRouter } from "./intelligence-routes";
 import { parseFileBuffer } from "./services/file-parser";
-import { recommendationRouter } from "./recommendation-routes";
-import { confidenceRouter } from "./confidence-routes";
-import { securityV1Router } from "./security-v1-routes";
-import { jobRouter } from "./job-routes";
-import { inboxRouter } from "./inbox-routes";
 import { onboardingRouter } from "./onboarding-routes";
-import { dailyBriefRouter } from "./daily-brief-routes";
 import { generateForecast, detectAnomalies } from "./services/analytics";
-import { startScheduler } from "./services/scheduler";
-import { startJobProcessor } from "./services/job-queue";
 import { tracingMiddleware } from "./middleware/tracing";
 import { parseIntOrThrow, ValidationError } from "./utils";
 
@@ -1326,14 +1316,6 @@ export async function registerRoutes(
 
   app.use("/api/admin", adminRouter);
   app.use("/api/admin", securityRouter);
-  app.use("/api/v1", securityV1Router);
-  app.use("/api/v1/admin", jobRouter);
-  app.use("/api", intelligenceRouter);
-  app.use("/api", phase5Router);
-  app.use("/api/v1", confidenceRouter);
-  app.use("/api/v1", recommendationRouter);
-  app.use("/api/v1", inboxRouter);
-  app.use("/api/v1", dailyBriefRouter);
   app.use("/api/v1", onboardingRouter);
 
   app.post("/api/tenants/:tenantId/import-preview", isAuthenticated, fileUpload.single("file"), async (req: any, res) => {
@@ -1678,8 +1660,6 @@ export async function registerRoutes(
   });
 
   seed().catch(console.error);
-  startScheduler();
-  startJobProcessor();
 
   return httpServer;
 }

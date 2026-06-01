@@ -13,9 +13,8 @@ let processorInterval: ReturnType<typeof setInterval> | null = null;
 type JobHandler = (payload: any, job: JobQueueEntry) => Promise<void>;
 
 const jobHandlers: Record<string, JobHandler> = {
-  digest_generation: async (payload) => {
-    const { generateDigest } = await import("../phase5-routes");
-    await generateDigest(payload.tenantId, payload.userId || "system");
+  digest_generation: async () => {
+    throw new Error("digest_generation handler removed during BI cleanup");
   },
   risk_recompute: async (payload) => {
     const { computeTenantRisk } = await import("./risk-engine");
