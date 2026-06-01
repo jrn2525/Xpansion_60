@@ -6,7 +6,7 @@ import { securityHeaders } from "./middleware/security-headers";
 
 console.log("[BOOT] xpansion-console server entrypoint loaded:", import.meta.filename ?? import.meta.url ?? "unknown-file");
 
-const requiredSecrets = ["SESSION_SECRET", "DATABASE_URL", "REPL_ID"];
+const requiredSecrets = ["SESSION_SECRET", "DATABASE_URL", "APP_URL"];
 for (const key of requiredSecrets) {
   if (!process.env[key]) {
     console.error(`[BOOT] FATAL: Required env var ${key} is missing`);

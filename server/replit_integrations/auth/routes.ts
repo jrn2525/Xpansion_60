@@ -464,7 +464,7 @@ export function registerAuthRoutes(app: Express): void {
         role: role || null,
       });
 
-      const appUrl = `https://${req.get("host")}`;
+      const appUrl = process.env.APP_URL || `https://${req.get("host")}`;
       const clientName = firstName || "there";
       try {
         await sendEmail(
