@@ -21,11 +21,15 @@ import {
   UserCheck,
   BookOpen,
   ClipboardList,
+  Sunrise,
+  History,
 } from "lucide-react";
 import type { Tenant } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
 
 const allPages = [
+  { title: "Today", url: "/", icon: Sunrise },
+  { title: "History", url: "/history", icon: History },
   { title: "Clients", url: "/clients", icon: UserCheck },
   { title: "Programs", url: "/admin/programs", icon: BookOpen },
   { title: "Enrollments", url: "/admin/enrollments", icon: ClipboardList },

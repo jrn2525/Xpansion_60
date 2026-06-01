@@ -13,6 +13,8 @@ import {
   UserCheck,
   BookOpen,
   ClipboardList,
+  Sunrise,
+  History,
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,7 +51,8 @@ interface NavItem {
 }
 
 const clientNavItems: NavItem[] = [
-  { title: "Home", url: "/", icon: Home, visibleTo: allRoles },
+  { title: "Today", url: "/", icon: Sunrise, visibleTo: allRoles },
+  { title: "History", url: "/history", icon: History, visibleTo: allRoles },
 ];
 
 const clientOperationsItems: NavItem[] = [

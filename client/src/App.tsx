@@ -29,7 +29,8 @@ const AdminUsersPage = lazy(() => import("@/pages/admin-users"));
 const AdminProgramsPage = lazy(() => import("@/pages/admin-programs"));
 const AdminProgramDetailPage = lazy(() => import("@/pages/admin-program-detail"));
 const AdminEnrollmentsPage = lazy(() => import("@/pages/admin-enrollments"));
-const ClientHomePage = lazy(() => import("@/pages/client-home"));
+const ClientTodayPage = lazy(() => import("@/pages/client-today"));
+const ClientHistoryPage = lazy(() => import("@/pages/client-history"));
 const ConsultantClientsPage = lazy(() => import("@/pages/consultant-clients"));
 const ClientSettingsPage = lazy(() => import("@/pages/client-settings"));
 
@@ -45,7 +46,8 @@ function LoadingSkeleton() {
 }
 
 const routeTitles: Record<string, string> = {
-  "/": "Home | Xpansion 60",
+  "/": "Today | Xpansion 60",
+  "/history": "History | Xpansion 60",
   "/clients": "Clients | Xpansion 60",
   "/settings": "Settings | Xpansion 60",
   "/admin/users": "Users | Xpansion 60",
@@ -68,7 +70,7 @@ function RouteTitle() {
 function RoleBasedHome() {
   const { user } = useAuth();
   const isSuperAdmin = user?.isSuperAdmin === "true";
-  return isSuperAdmin ? <ConsultantClientsPage /> : <ClientHomePage />;
+  return isSuperAdmin ? <ConsultantClientsPage /> : <ClientTodayPage />;
 }
 
 function SuperAdminRoute({ component: Component }: { component: React.ComponentType }) {
@@ -86,6 +88,7 @@ function AuthenticatedRouter() {
   return (
     <Switch>
       <Route path="/" component={RoleBasedHome} />
+      <Route path="/history" component={ClientHistoryPage} />
       <Route path="/clients">{() => <SuperAdminRoute component={ConsultantClientsPage} />}</Route>
       <Route path="/settings" component={ClientSettingsPage} />
       <Route path="/admin/users" component={AdminUsersPage} />

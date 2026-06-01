@@ -655,6 +655,10 @@ export const actions = pgTable("actions", {
   dueDate: timestamp("due_date"),
   // Coaching: client's reflection on what happened when they did the task
   feedbackText: text("feedback_text"),
+  // Coaching: links this action to the enrollment + step that produced it
+  enrollmentId: integer("enrollment_id"),
+  stepId: integer("step_id"),
+  completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
