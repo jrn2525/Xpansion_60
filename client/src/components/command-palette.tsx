@@ -19,12 +19,14 @@ import {
   Users,
   Settings,
   UserCheck,
+  BookOpen,
 } from "lucide-react";
 import type { Tenant } from "@shared/schema";
 import { useTenantStore } from "@/lib/tenant-store";
 
 const allPages = [
   { title: "Clients", url: "/clients", icon: UserCheck },
+  { title: "Programs", url: "/admin/programs", icon: BookOpen },
   { title: "Settings", url: "/settings", icon: Settings },
   { title: "Users", url: "/admin/users", icon: Users },
   { title: "Notifications", url: "/admin/notifications", icon: Mail },
