@@ -12,6 +12,8 @@ import {
   real,
   uniqueIndex,
   jsonb,
+  date,
+  unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -651,6 +653,8 @@ export const actions = pgTable("actions", {
   sourceType: varchar("source_type", { length: 50 }),
   sourceId: integer("source_id"),
   dueDate: timestamp("due_date"),
+  // Coaching: client's reflection on what happened when they did the task
+  feedbackText: text("feedback_text"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -717,8 +721,35 @@ export const playbooks = pgTable("playbooks", {
   isArchived: boolean("is_archived").notNull().default(false),
   version: integer("version").notNull().default(1),
   updatedByUserId: varchar("updated_by_user_id"),
+  // Coaching: per-program configurable shape and behavior
+  totalWeeks: integer("total_weeks").notNull().default(12),
+  totalWeekdays: integer("total_weekdays").notNull().default(60),
+  feedbackRequired: boolean("feedback_required").notNull().default(true),
+  reflectionRequired: boolean("reflection_required").notNull().default(false),
+  reflectionPrompt: text("reflection_prompt")
+    .notNull()
+    .default("Reflecting back on this week, what is your biggest takeaway?"),
+  completionMessage: text("completion_message"),
+  ctaLabel: varchar("cta_label", { length: 255 }),
+  ctaUrl: varchar("cta_url", { length: 500 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Coaching: named sections within a program (e.g., Greeting/Educate/Process/Close)
+export const playbookSections = pgTable("playbook_sections", {
+  id: serial("id").primaryKey(),
+  playbookId: integer("playbook_id")
+    .notNull()
+    .references(() => playbooks.id, { onDelete: "cascade" }),
+  order: integer("order").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  startDay: integer("start_day").notNull(),
+  endDay: integer("end_day").notNull(),
+  transitionEmailEnabled: boolean("transition_email_enabled").notNull().default(false),
+  transitionEmailSubject: text("transition_email_subject"),
+  transitionEmailBody: text("transition_email_body"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const playbookSteps = pgTable("playbook_steps", {
@@ -730,6 +761,13 @@ export const playbookSteps = pgTable("playbook_steps", {
   title: varchar("title", { length: 500 }).notNull(),
   description: text("description"),
   metricDefinitionId: integer("metric_definition_id").references(() => metricDefinitions.id, { onDelete: "set null" }),
+  // Coaching: where this step sits in the 12-week / 5-weekday grid
+  weekNumber: integer("week_number"),
+  dayNumber: integer("day_number"),
+  taskText: text("task_text"),
+  implementationText: text("implementation_text"),
+  mediaUrl: varchar("media_url", { length: 1000 }),
+  sectionId: integer("section_id").references(() => playbookSections.id, { onDelete: "set null" }),
 });
 
 export const playbookApplications = pgTable("playbook_applications", {
@@ -740,15 +778,100 @@ export const playbookApplications = pgTable("playbook_applications", {
   tenantId: integer("tenant_id")
     .notNull()
     .references(() => tenants.id, { onDelete: "cascade" }),
-  locationId: integer("location_id")
-    .notNull()
-    .references(() => locations.id, { onDelete: "cascade" }),
+  // Coaching enrollments have no location; nullable for the new use case while
+  // staying valid for any pre-existing rows
+  locationId: integer("location_id").references(() => locations.id, { onDelete: "cascade" }),
   appliedByUserId: varchar("applied_by_user_id").notNull(),
   status: varchar("status", { length: 50 }).notNull().default("applied"),
   completedSteps: integer("completed_steps").array().notNull().default([]),
   completedAt: timestamp("completed_at"),
+  // Coaching: per-client enrollment start date (drives "today's task" lookup)
+  startDate: date("start_date"),
   createdAt: timestamp("created_at").defaultNow(),
 });
+
+// Coaching: end-of-week recap, generated after the 5th task of a week is completed
+export const weeklySummaries = pgTable("weekly_summaries", {
+  id: serial("id").primaryKey(),
+  enrollmentId: integer("enrollment_id")
+    .notNull()
+    .references(() => playbookApplications.id, { onDelete: "cascade" }),
+  weekNumber: integer("week_number").notNull(),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  summaryText: text("summary_text").notNull(),
+  reflectionText: text("reflection_text"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (t) => ({
+  uniqueEnrollmentWeek: unique().on(t.enrollmentId, t.weekNumber),
+}));
+
+// Coaching: end-of-phase (60-day) summary report
+export const phaseSummaries = pgTable("phase_summaries", {
+  id: serial("id").primaryKey(),
+  enrollmentId: integer("enrollment_id")
+    .notNull()
+    .unique()
+    .references(() => playbookApplications.id, { onDelete: "cascade" }),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  summaryText: text("summary_text").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Coaching: per-enrollment pauses (vacation / sick) that shift the schedule forward
+export const enrollmentPauses = pgTable("enrollment_pauses", {
+  id: serial("id").primaryKey(),
+  enrollmentId: integer("enrollment_id")
+    .notNull()
+    .references(() => playbookApplications.id, { onDelete: "cascade" }),
+  pauseStart: date("pause_start").notNull(),
+  pauseEnd: date("pause_end"),
+  reason: text("reason"),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Coaching: admin-editable Sunday encouragement messages per week of the program
+export const weekEncouragements = pgTable("week_encouragements", {
+  id: serial("id").primaryKey(),
+  playbookId: integer("playbook_id")
+    .notNull()
+    .references(() => playbooks.id, { onDelete: "cascade" }),
+  weekNumber: integer("week_number").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  uniquePlaybookWeek: unique().on(t.playbookId, t.weekNumber),
+}));
+
+// Coaching: admin-editable email templates (daily task, weekly summary, etc.)
+export const emailTemplates = pgTable("email_templates", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  key: varchar("key", { length: 100 }).notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  uniqueTenantKey: unique().on(t.tenantId, t.key),
+}));
+
+// Coaching: per-tenant app config (send times, app display name, copy, etc.)
+export const appSettings = pgTable("app_settings", {
+  id: serial("id").primaryKey(),
+  tenantId: integer("tenant_id")
+    .notNull()
+    .references(() => tenants.id, { onDelete: "cascade" }),
+  key: varchar("key", { length: 100 }).notNull(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (t) => ({
+  uniqueTenantKey: unique().on(t.tenantId, t.key),
+}));
 
 export const digests = pgTable("digests", {
   id: serial("id").primaryKey(),
@@ -1404,3 +1527,58 @@ export const insertIntegrationSyncLogSchema = createInsertSchema(integrationSync
 
 export type IntegrationSyncLog = typeof integrationSyncLogs.$inferSelect;
 export type InsertIntegrationSyncLog = z.infer<typeof insertIntegrationSyncLogSchema>;
+
+// ============================================================================
+// Coaching app (Xpansion 60) — insert schemas and types
+// ============================================================================
+
+export const insertPlaybookSectionSchema = createInsertSchema(playbookSections).omit({
+  id: true,
+  createdAt: true,
+});
+export type PlaybookSection = typeof playbookSections.$inferSelect;
+export type InsertPlaybookSection = z.infer<typeof insertPlaybookSectionSchema>;
+
+export const insertWeeklySummarySchema = createInsertSchema(weeklySummaries).omit({
+  id: true,
+  generatedAt: true,
+  createdAt: true,
+});
+export type WeeklySummary = typeof weeklySummaries.$inferSelect;
+export type InsertWeeklySummary = z.infer<typeof insertWeeklySummarySchema>;
+
+export const insertPhaseSummarySchema = createInsertSchema(phaseSummaries).omit({
+  id: true,
+  generatedAt: true,
+  createdAt: true,
+});
+export type PhaseSummary = typeof phaseSummaries.$inferSelect;
+export type InsertPhaseSummary = z.infer<typeof insertPhaseSummarySchema>;
+
+export const insertEnrollmentPauseSchema = createInsertSchema(enrollmentPauses).omit({
+  id: true,
+  createdAt: true,
+});
+export type EnrollmentPause = typeof enrollmentPauses.$inferSelect;
+export type InsertEnrollmentPause = z.infer<typeof insertEnrollmentPauseSchema>;
+
+export const insertWeekEncouragementSchema = createInsertSchema(weekEncouragements).omit({
+  id: true,
+  updatedAt: true,
+});
+export type WeekEncouragement = typeof weekEncouragements.$inferSelect;
+export type InsertWeekEncouragement = z.infer<typeof insertWeekEncouragementSchema>;
+
+export const insertEmailTemplateSchema = createInsertSchema(emailTemplates).omit({
+  id: true,
+  updatedAt: true,
+});
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export type InsertEmailTemplate = z.infer<typeof insertEmailTemplateSchema>;
+
+export const insertAppSettingSchema = createInsertSchema(appSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+export type AppSetting = typeof appSettings.$inferSelect;
+export type InsertAppSetting = z.infer<typeof insertAppSettingSchema>;
