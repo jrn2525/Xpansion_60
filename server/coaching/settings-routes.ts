@@ -3,6 +3,7 @@ import { db } from "../db";
 import { appSettings, emailTemplates } from "@shared/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { isAuthenticated, isSuperAdminGuard } from "../auth/session";
+import { requireTenantAccess } from "./tenant-access";
 import { sendEmail } from "../services/notifications";
 import { z } from "zod";
 
@@ -345,6 +346,7 @@ settingsRouter.get("/app-settings", ...guard, async (req, res) => {
     if (!tenantId) {
       return res.status(400).json(err("VALIDATION_ERROR", "tenantId required"));
     }
+    if (!(await requireTenantAccess(req, res, tenantId))) return;
     await ensureAppSettings(tenantId);
     const rows = await db
       .select()
@@ -377,6 +379,7 @@ settingsRouter.put("/app-settings", ...guard, async (req, res) => {
       return res.status(400).json(err("VALIDATION_ERROR", parsed.error.message));
     }
     const { tenantId, updates } = parsed.data;
+    if (!(await requireTenantAccess(req, res, tenantId))) return;
     const allowedKeys = new Set(APP_SETTING_DEFAULTS.map((d) => d.key));
     for (const u of updates) {
       if (!allowedKeys.has(u.key)) {
@@ -406,6 +409,7 @@ settingsRouter.get("/email-templates", ...guard, async (req, res) => {
     if (!tenantId) {
       return res.status(400).json(err("VALIDATION_ERROR", "tenantId required"));
     }
+    if (!(await requireTenantAccess(req, res, tenantId))) return;
     await ensureEmailTemplates(tenantId);
     const rows = await db
       .select()
@@ -455,6 +459,7 @@ settingsRouter.put("/email-templates/:key", ...guard, async (req, res) => {
       return res.status(400).json(err("VALIDATION_ERROR", parsed.error.message));
     }
     const { tenantId, enabled, subject, body } = parsed.data;
+    if (!(await requireTenantAccess(req, res, tenantId))) return;
     await ensureEmailTemplates(tenantId);
     const patch: any = { updatedAt: new Date() };
     if (enabled !== undefined) patch.enabled = enabled;

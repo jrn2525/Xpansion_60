@@ -8,6 +8,12 @@ import {
 } from "@shared/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { isAuthenticated, isSuperAdminGuard } from "../auth/session";
+import {
+  requireTenantAccess,
+  requireProgramAccess,
+  requireSectionAccess,
+  requireStepAccess,
+} from "./tenant-access";
 import { z } from "zod";
 
 export const programsRouter = Router();
@@ -106,6 +112,7 @@ programsRouter.get("/", ...guard, async (req, res) => {
         .status(400)
         .json(err("VALIDATION_ERROR", "tenantId query parameter is required"));
     }
+    if (!(await requireTenantAccess(req, res, tenantId))) return;
     const rows = await db
       .select()
       .from(playbooks)
@@ -134,6 +141,7 @@ programsRouter.post("/", ...guard, async (req: any, res) => {
         .json(err("VALIDATION_ERROR", parsed.error.message));
     }
     const { tenantId, name, description, seedFourBasics: seed } = parsed.data;
+    if (!(await requireTenantAccess(req, res, tenantId))) return;
     const userId = req.user?.claims?.sub;
 
     const [row] = await db
@@ -163,6 +171,7 @@ programsRouter.get("/:id", ...guard, async (req, res) => {
     if (!id || Number.isNaN(id)) {
       return res.status(400).json(err("VALIDATION_ERROR", "Invalid id"));
     }
+    if (!(await requireProgramAccess(req, res, id))) return;
     const [program] = await db
       .select()
       .from(playbooks)
@@ -211,6 +220,7 @@ programsRouter.put("/:id", ...guard, async (req: any, res) => {
         .status(400)
         .json(err("VALIDATION_ERROR", parsed.error.message));
     }
+    if (!(await requireProgramAccess(req, res, id))) return;
     const [row] = await db
       .update(playbooks)
       .set({
@@ -233,6 +243,7 @@ programsRouter.put("/:id", ...guard, async (req: any, res) => {
 programsRouter.delete("/:id", ...guard, async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (!(await requireProgramAccess(req, res, id))) return;
     const result = await db.delete(playbooks).where(eq(playbooks.id, id)).returning();
     if (result.length === 0) {
       return res.status(404).json(err("NOT_FOUND", "Program not found"));
@@ -247,13 +258,7 @@ programsRouter.delete("/:id", ...guard, async (req, res) => {
 programsRouter.post("/:id/seed-four-basics", ...guard, async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const [program] = await db
-      .select()
-      .from(playbooks)
-      .where(eq(playbooks.id, id));
-    if (!program) {
-      return res.status(404).json(err("NOT_FOUND", "Program not found"));
-    }
+    if (!(await requireProgramAccess(req, res, id))) return;
     await seedFourBasics(id);
     res.json(ok({ seeded: true }));
   } catch (e: any) {
@@ -280,6 +285,7 @@ programsRouter.put("/:id/sections/:sectionId", ...guard, async (req, res) => {
         .status(400)
         .json(err("VALIDATION_ERROR", parsed.error.message));
     }
+    if (!(await requireSectionAccess(req, res, sectionId))) return;
     const [row] = await db
       .update(playbookSections)
       .set(parsed.data)
@@ -311,6 +317,7 @@ programsRouter.put("/:id/steps/:stepId", ...guard, async (req, res) => {
         .status(400)
         .json(err("VALIDATION_ERROR", parsed.error.message));
     }
+    if (!(await requireStepAccess(req, res, stepId))) return;
     const [row] = await db
       .update(playbookSteps)
       .set(parsed.data)

@@ -8,6 +8,7 @@ import {
 import { users } from "@shared/models/auth";
 import { eq, and, asc, desc, isNull, isNotNull, sql } from "drizzle-orm";
 import { isAuthenticated, isSuperAdminGuard } from "../auth/session";
+import { requireTenantAccess, requireEnrollmentAccess } from "./tenant-access";
 import { z } from "zod";
 import { computeSchedule, type PauseRange } from "./schedule";
 import { sendPauseNotificationEmail } from "./cron";
@@ -57,6 +58,7 @@ enrollmentsRouter.get("/", ...guard, async (req, res) => {
         .status(400)
         .json(err("VALIDATION_ERROR", "tenantId query parameter is required"));
     }
+    if (!(await requireTenantAccess(req, res, tenantId))) return;
 
     const rows = await db
       .select({
@@ -128,6 +130,7 @@ enrollmentsRouter.post("/", ...guard, async (req: any, res) => {
       return res.status(400).json(err("VALIDATION_ERROR", parsed.error.message));
     }
     const { tenantId, playbookId, enrolledUserId, startDate } = parsed.data;
+    if (!(await requireTenantAccess(req, res, tenantId))) return;
     const appliedByUserId = req.user?.claims?.sub;
 
     // Prevent duplicate enrollment of the same user in the same program
@@ -170,6 +173,7 @@ enrollmentsRouter.post("/", ...guard, async (req: any, res) => {
 enrollmentsRouter.delete("/:id", ...guard, async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (!(await requireEnrollmentAccess(req, res, id))) return;
     const result = await db
       .delete(playbookApplications)
       .where(eq(playbookApplications.id, id))
@@ -187,6 +191,7 @@ enrollmentsRouter.delete("/:id", ...guard, async (req, res) => {
 enrollmentsRouter.get("/:id", ...guard, async (req, res) => {
   try {
     const id = Number(req.params.id);
+    if (!(await requireEnrollmentAccess(req, res, id))) return;
     const [enrollment] = await db
       .select()
       .from(playbookApplications)
@@ -223,6 +228,7 @@ enrollmentsRouter.post("/:id/pauses", ...guard, async (req: any, res) => {
     if (!parsed.success) {
       return res.status(400).json(err("VALIDATION_ERROR", parsed.error.message));
     }
+    if (!(await requireEnrollmentAccess(req, res, id))) return;
 
     const { pauseStart, pauseEnd } = parsed.data;
     if (pauseEnd && pauseEnd < pauseStart) {
@@ -282,11 +288,13 @@ const updatePauseSchema = z.object({
 
 enrollmentsRouter.put("/:id/pauses/:pauseId", ...guard, async (req, res) => {
   try {
+    const id = Number(req.params.id);
     const pauseId = Number(req.params.pauseId);
     const parsed = updatePauseSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json(err("VALIDATION_ERROR", parsed.error.message));
     }
+    if (!(await requireEnrollmentAccess(req, res, id))) return;
     const [row] = await db
       .update(enrollmentPauses)
       .set(parsed.data)
