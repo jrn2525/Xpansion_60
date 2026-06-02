@@ -25,6 +25,7 @@ import { programsRouter } from "./coaching/programs-routes";
 import { enrollmentsRouter } from "./coaching/enrollments-routes";
 import { clientRouter } from "./coaching/client-routes";
 import { settingsRouter } from "./coaching/settings-routes";
+import { startCoachingCron } from "./coaching/cron";
 import { parseIntOrThrow, ValidationError } from "./utils";
 
 function ok(data: any) {
@@ -1668,6 +1669,7 @@ export async function registerRoutes(
   });
 
   seed().catch(console.error);
+  startCoachingCron();
 
   return httpServer;
 }

@@ -36,7 +36,8 @@ const GROUP_TITLES: Record<Group, string> = {
 
 const GROUP_DESCRIPTIONS: Record<Group, string> = {
   branding: "Names and addresses your clients see.",
-  schedule: "When automated emails go out each day.",
+  schedule:
+    "When automated emails go out each day. Times are in UTC — if Railway is in UTC, set 13:00 for 8am ET / 5am PT.",
   copy: "Messages clients see on their dashboard during weekends, pauses, etc.",
 };
 

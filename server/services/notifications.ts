@@ -25,7 +25,9 @@ export async function sendEmail(to: string, subject: string, htmlBody: string, s
       return true;
     }
 
-    const from = senderEmail ? `Xpansion Console <${senderEmail}>` : "Xpansion Console <notifications@resend.dev>";
+    const fromName = process.env.EMAIL_FROM_NAME || "Xpansion 60";
+    const fromAddress = senderEmail || process.env.EMAIL_FROM || "notifications@resend.dev";
+    const from = `${fromName} <${fromAddress}>`;
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Authorization": `Bearer ${resendApiKey}`, "Content-Type": "application/json" },

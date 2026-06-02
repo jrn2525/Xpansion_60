@@ -10,6 +10,7 @@ import { eq, and, asc, desc, isNull, isNotNull, sql } from "drizzle-orm";
 import { isAuthenticated, isSuperAdminGuard } from "../replit_integrations/auth/replitAuth";
 import { z } from "zod";
 import { computeSchedule, type PauseRange } from "./schedule";
+import { sendPauseNotificationEmail } from "./cron";
 
 export const enrollmentsRouter = Router();
 
@@ -232,6 +233,9 @@ enrollmentsRouter.post("/:id/pauses", ...guard, async (req: any, res) => {
         createdByUserId: req.user?.claims?.sub,
       })
       .returning();
+    sendPauseNotificationEmail(id, parsed.data.pauseEnd ?? null).catch((e) =>
+      console.error("[ENROLLMENTS] pause notification failed:", e?.message ?? e),
+    );
     res.status(201).json(ok(row));
   } catch (e: any) {
     res.status(500).json(err("INTERNAL_ERROR", e.message));

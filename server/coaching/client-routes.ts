@@ -12,6 +12,7 @@ import { eq, and, desc, asc, isNotNull, inArray } from "drizzle-orm";
 import { isAuthenticated } from "../replit_integrations/auth/replitAuth";
 import { z } from "zod";
 import { computeSchedule, type PauseRange, type ScheduleResult } from "./schedule";
+import { sendPhaseCompletionEmail } from "./cron";
 
 export const clientRouter = Router();
 
@@ -197,7 +198,9 @@ clientRouter.post("/today/complete", isAuthenticated, async (req: any, res) => {
       .limit(1);
 
     const completedAt = new Date();
+    let savedRow;
     if (existing) {
+      const wasAlreadyClosed = existing.status === "closed";
       const [updated] = await db
         .update(actions)
         .set({
@@ -208,27 +211,56 @@ clientRouter.post("/today/complete", isAuthenticated, async (req: any, res) => {
         })
         .where(eq(actions.id, existing.id))
         .returning();
-      return res.json(ok(updated));
+      savedRow = updated;
+      // Fire phase-completion only on the first close, not on later updates
+      if (
+        !wasAlreadyClosed &&
+        program &&
+        step.weekNumber === program.totalWeeks &&
+        step.dayNumber === 5
+      ) {
+        await db
+          .update(playbookApplications)
+          .set({ completedAt, status: "completed" })
+          .where(eq(playbookApplications.id, enrollmentId));
+        sendPhaseCompletionEmail(enrollmentId).catch((e) =>
+          console.error("[CLIENT] phase_completion email failed:", e?.message ?? e),
+        );
+      }
+    } else {
+      const [created] = await db
+        .insert(actions)
+        .values({
+          tenantId: enrollment.tenantId,
+          ownerUserId: userId,
+          title: step.title,
+          description: step.taskText ?? null,
+          status: "closed",
+          priority: "medium",
+          sourceType: "coaching_step",
+          sourceId: stepId,
+          enrollmentId,
+          stepId,
+          feedbackText: feedbackText ?? null,
+          completedAt,
+        })
+        .returning();
+      savedRow = created;
+      if (
+        program &&
+        step.weekNumber === program.totalWeeks &&
+        step.dayNumber === 5
+      ) {
+        await db
+          .update(playbookApplications)
+          .set({ completedAt, status: "completed" })
+          .where(eq(playbookApplications.id, enrollmentId));
+        sendPhaseCompletionEmail(enrollmentId).catch((e) =>
+          console.error("[CLIENT] phase_completion email failed:", e?.message ?? e),
+        );
+      }
     }
-
-    const [created] = await db
-      .insert(actions)
-      .values({
-        tenantId: enrollment.tenantId,
-        ownerUserId: userId,
-        title: step.title,
-        description: step.taskText ?? null,
-        status: "closed",
-        priority: "medium",
-        sourceType: "coaching_step",
-        sourceId: stepId,
-        enrollmentId,
-        stepId,
-        feedbackText: feedbackText ?? null,
-        completedAt,
-      })
-      .returning();
-    res.status(201).json(ok(created));
+    res.status(existing ? 200 : 201).json(ok(savedRow));
   } catch (e: any) {
     console.error("[CLIENT] /today/complete error:", e);
     res.status(500).json(err("INTERNAL_ERROR", e.message));
