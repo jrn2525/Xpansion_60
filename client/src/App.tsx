@@ -21,6 +21,7 @@ import { ShortcutsDialog } from "@/components/shortcuts-dialog";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const LandingPage = lazy(() => import("@/pages/landing"));
+const ActivatePage = lazy(() => import("@/pages/activate"));
 const AdminNotificationsPage = lazy(() => import("@/pages/admin-notifications"));
 const AdminActivityPage = lazy(() => import("@/pages/admin-activity"));
 const SuperadminTowerPage = lazy(() => import("@/pages/superadmin-tower"));
@@ -61,6 +62,7 @@ const routeTitles: Record<string, string> = {
   "/admin/activity": "Activity | Xpansion 60",
   "/superadmin/tower": "Command Tower | Xpansion 60",
   "/onboarding": "Onboarding | Xpansion 60",
+  "/activate": "Activate Account | Xpansion 60",
 };
 
 function RouteTitle() {
@@ -205,6 +207,12 @@ function AppContent() {
         </div>
       </div>
     );
+  }
+
+  // /activate is the post-invite password-setup page. It's a public route —
+  // the activation token IS the credential, so don't gate it behind auth.
+  if (typeof window !== "undefined" && window.location.pathname === "/activate") {
+    return <ErrorBoundary><Suspense fallback={<LoadingSkeleton />}><ActivatePage /></Suspense></ErrorBoundary>;
   }
 
   if (!user) {

@@ -102,7 +102,6 @@ export default function AdminUsersPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newBusinessName, setNewBusinessName] = useState("");
-  const [newPassword, setNewPassword] = useState("");
   const [newUserType, setNewUserType] = useState<UserType>("client");
 
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
@@ -128,7 +127,6 @@ export default function AdminUsersPage() {
         lastName: newLastName,
         phone: newPhone,
         businessName: newBusinessName,
-        password: newPassword,
         userType: newUserType,
       });
       return res.json();
@@ -226,7 +224,6 @@ export default function AdminUsersPage() {
     setNewEmail("");
     setNewPhone("");
     setNewBusinessName("");
-    setNewPassword("");
     setNewUserType("client");
   }
 
@@ -505,22 +502,9 @@ export default function AdminUsersPage() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="newPassword">Password</Label>
-              <Input
-                id="newPassword"
-                type="text"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Minimum 8 characters"
-                required
-                minLength={8}
-                data-testid="input-new-password"
-              />
-              <p className="text-xs text-muted-foreground">
-                Share this with your client. They'll be asked to change it on
-                first sign-in.
-              </p>
+            <div className="rounded-md bg-muted/40 p-3 text-sm text-muted-foreground">
+              We'll email them a one-time activation link to set their own
+              password. No need for you to choose one.
             </div>
 
             <DialogFooter>

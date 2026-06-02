@@ -845,6 +845,18 @@ export const enrollmentPauses = pgTable("enrollment_pauses", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Auth: one-time tokens used to set the initial password when a coach invites
+// a new client. The welcome email links the client to /activate?token=... so
+// the plaintext password never leaves the server.
+export const accountActivationTokens = pgTable("account_activation_tokens", {
+  id: serial("id").primaryKey(),
+  token: varchar("token", { length: 128 }).notNull().unique(),
+  userId: varchar("user_id").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Coaching: admin-editable Sunday encouragement messages per week of the program
 export const weekEncouragements = pgTable("week_encouragements", {
   id: serial("id").primaryKey(),

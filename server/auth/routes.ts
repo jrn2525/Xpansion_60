@@ -5,6 +5,7 @@ import { storage } from "../storage";
 import bcrypt from "bcryptjs";
 import { db } from "../db";
 import { users } from "@shared/models/auth";
+import { accountActivationTokens } from "@shared/schema";
 import { eq, and, isNull } from "drizzle-orm";
 
 const USER_TYPES = ["admin", "coach", "client"] as const;
@@ -12,7 +13,7 @@ type UserType = (typeof USER_TYPES)[number];
 function isUserType(value: unknown): value is UserType {
   return typeof value === "string" && (USER_TYPES as readonly string[]).includes(value);
 }
-import { randomUUID } from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import { sendCoachingEmail } from "../coaching/cron";
 import { z } from "zod";
 
@@ -269,6 +270,62 @@ export function registerAuthRoutes(app: Express): void {
     }
   });
 
+  // POST /api/auth/activate — first-time password set via the emailed link.
+  // Public (no isAuthenticated): the token IS the credential.
+  const activateSchema = z.object({
+    token: z.string().min(8),
+    password: z.string().min(8),
+  }).strict();
+  app.post("/api/auth/activate", async (req: any, res) => {
+    try {
+      const parsed = activateSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } });
+      }
+      const { token, password } = parsed.data;
+      const policyError = validatePassword(password);
+      if (policyError) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: policyError } });
+      }
+
+      const [row] = await db
+        .select()
+        .from(accountActivationTokens)
+        .where(eq(accountActivationTokens.token, token));
+      if (!row) {
+        return res.status(400).json({ ok: false, error: { code: "INVALID_TOKEN", message: "This activation link is not valid." } });
+      }
+      if (row.usedAt) {
+        return res.status(400).json({ ok: false, error: { code: "TOKEN_USED", message: "This activation link has already been used. Sign in with your password." } });
+      }
+      if (row.expiresAt.getTime() < Date.now()) {
+        return res.status(400).json({ ok: false, error: { code: "TOKEN_EXPIRED", message: "This activation link has expired. Ask your coach to send a new one." } });
+      }
+
+      const [user] = await db.select().from(users).where(eq(users.id, row.userId));
+      if (!user) {
+        return res.status(400).json({ ok: false, error: { code: "INVALID_TOKEN", message: "This activation link is not valid." } });
+      }
+      if ((user as any).suspendedAt) {
+        return res.status(403).json({ ok: false, error: { code: "ACCOUNT_SUSPENDED", message: "This account is suspended." } });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 10);
+      await db.update(users).set({
+        passwordHash,
+        mustChangePassword: false,
+        updatedAt: new Date(),
+      }).where(eq(users.id, user.id));
+      await db.update(accountActivationTokens).set({ usedAt: new Date() }).where(eq(accountActivationTokens.id, row.id));
+
+      auditLog("ACCOUNT_ACTIVATED", { userId: user.id, email: user.email });
+      res.json({ ok: true, data: { email: user.email } });
+    } catch (e: any) {
+      console.error("[AUTH] Activate error:", e);
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: e.message } });
+    }
+  });
+
   app.post("/api/auth/logout", (req: any, res) => {
     const wasLocal = req.user?.authType === "local";
     req.logout((err: any) => {
@@ -465,7 +522,6 @@ export function registerAuthRoutes(app: Express): void {
 
   const createUserSchema = z.object({
     email: z.string().min(1),
-    password: z.string().min(8),
     firstName: z.string().optional(),
     lastName: z.string().optional(),
     phone: z.string().optional(),
@@ -479,12 +535,9 @@ export function registerAuthRoutes(app: Express): void {
       if (!parsed.success) {
         return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } });
       }
-      const { email, firstName, lastName, phone, businessName, password, userType } = parsed.data;
-      if (!email || !password) {
-        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Email and password are required" } });
-      }
-      if (password.length < 8) {
-        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Password must be at least 8 characters" } });
+      const { email, firstName, lastName, phone, businessName, userType } = parsed.data;
+      if (!email) {
+        return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Email is required" } });
       }
       if (userType !== undefined && !isUserType(userType)) {
         return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: `userType must be one of: ${USER_TYPES.join(", ")}` } });
@@ -500,8 +553,13 @@ export function registerAuthRoutes(app: Express): void {
         return res.status(400).json({ ok: false, error: { code: "VALIDATION_ERROR", message: "Invalid email format" } });
       }
 
+      // Generate a random unguessable password the user never sees. They'll
+      // set their own via the activation link in the welcome email. We still
+      // bcrypt-hash this so the column is populated and login attempts before
+      // activation fail at the password check rather than from a null hash.
+      const placeholderPassword = randomBytes(24).toString("hex");
       const effectiveType: UserType = (userType as UserType | undefined) ?? "client";
-      const passwordHash = await bcrypt.hash(password, 10);
+      const passwordHash = await bcrypt.hash(placeholderPassword, 10);
       const userId = `user-${randomUUID()}`;
       const [newUser] = await db.insert(users).values({
         id: userId,
@@ -515,6 +573,17 @@ export function registerAuthRoutes(app: Express): void {
         userType: effectiveType,
         mustChangePassword: true,
       }).returning();
+
+      // Mint a one-time activation token. 7-day TTL is plenty.
+      const token = randomBytes(48).toString("hex");
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await db.insert(accountActivationTokens).values({
+        token,
+        userId,
+        expiresAt,
+      });
+      const appUrl = process.env.APP_URL ?? "https://www.xpansion60.com";
+      const activationUrl = `${appUrl.replace(/\/$/, "")}/activate?token=${token}`;
 
       auditLog("USER_CREATED", {
         createdBy: req.user.claims.sub,
@@ -539,7 +608,7 @@ export function registerAuthRoutes(app: Express): void {
             vars: {
               client_first_name: firstName || "there",
               client_email: email,
-              password,
+              activation_url: activationUrl,
             },
           });
         } else {

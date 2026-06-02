@@ -122,22 +122,21 @@ const EMAIL_TEMPLATE_DEFAULTS: EmailTemplateDefault[] = [
     key: "welcome",
     label: "Welcome email",
     description:
-      "Sent when you create a new client account. Includes their temporary password.",
-    subject: "Welcome to {{app_name}} — your account is ready",
+      "Sent when you create a new client account. Includes a one-time link the client uses to set their own password.",
+    subject: "Welcome to {{app_name}} — set up your account",
     body: `Welcome, {{client_first_name}}!
 
-Your account is set up at {{dashboard_url}}.
+Your account is ready. Click the link below to set your password and sign in:
 
-  Email: {{client_email}}
-  Temporary password: {{password}}
+  {{activation_url}}
 
-You'll be asked to set a new password on first sign-in.
+The link expires in 7 days. After that, ask your coach for a new invite.
 
 — {{coach_name}}`,
     placeholders: [
       "{{client_first_name}}",
       "{{client_email}}",
-      "{{password}}",
+      "{{activation_url}}",
       "{{dashboard_url}}",
       "{{app_name}}",
       "{{coach_name}}",
@@ -319,6 +318,7 @@ function sampleVars(): Record<string, string> {
     client_email: "sample@example.com",
     client_business_name: "Sample Business",
     password: "Sample123",
+    activation_url: "https://www.xpansion60.com/activate?token=sample-1234567890",
     program_name: "The 4 Basics",
     section_name: "Greeting",
     week_number: "1",
