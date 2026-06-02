@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { storage } from "./storage";
-import { isAuthenticated } from "./replit_integrations/auth";
+import { isAuthenticated } from "./auth";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";
 import { parseIntOrThrow, ValidationError } from "./utils";

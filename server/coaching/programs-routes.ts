@@ -7,7 +7,7 @@ import {
   insertPlaybookSectionSchema,
 } from "@shared/schema";
 import { eq, and, asc } from "drizzle-orm";
-import { isAuthenticated, isSuperAdminGuard } from "../replit_integrations/auth/replitAuth";
+import { isAuthenticated, isSuperAdminGuard } from "../auth/session";
 import { z } from "zod";
 
 export const programsRouter = Router();

@@ -2,7 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { db } from "../db";
 import { appSettings, emailTemplates } from "@shared/schema";
 import { eq, and, asc } from "drizzle-orm";
-import { isAuthenticated, isSuperAdminGuard } from "../replit_integrations/auth/replitAuth";
+import { isAuthenticated, isSuperAdminGuard } from "../auth/session";
 import { sendEmail } from "../services/notifications";
 import { z } from "zod";
 

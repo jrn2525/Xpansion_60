@@ -9,7 +9,7 @@ import {
   enrollmentPauses,
 } from "@shared/schema";
 import { eq, and, desc, asc, isNotNull, inArray } from "drizzle-orm";
-import { isAuthenticated } from "../replit_integrations/auth/replitAuth";
+import { isAuthenticated } from "../auth/session";
 import { z } from "zod";
 import { computeSchedule, type PauseRange, type ScheduleResult } from "./schedule";
 import { sendPhaseCompletionEmail } from "./cron";

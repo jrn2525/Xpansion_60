@@ -1,9 +1,9 @@
 import type { Express, RequestHandler } from "express";
 import { authStorage } from "./storage";
-import { isAuthenticated, isSuperAdminGuard } from "./replitAuth";
-import { storage } from "../../storage";
+import { isAuthenticated, isSuperAdminGuard } from "./session";
+import { storage } from "../storage";
 import bcrypt from "bcryptjs";
-import { db } from "../../db";
+import { db } from "../db";
 import { users } from "@shared/models/auth";
 import { eq, and, isNull } from "drizzle-orm";
 
@@ -13,7 +13,7 @@ function isUserType(value: unknown): value is UserType {
   return typeof value === "string" && (USER_TYPES as readonly string[]).includes(value);
 }
 import { randomUUID } from "crypto";
-import { sendEmail } from "../../services/notifications";
+import { sendEmail } from "../services/notifications";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS_PER_IP = 20;
@@ -274,7 +274,7 @@ export function registerAuthRoutes(app: Express): void {
       if (err) return res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: "Logout failed" } });
       req.session.destroy((err2: any) => {
         res.clearCookie("connect.sid", { path: "/" });
-        auditLog("LOGOUT", { authType: wasLocal ? "local" : "replit" });
+        auditLog("LOGOUT", { authType: wasLocal ? "local" : "unknown" });
         res.json({ ok: true, data: { loggedOut: true } });
       });
     });
@@ -697,8 +697,8 @@ function buildWelcomeEmail(name: string, email: string, password: string, appUrl
         <table width="100%" style="max-width:520px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <tr>
             <td style="background:linear-gradient(135deg,#dc2626,#b91c1c);padding:32px 40px;text-align:center;">
-              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.5px;">Xpansion Console</h1>
-              <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;letter-spacing:1px;text-transform:uppercase;">Franchise Intelligence Platform</p>
+              <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.5px;">Xpansion 60</h1>
+              <p style="margin:8px 0 0;color:rgba(255,255,255,0.85);font-size:13px;letter-spacing:1px;text-transform:uppercase;">12-Week Coaching</p>
             </td>
           </tr>
           <tr>
@@ -736,7 +736,7 @@ function buildWelcomeEmail(name: string, email: string, password: string, appUrl
           </tr>
           <tr>
             <td style="padding:20px 40px;background-color:#fafafa;border-top:1px solid #e4e4e7;text-align:center;">
-              <p style="margin:0;color:#a1a1aa;font-size:12px;">Powered by Xpansion Console</p>
+              <p style="margin:0;color:#a1a1aa;font-size:12px;">Powered by Xpansion 60</p>
             </td>
           </tr>
         </table>

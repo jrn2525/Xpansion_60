@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { isAuthenticated, isSuperAdminGuard } from "./replit_integrations/auth/replitAuth";
-import { clearAccountLockout, getLoginStats } from "./replit_integrations/auth/routes";
+import { isAuthenticated, isSuperAdminGuard } from "./auth/session";
+import { clearAccountLockout, getLoginStats } from "./auth/routes";
 import { storage } from "./storage";
 import { z } from "zod";
 import { fromZodError } from "zod-validation-error";

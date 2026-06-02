@@ -66,7 +66,7 @@ const routeTitles: Record<string, string> = {
 function RouteTitle() {
   const [location] = useLocation();
   useEffect(() => {
-    document.title = routeTitles[location] || "Xpansion Console";
+    document.title = routeTitles[location] || "Xpansion 60";
   }, [location]);
   return null;
 }

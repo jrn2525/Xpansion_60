@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { storage } from "./storage";
-import { isAuthenticated } from "./replit_integrations/auth";
+import { isAuthenticated } from "./auth";
 import {
   insertAlertRuleSchema,
   insertReportSchema,
@@ -908,7 +908,7 @@ adminRouter.post("/notification-test", async (req: any, res) => {
       const recipients: string[] = (() => { try { return JSON.parse(settings.recipientsJson); } catch { return []; } })();
       for (const recipient of recipients) {
         try {
-          await sendNotification(tenantId, "email", recipient, "Test Notification", "<p>This is a test notification from Xpansion Console.</p>", "test", "0");
+          await sendNotification(tenantId, "email", recipient, "Test Notification", "<p>This is a test notification from Xpansion 60.</p>", "test", "0");
           results.push({ channel: "email", recipient, status: "sent" });
         } catch (e: any) {
           results.push({ channel: "email", recipient, status: "failed", error: e.message });
@@ -917,7 +917,7 @@ adminRouter.post("/notification-test", async (req: any, res) => {
     }
     if (settings.slackEnabled && settings.slackWebhookUrl) {
       try {
-        await sendNotification(tenantId, "slack", settings.slackWebhookUrl, "Test Notification", "This is a test from Xpansion Console", "test", "0");
+        await sendNotification(tenantId, "slack", settings.slackWebhookUrl, "Test Notification", "This is a test from Xpansion 60", "test", "0");
         results.push({ channel: "slack", status: "sent" });
       } catch (e: any) {
         results.push({ channel: "slack", status: "failed", error: e.message });

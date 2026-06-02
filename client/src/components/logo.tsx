@@ -13,7 +13,7 @@ export function Logo({ className = "h-8 w-auto" }: LogoProps) {
   return (
     <img
       src={src}
-      alt="Xpansion Console"
+      alt="Xpansion 60"
       className={className}
       data-testid="logo"
     />

@@ -176,7 +176,7 @@ export async function notifyAlertEvent(tenantId: number, eventMessage: string, s
 
   const prefix = eventType === "ack" ? "ACK" : eventType === "resolved" ? "RESOLVED" : severity.toUpperCase();
   const subject = `[${prefix}] Alert: ${eventMessage.slice(0, 100)}`;
-  const htmlBody = `<h2>Alert Event (${eventType})</h2><p><strong>Severity:</strong> ${severity}</p><p>${eventMessage}</p><p><em>Sent by Xpansion Console</em></p>`;
+  const htmlBody = `<h2>Alert Event (${eventType})</h2><p><strong>Severity:</strong> ${severity}</p><p>${eventMessage}</p><p><em>Sent by Xpansion 60</em></p>`;
   const senderEmail = settings.senderEmail || undefined;
 
   for (const recipient of recipients) {
@@ -210,7 +210,7 @@ export async function notifyReportReady(tenantId: number, reportName: string, ru
   if (recipients.length === 0) return;
 
   const subject = `Report Ready: ${reportName}`;
-  const htmlBody = `<h2>Report Completed</h2><p>The report <strong>${reportName}</strong> has finished running.</p><p><em>Sent by Xpansion Console</em></p>`;
+  const htmlBody = `<h2>Report Completed</h2><p>The report <strong>${reportName}</strong> has finished running.</p><p><em>Sent by Xpansion 60</em></p>`;
   const senderEmail = settings.senderEmail || undefined;
 
   for (const recipient of recipients) {

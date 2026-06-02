@@ -23,7 +23,7 @@ You can pause between phases. Each phase is self-contained.
 
 ## Phase C — Add the App Service (production)
 
-> **Important:** Do this step *after* I push the code-prep commit. I'll tell you when it's ready. If you connect the repo before code prep is pushed, the first deploy will fail because the current code still has Replit-specific initialization that crashes outside Replit. You can skip ahead to Phase D / E / F while you wait — those don't depend on the deploy succeeding.
+> **Important:** Do this step *after* the working branch contains the latest code. If you connect the repo to an older branch, the first deploy may fail. You can skip ahead to Phase D / E / F while you wait — those don't depend on the deploy succeeding.
 
 8. On the project canvas, click **+ Create** → **GitHub Repo**.
 9. If Railway hasn't been authorized for your GitHub account yet, follow the prompt to install the Railway GitHub app. Grant it access to `jrn2525/Xpansion_60`.
@@ -123,12 +123,12 @@ Tell me when all of these are true and we can mark Step 1 done:
 - [ ] Apex `https://xpansion60.com` redirects to `https://www.xpansion60.com`
 - [ ] In Resend, `xpansion60.com` shows green (verified)
 - [ ] In Railway, `staging` environment exists with its own Postgres
-- [ ] No `@replit/*` references in the deployed app, no `.replit` file (code prep complete on my side)
+- [ ] App deploys cleanly with `drizzle-kit push --force` running on start
 
 ## If something goes wrong
 
 - **Deploy fails with "DATABASE_URL is undefined":** confirm Postgres and the app service are in the *same* environment. Variables don't cross environments.
-- **Deploy fails with auth/Replit-related error:** code prep isn't pushed yet, or Railway is deploying from the wrong branch. Confirm branch is `claude/coaching-app-planning-Sg4RF` and the latest commit is the code-prep one.
+- **Deploy crashes on boot with a missing-env-var error:** confirm `APP_URL`, `SESSION_SECRET`, `DATABASE_URL` are all set in the service Variables tab.
 - **DNS not resolving after a few hours:** double-check the CNAME value in GoDaddy matches Railway exactly. No trailing dot. No typos.
 - **Resend can't verify:** sometimes GoDaddy auto-appends the domain to record names. If Resend wants `resend._domainkey` and GoDaddy now shows `resend._domainkey.xpansion60.com`, that's usually fine — the record value is what matters.
 - **Anything else:** screenshot it, send it over, we'll fix it.

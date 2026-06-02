@@ -7,7 +7,7 @@ import {
 } from "@shared/schema";
 import { users } from "@shared/models/auth";
 import { eq, and, asc, desc, isNull, isNotNull, sql } from "drizzle-orm";
-import { isAuthenticated, isSuperAdminGuard } from "../replit_integrations/auth/replitAuth";
+import { isAuthenticated, isSuperAdminGuard } from "../auth/session";
 import { z } from "zod";
 import { computeSchedule, type PauseRange } from "./schedule";
 import { sendPauseNotificationEmail } from "./cron";

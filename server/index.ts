@@ -4,7 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { securityHeaders } from "./middleware/security-headers";
 
-console.log("[BOOT] xpansion-console server entrypoint loaded:", import.meta.filename ?? import.meta.url ?? "unknown-file");
+console.log("[BOOT] xpansion-60 server entrypoint loaded:", import.meta.filename ?? import.meta.url ?? "unknown-file");
 
 const requiredSecrets = ["SESSION_SECRET", "DATABASE_URL", "APP_URL"];
 for (const key of requiredSecrets) {
@@ -109,7 +109,7 @@ app.use((req, res, next) => {
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
-    service: "xpansion-console",
+    service: "xpansion-60",
     timestamp: new Date().toISOString(),
   });
 });
@@ -118,7 +118,7 @@ app.get("/api/health", (_req, res) => {
   await registerRoutes(httpServer, app);
 
   try {
-    const { seedSuperAdmin } = await import("./replit_integrations/auth/routes");
+    const { seedSuperAdmin } = await import("./auth/routes");
     await seedSuperAdmin();
   } catch (e) {
     console.error("[SEED] Admin seed error:", e);
