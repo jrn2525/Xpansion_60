@@ -29,6 +29,8 @@ const AdminUsersPage = lazy(() => import("@/pages/admin-users"));
 const AdminProgramsPage = lazy(() => import("@/pages/admin-programs"));
 const AdminProgramDetailPage = lazy(() => import("@/pages/admin-program-detail"));
 const AdminEnrollmentsPage = lazy(() => import("@/pages/admin-enrollments"));
+const AdminSettingsPage = lazy(() => import("@/pages/admin-settings"));
+const AdminMessagingPage = lazy(() => import("@/pages/admin-messaging"));
 const ClientTodayPage = lazy(() => import("@/pages/client-today"));
 const ClientHistoryPage = lazy(() => import("@/pages/client-history"));
 const ConsultantClientsPage = lazy(() => import("@/pages/consultant-clients"));
@@ -53,6 +55,8 @@ const routeTitles: Record<string, string> = {
   "/admin/users": "Users | Xpansion 60",
   "/admin/programs": "Programs | Xpansion 60",
   "/admin/enrollments": "Enrollments | Xpansion 60",
+  "/admin/settings": "App Settings | Xpansion 60",
+  "/admin/messaging": "Messaging | Xpansion 60",
   "/admin/notifications": "Notifications | Xpansion 60",
   "/admin/activity": "Activity | Xpansion 60",
   "/superadmin/tower": "Command Tower | Xpansion 60",
@@ -95,6 +99,8 @@ function AuthenticatedRouter() {
       <Route path="/admin/programs" component={AdminProgramsPage} />
       <Route path="/admin/programs/:id" component={AdminProgramDetailPage} />
       <Route path="/admin/enrollments" component={AdminEnrollmentsPage} />
+      <Route path="/admin/settings" component={AdminSettingsPage} />
+      <Route path="/admin/messaging" component={AdminMessagingPage} />
       <Route path="/admin/notifications" component={AdminNotificationsPage} />
       <Route path="/admin/activity" component={AdminActivityPage} />
       <Route path="/superadmin/tower" component={SuperadminTowerPage} />

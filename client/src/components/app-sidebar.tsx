@@ -69,7 +69,8 @@ const adminItems: NavItem[] = [
   { title: "Programs", url: "/admin/programs", icon: BookOpen, visibleTo: [], superadminOnly: true },
   { title: "Enrollments", url: "/admin/enrollments", icon: ClipboardList, visibleTo: [], superadminOnly: true },
   { title: "Users", url: "/admin/users", icon: Users, visibleTo: [], superadminOnly: true },
-  { title: "Notifications", url: "/admin/notifications", icon: Mail, visibleTo: adminOwnerRoles },
+  { title: "Messaging", url: "/admin/messaging", icon: Mail, visibleTo: [], superadminOnly: true },
+  { title: "Settings", url: "/admin/settings", icon: Settings, visibleTo: [], superadminOnly: true },
   { title: "Activity", url: "/admin/activity", icon: Activity, visibleTo: adminOwnerRoles },
 ];
 

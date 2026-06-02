@@ -35,6 +35,8 @@ const allPages = [
   { title: "Enrollments", url: "/admin/enrollments", icon: ClipboardList },
   { title: "Settings", url: "/settings", icon: Settings },
   { title: "Users", url: "/admin/users", icon: Users },
+  { title: "Messaging", url: "/admin/messaging", icon: Mail },
+  { title: "App Settings", url: "/admin/settings", icon: Settings },
   { title: "Notifications", url: "/admin/notifications", icon: Mail },
   { title: "Activity", url: "/admin/activity", icon: Activity },
   { title: "Command Tower", url: "/superadmin/tower", icon: Radio },

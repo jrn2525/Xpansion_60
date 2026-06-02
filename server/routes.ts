@@ -24,6 +24,7 @@ import { tracingMiddleware } from "./middleware/tracing";
 import { programsRouter } from "./coaching/programs-routes";
 import { enrollmentsRouter } from "./coaching/enrollments-routes";
 import { clientRouter } from "./coaching/client-routes";
+import { settingsRouter } from "./coaching/settings-routes";
 import { parseIntOrThrow, ValidationError } from "./utils";
 
 function ok(data: any) {
@@ -1322,6 +1323,7 @@ export async function registerRoutes(
   app.use("/api/admin/programs", programsRouter);
   app.use("/api/admin/enrollments", enrollmentsRouter);
   app.use("/api/client", clientRouter);
+  app.use("/api/admin", settingsRouter);
   app.use("/api/v1", onboardingRouter);
 
   app.post("/api/tenants/:tenantId/import-preview", isAuthenticated, fileUpload.single("file"), async (req: any, res) => {
