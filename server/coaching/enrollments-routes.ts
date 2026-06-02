@@ -119,7 +119,7 @@ const createEnrollmentSchema = z.object({
   playbookId: z.number().int().positive(),
   enrolledUserId: z.string().min(1),
   startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
-});
+}).strict();
 
 enrollmentsRouter.post("/", ...guard, async (req: any, res) => {
   try {
@@ -214,7 +214,7 @@ const createPauseSchema = z.object({
     .nullable()
     .optional(),
   reason: z.string().nullable().optional(),
-});
+}).strict();
 
 enrollmentsRouter.post("/:id/pauses", ...guard, async (req: any, res) => {
   try {
@@ -223,17 +223,45 @@ enrollmentsRouter.post("/:id/pauses", ...guard, async (req: any, res) => {
     if (!parsed.success) {
       return res.status(400).json(err("VALIDATION_ERROR", parsed.error.message));
     }
+
+    const { pauseStart, pauseEnd } = parsed.data;
+    if (pauseEnd && pauseEnd < pauseStart) {
+      return res
+        .status(400)
+        .json(err("VALIDATION_ERROR", "pauseEnd must be on or after pauseStart"));
+    }
+
+    // Reject overlapping pauses — otherwise computeSchedule would
+    // double-subtract weekdays in the overlap and the client's day-count
+    // would drift behind.
+    const existing = await db
+      .select()
+      .from(enrollmentPauses)
+      .where(eq(enrollmentPauses.enrollmentId, id));
+    for (const p of existing) {
+      const aStart = pauseStart;
+      const aEnd = pauseEnd ?? "9999-12-31";
+      const bStart = p.pauseStart;
+      const bEnd = p.pauseEnd ?? "9999-12-31";
+      const overlaps = aStart <= bEnd && bStart <= aEnd;
+      if (overlaps) {
+        return res
+          .status(409)
+          .json(err("CONFLICT", `Overlaps existing pause ${bStart} → ${p.pauseEnd ?? "open-ended"}`));
+      }
+    }
+
     const [row] = await db
       .insert(enrollmentPauses)
       .values({
         enrollmentId: id,
-        pauseStart: parsed.data.pauseStart,
-        pauseEnd: parsed.data.pauseEnd ?? null,
+        pauseStart,
+        pauseEnd: pauseEnd ?? null,
         reason: parsed.data.reason ?? null,
         createdByUserId: req.user?.claims?.sub,
       })
       .returning();
-    sendPauseNotificationEmail(id, parsed.data.pauseEnd ?? null).catch((e) =>
+    sendPauseNotificationEmail(id, pauseEnd ?? null).catch((e) =>
       console.error("[ENROLLMENTS] pause notification failed:", e?.message ?? e),
     );
     res.status(201).json(ok(row));
@@ -250,7 +278,7 @@ const updatePauseSchema = z.object({
     .nullable()
     .optional(),
   reason: z.string().nullable().optional(),
-});
+}).strict();
 
 enrollmentsRouter.put("/:id/pauses/:pauseId", ...guard, async (req, res) => {
   try {

@@ -156,7 +156,7 @@ const completeSchema = z.object({
   enrollmentId: z.number().int().positive(),
   stepId: z.number().int().positive(),
   feedbackText: z.string().optional(),
-});
+}).strict();
 
 clientRouter.post("/today/complete", isAuthenticated, async (req: any, res) => {
   try {

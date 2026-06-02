@@ -90,9 +90,8 @@ async function sendDailyTaskEmails(tenantId: number, settings: SettingsMap, toda
       const vars = baseVars(settings, ctx);
       await sendOnce({
         tenantId,
-        enrollmentId: e.id,
+        entityId: `${e.id}:${"daily_task"}:${today}`,
         templateKey: "daily_task",
-        date: today,
         to: ctx.clientEmail,
         fromName: settings.email_from_name ?? "Xpansion 60",
         fromAddress: settings.email_from_address ?? null,
@@ -108,7 +107,7 @@ async function sendDailyTaskEmails(tenantId: number, settings: SettingsMap, toda
 async function sendSaturdaySummaryEmails(tenantId: number, settings: SettingsMap, today: string): Promise<void> {
   const template = await getTemplate(tenantId, "weekly_summary");
   if (!template || !template.enabled) return;
-  const enrollments = await getActiveEnrollments(tenantId);
+  const enrollments = await getEnrollmentsForWeeklySummary(tenantId, today);
   for (const e of enrollments) {
     try {
       const ctx = await buildEnrollmentContext(e, today);
@@ -127,9 +126,8 @@ async function sendSaturdaySummaryEmails(tenantId: number, settings: SettingsMap
       };
       await sendOnce({
         tenantId,
-        enrollmentId: e.id,
+        entityId: `${e.id}:${`weekly_summary_w${lastCompletedWeek}`}:${today}`,
         templateKey: `weekly_summary_w${lastCompletedWeek}`,
-        date: today,
         to: ctx.clientEmail,
         fromName: settings.email_from_name ?? "Xpansion 60",
         fromAddress: settings.email_from_address ?? null,
@@ -161,9 +159,8 @@ async function sendSundayEncouragementEmails(tenantId: number, settings: Setting
       };
       await sendOnce({
         tenantId,
-        enrollmentId: e.id,
+        entityId: `${e.id}:${"sunday_encouragement"}:${today}`,
         templateKey: "sunday_encouragement",
-        date: today,
         to: ctx.clientEmail,
         fromName: settings.email_from_name ?? "Xpansion 60",
         fromAddress: settings.email_from_address ?? null,
@@ -207,9 +204,8 @@ export async function sendPhaseCompletionEmail(enrollmentId: number): Promise<vo
 
     await sendOnce({
       tenantId,
-      enrollmentId,
+      entityId: `${enrollmentId}:phase_completion:${today}`,
       templateKey: "phase_completion",
-      date: today,
       to: ctx.clientEmail,
       fromName: settings.email_from_name ?? "Xpansion 60",
       fromAddress: settings.email_from_address ?? null,
@@ -245,11 +241,14 @@ export async function sendPauseNotificationEmail(enrollmentId: number, pauseEnd:
       pause_until: pauseEnd ?? "further notice",
     };
 
+    // Each pause is its own event (timestamped). Keying by pauseEnd
+    // (or "open") gives us per-event idempotency without colliding with
+    // resumes/re-pauses on the same enrollment.
+    const today = isoDate(new Date());
     await sendOnce({
       tenantId,
-      enrollmentId,
-      templateKey: `pause_notification_${Date.now()}`,
-      date: isoDate(new Date()),
+      entityId: `${enrollmentId}:pause_notification:${pauseEnd ?? "open"}:${today}`,
+      templateKey: "pause_notification",
       to: ctx.clientEmail,
       fromName: settings.email_from_name ?? "Xpansion 60",
       fromAddress: settings.email_from_address ?? null,
@@ -258,6 +257,48 @@ export async function sendPauseNotificationEmail(enrollmentId: number, pauseEnd:
     });
   } catch (e: any) {
     console.error("[CRON][pause_notification] error:", e?.message ?? e);
+  }
+}
+
+/**
+ * One-off templated send. Used for emails outside the daily/weekly/Sunday
+ * cron cycle — currently only the welcome email when a new user is
+ * created. The caller supplies vars; we render the configured template,
+ * send via Resend, and record an idempotent delivery row.
+ */
+export async function sendCoachingEmail(opts: {
+  tenantId: number;
+  templateKey: string;
+  /** Stable per-event id, e.g. `welcome:${userId}`. */
+  entityId: string;
+  to: string;
+  vars: Record<string, string>;
+}): Promise<void> {
+  try {
+    const template = await getTemplate(opts.tenantId, opts.templateKey);
+    if (!template || !template.enabled) {
+      console.log(`[MAIL][${opts.templateKey}] template missing or disabled; skipping`);
+      return;
+    }
+    const settings = await getSettingsMap(opts.tenantId);
+    const allVars: Record<string, string> = {
+      app_name: settings.app_display_name ?? "Xpansion 60",
+      coach_name: settings.coach_name ?? "Your coach",
+      dashboard_url: process.env.APP_URL ?? "https://www.xpansion60.com",
+      ...opts.vars,
+    };
+    await sendOnce({
+      tenantId: opts.tenantId,
+      entityId: opts.entityId,
+      templateKey: opts.templateKey,
+      to: opts.to,
+      fromName: settings.email_from_name ?? "Xpansion 60",
+      fromAddress: settings.email_from_address ?? null,
+      subject: renderTemplate(template.subject, allVars),
+      body: renderTemplate(template.body, allVars),
+    });
+  } catch (e: any) {
+    console.error(`[MAIL][${opts.templateKey}] error:`, e?.message ?? e);
   }
 }
 
@@ -294,6 +335,26 @@ async function getActiveEnrollments(tenantId: number) {
         isNull(playbookApplications.completedAt),
       ),
     );
+}
+
+/**
+ * Like getActiveEnrollments, but also includes enrollments that completed
+ * earlier on `today`. Used by the Saturday weekly-summary cron so a client
+ * who finished day 60 on Saturday morning still gets their final week's
+ * recap (in addition to the phase_completion email).
+ */
+async function getEnrollmentsForWeeklySummary(tenantId: number, today: string) {
+  const rows = await db
+    .select()
+    .from(playbookApplications)
+    .where(
+      and(
+        eq(playbookApplications.tenantId, tenantId),
+        isNotNull(playbookApplications.startDate),
+        isNotNull(playbookApplications.enrolledUserId),
+      ),
+    );
+  return rows.filter((r) => !r.completedAt || isoDate(r.completedAt) === today);
 }
 
 interface EnrollmentContext {
@@ -435,7 +496,17 @@ async function buildWeekRecap(enrollmentId: number, programId: number, weekNumbe
     .join("\n");
 }
 
-async function alreadyDelivered(tenantId: number, enrollmentId: number, templateKey: string, date: string): Promise<boolean> {
+async function alreadyDelivered(
+  tenantId: number,
+  enrollmentId: number,
+  templateKey: string,
+  date: string,
+): Promise<boolean> {
+  // Fast-path skip used by handlers to avoid building template vars when a row
+  // already exists. The DB unique constraint in sendOnce() is the actual
+  // safety net against double-sends; this check is purely a perf optimization.
+  // Match ANY status (pending/sent/failed) because the unique key makes those
+  // mutually exclusive.
   const entityId = `${enrollmentId}:${templateKey}:${date}`;
   const [row] = await db
     .select({ id: notificationDeliveries.id })
@@ -445,7 +516,6 @@ async function alreadyDelivered(tenantId: number, enrollmentId: number, template
         eq(notificationDeliveries.tenantId, tenantId),
         eq(notificationDeliveries.relatedEntityType, "coaching_email"),
         eq(notificationDeliveries.relatedEntityId, entityId),
-        eq(notificationDeliveries.status, "sent"),
       ),
     )
     .limit(1);
@@ -454,9 +524,11 @@ async function alreadyDelivered(tenantId: number, enrollmentId: number, template
 
 interface SendOnceArgs {
   tenantId: number;
-  enrollmentId: number;
+  /** Deterministic key for idempotency — typically
+   *  `${enrollmentId}:${templateKey}:${date}` for cron sends, or
+   *  `${templateKey}:${userId}` for one-off sends like welcome. */
+  entityId: string;
   templateKey: string;
-  date: string;
   to: string;
   fromName: string;
   fromAddress: string | null;
@@ -467,6 +539,39 @@ interface SendOnceArgs {
 async function sendOnce(args: SendOnceArgs): Promise<void> {
   const html = wrapHtml(args.subject, args.body);
   const senderForSendEmail = args.fromAddress ? args.fromAddress : undefined;
+  const entityId = args.entityId;
+
+  // Reserve the delivery row BEFORE calling Resend. The unique index on
+  // (tenantId, relatedEntityType, relatedEntityId) makes this an atomic
+  // dedupe: concurrent ticks racing on the same email collide here and
+  // exactly one survives to actually call sendEmail().
+  let reserved: { id: number } | null = null;
+  try {
+    const [row] = await db
+      .insert(notificationDeliveries)
+      .values({
+        tenantId: args.tenantId,
+        channel: "email",
+        recipientAddress: args.to,
+        subjectOrTitle: args.subject,
+        bodyPreview: args.body.slice(0, 500),
+        status: "pending",
+        attempts: 0,
+        relatedEntityType: "coaching_email",
+        relatedEntityId: entityId,
+      })
+      .returning({ id: notificationDeliveries.id });
+    reserved = row;
+  } catch (e: any) {
+    // Postgres unique-violation code is 23505. Anything else is unexpected.
+    if (e?.code === "23505") {
+      // Another tick already reserved (or already sent) this delivery; skip.
+      return;
+    }
+    console.error(`[CRON][${args.templateKey}] reserve failed: ${e?.message ?? e}`);
+    throw e;
+  }
+
   let status: "sent" | "failed" = "sent";
   let errorMessage: string | null = null;
   try {
@@ -475,19 +580,17 @@ async function sendOnce(args: SendOnceArgs): Promise<void> {
     status = "failed";
     errorMessage = e?.message ?? String(e);
   }
-  await db.insert(notificationDeliveries).values({
-    tenantId: args.tenantId,
-    channel: "email",
-    recipientAddress: args.to,
-    subjectOrTitle: args.subject,
-    bodyPreview: args.body.slice(0, 500),
-    status,
-    attempts: 1,
-    lastAttemptAt: new Date(),
-    errorMessage,
-    relatedEntityType: "coaching_email",
-    relatedEntityId: `${args.enrollmentId}:${args.templateKey}:${args.date}`,
-  });
+
+  await db
+    .update(notificationDeliveries)
+    .set({
+      status,
+      attempts: 1,
+      lastAttemptAt: new Date(),
+      errorMessage,
+    })
+    .where(eq(notificationDeliveries.id, reserved.id));
+
   if (status === "failed") {
     console.error(`[CRON][${args.templateKey}] send to ${args.to} failed: ${errorMessage}`);
   } else {
@@ -495,14 +598,26 @@ async function sendOnce(args: SendOnceArgs): Promise<void> {
   }
 }
 
+// Matches http(s) URLs in plain text. Avoids trailing punctuation that's
+// usually part of the surrounding sentence (period, comma, paren, etc.).
+const URL_RE = /\bhttps?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]]/g;
+
 function wrapHtml(_subject: string, body: string): string {
+  // Escape the body first so admin-edited template text can never inject HTML.
   const escaped = body
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+  // Then replace escaped URLs with safe <a> tags. The href is the original URL
+  // (also escaped to be safe in an attribute context), the visible text is
+  // the already-escaped string.
+  const linked = escaped.replace(URL_RE, (url) => {
+    const safeHref = url.replace(/"/g, "&quot;");
+    return `<a href="${safeHref}" style="color:#dc2626;text-decoration:underline;">${url}</a>`;
+  });
   return `<!doctype html>
 <html><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;line-height:1.6;color:#111;max-width:560px;margin:24px auto;padding:0 16px;">
-<pre style="white-space:pre-wrap;font-family:inherit;font-size:15px;margin:0;">${escaped}</pre>
+<pre style="white-space:pre-wrap;font-family:inherit;font-size:15px;margin:0;">${linked}</pre>
 </body></html>`;
 }
 

@@ -409,23 +409,31 @@ export const notificationSettings = pgTable("notification_settings", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const notificationDeliveries = pgTable("notification_deliveries", {
-  id: serial("id").primaryKey(),
-  tenantId: integer("tenant_id")
-    .notNull()
-    .references(() => tenants.id, { onDelete: "cascade" }),
-  channel: varchar("channel", { length: 50 }).notNull(),
-  recipientAddress: varchar("recipient_address", { length: 500 }).notNull(),
-  subjectOrTitle: varchar("subject_or_title", { length: 500 }).notNull(),
-  bodyPreview: text("body_preview"),
-  status: varchar("status", { length: 50 }).notNull().default("pending"),
-  attempts: integer("attempts").notNull().default(0),
-  lastAttemptAt: timestamp("last_attempt_at"),
-  errorMessage: text("error_message"),
-  relatedEntityType: varchar("related_entity_type", { length: 100 }),
-  relatedEntityId: varchar("related_entity_id", { length: 100 }),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const notificationDeliveries = pgTable(
+  "notification_deliveries",
+  {
+    id: serial("id").primaryKey(),
+    tenantId: integer("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    channel: varchar("channel", { length: 50 }).notNull(),
+    recipientAddress: varchar("recipient_address", { length: 500 }).notNull(),
+    subjectOrTitle: varchar("subject_or_title", { length: 500 }).notNull(),
+    bodyPreview: text("body_preview"),
+    status: varchar("status", { length: 50 }).notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    lastAttemptAt: timestamp("last_attempt_at"),
+    errorMessage: text("error_message"),
+    relatedEntityType: varchar("related_entity_type", { length: 100 }),
+    relatedEntityId: varchar("related_entity_id", { length: 100 }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (t) => ({
+    // Idempotency key for coaching emails: (tenant, type, entityId) is unique.
+    // Used by the cron to reserve a delivery row before calling Resend.
+    uniqueDelivery: unique().on(t.tenantId, t.relatedEntityType, t.relatedEntityId),
+  }),
+);
 
 export const schedulerRuns = pgTable("scheduler_runs", {
   id: serial("id").primaryKey(),

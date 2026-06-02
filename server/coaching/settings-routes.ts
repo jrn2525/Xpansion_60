@@ -368,7 +368,7 @@ settingsRouter.get("/app-settings", ...guard, async (req, res) => {
 const updateSettingsSchema = z.object({
   tenantId: z.number().int().positive(),
   updates: z.array(z.object({ key: z.string(), value: z.string() })),
-});
+}).strict();
 
 settingsRouter.put("/app-settings", ...guard, async (req, res) => {
   try {
@@ -441,11 +441,11 @@ const updateTemplateSchema = z.object({
   enabled: z.boolean().optional(),
   subject: z.string().min(1).max(500).optional(),
   body: z.string().min(1).optional(),
-});
+}).strict();
 
 settingsRouter.put("/email-templates/:key", ...guard, async (req, res) => {
   try {
-    const key = req.params.key;
+    const key = String(req.params.key);
     const known = EMAIL_TEMPLATE_DEFAULTS.find((d) => d.key === key);
     if (!known) {
       return res.status(404).json(err("NOT_FOUND", `Unknown template key: ${key}`));
@@ -495,7 +495,7 @@ const testSendSchema = z.object({
   to: z.string().email(),
   subject: z.string().optional(),
   body: z.string().optional(),
-});
+}).strict();
 
 settingsRouter.post("/email-templates/:key/test-send", ...guard, async (req: any, res) => {
   try {

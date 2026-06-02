@@ -123,7 +123,7 @@ const createProgramSchema = z.object({
   name: z.string().min(1).max(255),
   description: z.string().optional().nullable(),
   seedFourBasics: z.boolean().optional().default(false),
-});
+}).strict();
 
 programsRouter.post("/", ...guard, async (req: any, res) => {
   try {
@@ -200,7 +200,7 @@ const updateProgramSchema = z.object({
   completionMessage: z.string().nullable().optional(),
   ctaLabel: z.string().nullable().optional(),
   ctaUrl: z.string().nullable().optional(),
-});
+}).strict();
 
 programsRouter.put("/:id", ...guard, async (req: any, res) => {
   try {
@@ -269,7 +269,7 @@ const updateSectionSchema = z.object({
   transitionEmailEnabled: z.boolean().optional(),
   transitionEmailSubject: z.string().nullable().optional(),
   transitionEmailBody: z.string().nullable().optional(),
-});
+}).strict();
 
 programsRouter.put("/:id/sections/:sectionId", ...guard, async (req, res) => {
   try {
@@ -300,7 +300,7 @@ const updateStepSchema = z.object({
   implementationText: z.string().optional(),
   mediaUrl: z.string().nullable().optional(),
   title: z.string().min(1).max(500).optional(),
-});
+}).strict();
 
 programsRouter.put("/:id/steps/:stepId", ...guard, async (req, res) => {
   try {
