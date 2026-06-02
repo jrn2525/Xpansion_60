@@ -1372,7 +1372,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSessionsByUserId(userId: string): Promise<number> {
-    const result = await db.execute(sql`DELETE FROM sessions WHERE sess::text LIKE ${'%"sub":"' + userId + '"%'}`);
+    // Use a precise JSON path instead of a LIKE substring — `%` or `_` in a
+    // userId would otherwise match the wrong sessions. Parameterised, so SQLi
+    // is impossible regardless of the userId shape.
+    const result = await db.execute(
+      sql`DELETE FROM sessions WHERE sess->'passport'->'user'->'claims'->>'sub' = ${userId}`,
+    );
     return Number(result.rowCount ?? 0);
   }
 

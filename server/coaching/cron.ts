@@ -84,7 +84,21 @@ async function sendDailyTaskEmails(tenantId: number, settings: SettingsMap, toda
     try {
       const ctx = await buildEnrollmentContext(e, today);
       if (!ctx) continue;
-      if (ctx.schedule.status !== "active" || !ctx.step) continue;
+      if (ctx.schedule.status !== "active") continue;
+      if (!ctx.step) {
+        // Schedule says we're on a real weekday but the program has no
+        // content for this (weekNumber, dayNumber). Almost always means the
+        // admin hasn't filled in this day yet — surface it loudly so it can
+        // be noticed and fixed.
+        console.warn(
+          `[CRON][daily_task] enrollment ${e.id} on week ${
+            ctx.schedule.status === "active" ? ctx.schedule.weekNumber : "?"
+          } day ${
+            ctx.schedule.status === "active" ? ctx.schedule.dayNumber : "?"
+          } has no step — skipping send`,
+        );
+        continue;
+      }
       if (await alreadyDelivered(tenantId, e.id, "daily_task", today)) continue;
 
       const vars = baseVars(settings, ctx);
@@ -487,11 +501,18 @@ async function buildWeekRecap(enrollmentId: number, programId: number, weekNumbe
     .leftJoin(actions, and(eq(actions.stepId, playbookSteps.id), eq(actions.enrollmentId, enrollmentId)))
     .where(and(eq(playbookSteps.playbookId, programId), eq(playbookSteps.weekNumber, weekNumber)))
     .orderBy(asc(playbookSteps.dayNumber));
+  if (rows.length === 0) {
+    return "(no recap available — this week's tasks weren't recorded)";
+  }
   return rows
     .map((r) => {
-      const taskLine = r.taskText ? r.taskText.split("\n")[0] : r.title;
-      const feedbackLine = r.feedback ? `   You said: ${r.feedback.slice(0, 200)}` : "";
-      return `Day ${r.dayNumber}: ${taskLine}${feedbackLine ? "\n" + feedbackLine : ""}`;
+      const firstLine = r.taskText?.split("\n")[0]?.trim();
+      const titleFallback = r.title?.trim();
+      const taskLine = firstLine || titleFallback || "(no task content)";
+      const feedbackLine = r.feedback?.trim()
+        ? `   You said: ${r.feedback.trim().slice(0, 200)}`
+        : "";
+      return `Day ${r.dayNumber ?? "?"}: ${taskLine}${feedbackLine ? "\n" + feedbackLine : ""}`;
     })
     .join("\n");
 }

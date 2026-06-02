@@ -281,6 +281,24 @@ export function registerAuthRoutes(app: Express): void {
     });
   });
 
+  // Sign out of every active session for this user, on every device.
+  app.post("/api/auth/logout-everywhere", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      const count = await storage.deleteSessionsByUserId(userId).catch(() => 0);
+      auditLog("LOGOUT_EVERYWHERE", { userId, sessionsDeleted: count });
+      // Clear THIS request's cookie too — the row is already gone.
+      req.logout(() => {
+        req.session?.destroy(() => {
+          res.clearCookie("connect.sid", { path: "/" });
+          res.json({ ok: true, data: { sessionsDeleted: count } });
+        });
+      });
+    } catch (e: any) {
+      res.status(500).json({ ok: false, error: { code: "INTERNAL_ERROR", message: e.message } });
+    }
+  });
+
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

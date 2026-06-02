@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { securityHeaders } from "./middleware/security-headers";
+import { csrfOriginCheck } from "./middleware/csrf";
 
 console.log("[BOOT] xpansion-60 server entrypoint loaded:", import.meta.filename ?? import.meta.url ?? "unknown-file");
 
@@ -34,6 +35,7 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 
 app.use(securityHeaders);
+app.use(csrfOriginCheck());
 
 const idempotencyCache = new Map<string, { status: number; body: any; timestamp: number }>();
 const IDEMPOTENCY_TTL = 5 * 60 * 1000;
